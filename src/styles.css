@@ -365,37 +365,72 @@ svg {
   color: #b795ff;
   background: #34234f;
 }
-.select-wrap {
+.sort-select {
   position: relative;
-  flex: 1;
-  min-width: 0;
 }
-.select-wrap select {
-  appearance: none;
-  width: 100%;
-  height: 33px;
-  padding: 0 26px 0 10px;
-  border: 1px solid #302b42;
-  color: #d8d1e5;
-  border-radius: 6px;
-  background: linear-gradient(#1a1826, #161420);
-  font-size: 11px;
-}
-.select-wrap svg {
-  position: absolute;
-  right: 9px;
-  top: 9px;
-  pointer-events: none;
-  color: #b9b0cd;
-}
-.sort-row {
+.sort-select-trigger {
   display: flex;
-  gap: 6px;
-  margin-top: 8px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  height: 35px;
+  padding: 0 10px;
+  border: 1px solid #393047;
+  border-radius: 7px;
+  background: linear-gradient(#201b2d, #191622);
+  color: #d8d1e5;
+  font-size: 11px;
+  text-align: left;
 }
-.sort-button {
-  width: 30px;
-  padding: 0 !important;
+.sort-select-trigger:hover {
+  border-color: #77539f;
+  background: #282034;
+}
+.sort-select-trigger[aria-expanded="true"] {
+  border-color: #a875ef;
+}
+.sort-select-trigger svg {
+  color: #b9a5d2;
+  transition: transform 150ms ease;
+}
+.sort-select-trigger[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+.sort-select-options {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  padding: 5px;
+  border: 1px solid #493558;
+  border-radius: 9px;
+  background: #1e192b;
+  box-shadow: 0 10px 28px #0008;
+  outline: none;
+}
+.sort-select-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 9px 7px;
+  border-radius: 5px;
+  color: #c8bfd8;
+  font-size: 11px;
+  cursor: pointer;
+}
+.sort-select-option.active {
+  background: #36264c;
+  color: #f3eaff;
+}
+.sort-select-option.selected {
+  color: #c69aff;
+}
+.sort-select-trigger:focus-visible {
+  outline: 2px solid #b084f6;
+  outline-offset: 3px;
 }
 .filter-tags {
   display: flex;
@@ -461,12 +496,42 @@ svg {
   margin-top: 12px;
 }
 input[type="checkbox"] {
-  width: 14px;
-  height: 14px;
-  accent-color: #9a62ea;
+  appearance: none;
+  display: grid;
+  place-content: center;
+  width: 16px;
+  height: 16px;
+  border: 1px solid #514361;
+  border-radius: 4px;
+  background: #191521;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease;
   margin: 0;
   cursor: pointer;
   flex-shrink: 0;
+}
+input[type="checkbox"]::after {
+  content: "";
+  width: 8px;
+  height: 4px;
+  border-left: 2px solid white;
+  border-bottom: 2px solid white;
+  transform: translateY(-1px) rotate(-45deg) scale(0);
+}
+input[type="checkbox"]:checked {
+  background: #9960e0;
+  border-color: #b985f7;
+}
+input[type="checkbox"]:checked::after {
+  transform: translateY(-1px) rotate(-45deg) scale(1);
+}
+.additional-section label:hover input {
+  border-color: #b985f7;
+}
+input[type="checkbox"]:focus-visible {
+  outline: 2px solid #b084f6;
+  outline-offset: 3px;
 }
 .filter-reset {
   padding: 14px;
@@ -570,6 +635,7 @@ input[type="checkbox"] {
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-gutter: stable;
+  overflow-anchor: none;
 }
 .virtual-space {
   position: relative;
@@ -837,14 +903,21 @@ input[type="checkbox"] {
   color: #e8dff5;
   border-radius: 4px;
 }
-.detail-tags {
+.detail-attribution {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   padding: 21px 0 14px;
   border-bottom: 1px solid var(--line);
 }
-.detail-tags h3 {
-  margin-bottom: 10px;
+.detail-tag-group h3 {
+  margin-bottom: 5px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 400;
+  text-transform: uppercase;
 }
-.detail-tags > div {
+.detail-tag-group > div {
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
@@ -853,11 +926,21 @@ input[type="checkbox"] {
 .detail-tags .tag-chip {
   border: 1px solid #533777;
 }
-.tag-add {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: #252033;
+.detail-tag-group .tag-chip {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.detail-copyright .tag-chip {
+  border: 1px solid #71333d;
+  background: #382128;
+}
+.detail-artist .tag-chip {
+  border: 1px solid #403e80;
+  background: #262544;
+}
+.detail-characters .tag-chip {
+  border: 1px solid #285b4a;
+  background: #203b32;
 }
 .metadata {
   margin: 10px 0 17px;

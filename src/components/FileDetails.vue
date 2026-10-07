@@ -5,6 +5,16 @@ import { formatDate, formatDuration, formatSize } from "../types/media";
 import AppIcon from "./AppIcon.vue";
 const props = defineProps<{ item: MediaItem }>();
 defineEmits<{ close: []; favorite: []; tags: []; action: [name: string] }>();
+const attribution = computed(() => [
+  { label: "Copyright", category: "copyright", values: props.item.copyrights },
+  { label: "Artist", category: "artist", values: [props.item.artist] },
+  {
+    label: "Characters",
+    category: "characters",
+    values: props.item.characters,
+  },
+  { label: "Tags", category: "tags", values: props.item.tags },
+]);
 const metadata = computed(() => [
   {
     icon: "files",
@@ -86,22 +96,24 @@ const metadata = computed(() => [
           formatDuration(item.duration)
         }}</span>
       </div>
-      <section class="detail-tags">
-        <h3>Tags</h3>
-        <div>
-          <span v-for="tag in item.tags" :key="tag" class="tag-chip">{{
-            tag
-          }}</span
-          ><span v-if="!item.tags.length" class="muted">No tags yet</span
-          ><button
-            class="tag-add icon-button"
-            aria-label="Edit file tags"
-            @click="$emit('tags')"
-          >
-            <AppIcon name="plus" :size="16" />
-          </button>
-        </div>
-      </section>
+      <div class="detail-attribution">
+        <section
+          v-for="group in attribution"
+          :key="group.category"
+          class="detail-tag-group"
+          :class="`detail-${group.category}`"
+        >
+          <h3>{{ group.label }}</h3>
+          <div>
+            <span v-for="value in group.values" :key="value" class="tag-chip">{{
+              value
+            }}</span>
+            <span v-if="!group.values.length" class="muted">{{
+              group.category === "tags" ? "No tags yet" : "Unavailable"
+            }}</span>
+          </div>
+        </section>
+      </div>
       <dl class="metadata">
         <div v-for="field in metadata" :key="field.label">
           <dt><AppIcon :name="field.icon" :size="16" />{{ field.label }}</dt>

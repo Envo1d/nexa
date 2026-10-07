@@ -10,6 +10,7 @@ import {
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import AppIcon from "./components/AppIcon.vue";
+import SortSelect from "./components/SortSelect.vue";
 import MediaCollection from "./components/MediaCollection.vue";
 import FileDetails from "./components/FileDetails.vue";
 import { useLibrary } from "./composables/useLibrary";
@@ -21,7 +22,7 @@ const {
   scope,
   search,
   kind,
-  sortDirection,
+  sortMode,
   selectedTags,
   favoritesOnly,
   taggedOnly,
@@ -372,28 +373,7 @@ onBeforeUnmount(() => {
             </section>
             <section class="filter-section">
               <h3>Sorting</h3>
-              <div class="select-wrap">
-                <select aria-label="Sort criterion">
-                  <option>Modification date</option></select
-                ><AppIcon name="down" :size="15" />
-              </div>
-              <div class="sort-row">
-                <div class="select-wrap">
-                  <select v-model="sortDirection" aria-label="Sort direction">
-                    <option value="desc">Newest first</option>
-                    <option value="asc">Oldest first</option></select
-                  ><AppIcon name="down" :size="15" />
-                </div>
-                <button
-                  class="secondary-button sort-button"
-                  aria-label="Reverse sort direction"
-                  @click="
-                    sortDirection = sortDirection === 'desc' ? 'asc' : 'desc'
-                  "
-                >
-                  <AppIcon name="sort" :size="17" />
-                </button>
-              </div>
+              <SortSelect v-model="sortMode" />
             </section>
             <section class="filter-section">
               <h3>Tags</h3>

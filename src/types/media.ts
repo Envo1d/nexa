@@ -18,6 +18,9 @@ export interface MediaItem {
   codec?: string;
   bitrate?: number;
   favorite: boolean;
+  copyrights: string[];
+  artist: string;
+  characters: string[];
   tags: string[];
 }
 

@@ -51,8 +51,22 @@ const visibleItems = computed(() =>
   ),
 );
 let observer: ResizeObserver | undefined;
+let scrollFrame: number | undefined;
 
 function onScroll() {
+  // Read the latest position once per frame, even when scroll events arrive faster.
+  if (scrollFrame !== undefined) return;
+  scrollFrame = requestAnimationFrame(() => {
+    scrollFrame = undefined;
+    updateScroll();
+  });
+}
+function cancelScrollFrame() {
+  if (scrollFrame === undefined) return;
+  cancelAnimationFrame(scrollFrame);
+  scrollFrame = undefined;
+}
+function updateScroll() {
   if (!viewport.value) return;
   scrollTop.value = viewport.value.scrollTop;
   if (
@@ -62,6 +76,7 @@ function onScroll() {
     loaded.value = Math.min(loaded.value + 36, props.items.length);
 }
 function resetScroll() {
+  cancelScrollFrame();
   loaded.value = 36;
   scrollTop.value = 0;
   viewport.value?.scrollTo({ top: 0 });
@@ -70,6 +85,7 @@ watch(() => props.items.map((item) => item.id).join(","), resetScroll);
 watch(
   () => props.mode,
   async () => {
+    cancelScrollFrame();
     scrollTop.value = 0;
     await nextTick();
     viewport.value?.scrollTo({ top: 0 });
@@ -84,7 +100,10 @@ onMounted(() => {
   });
   if (viewport.value) observer.observe(viewport.value);
 });
-onBeforeUnmount(() => observer?.disconnect());
+onBeforeUnmount(() => {
+  observer?.disconnect();
+  cancelScrollFrame();
+});
 </script>
 
 <template>
@@ -101,7 +120,7 @@ onBeforeUnmount(() => observer?.disconnect());
       class="collection-scroll"
       tabindex="0"
       aria-label="Loaded media"
-      @scroll="onScroll"
+      @scroll.passive="onScroll"
     >
       <div
         v-if="items.length"
