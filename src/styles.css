@@ -108,7 +108,8 @@ svg {
   background:
     radial-gradient(ellipse at 40% -35%, #201630 0, transparent 55%), #0b0b13;
 }
-.app-shell.maximized {
+.app-shell.maximized,
+.app-shell.system-window-corners {
   border-radius: 0;
 }
 .titlebar {
