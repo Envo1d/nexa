@@ -13,6 +13,7 @@ import AppIcon from "./AppIcon.vue";
 
 const props = defineProps<{
   items: MediaItem[];
+  showPreviews: boolean;
   mode: "grid" | "list";
   selectedId: string | null;
   heading: string;
@@ -139,6 +140,7 @@ onBeforeUnmount(() => {
             v-for="item in visibleItems"
             :key="item.id"
             :item="item"
+            :show-previews="showPreviews"
             :mode="mode"
             :selected="selectedId === item.id"
             @select="$emit('select', item)"

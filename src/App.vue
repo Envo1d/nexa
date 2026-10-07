@@ -23,7 +23,7 @@ const {
   search,
   kind,
   sortMode,
-  selectedTags,
+  suggestions,
   favoritesOnly,
   taggedOnly,
   hideUntagged,
@@ -37,9 +37,44 @@ const {
 } = library;
 const view = ref<"main" | "stage">("main");
 const mode = ref<"grid" | "list">("grid");
+const showPreviews = ref(true);
 const sidebarExpanded = ref(false);
 const showAllTags = ref(false);
 const searchInput = ref<HTMLInputElement | null>(null);
+const searchFocused = ref(false);
+const suggestionIndex = ref(-1);
+watch(search, () => {
+  suggestionIndex.value = -1;
+});
+function chooseSearchSuggestion(name: string) {
+  library.chooseSuggestion(name);
+  searchFocused.value = false;
+}
+function searchKeydown(event: KeyboardEvent) {
+  if (event.key === "Escape") {
+    searchFocused.value = false;
+  } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    event.preventDefault();
+    searchFocused.value = true;
+    const count = suggestions.value.length;
+    suggestionIndex.value = count
+      ? (suggestionIndex.value +
+          (event.key === "ArrowDown" ? 1 : count - 1) +
+          count) %
+        count
+      : -1;
+  } else if (event.key === "Enter") {
+    event.preventDefault();
+    const suggestion = searchFocused.value
+      ? suggestions.value[suggestionIndex.value]
+      : undefined;
+    if (suggestion) chooseSearchSuggestion(suggestion.name);
+    else {
+      library.commitSearch();
+      searchFocused.value = false;
+    }
+  }
+}
 const tagInput = ref<HTMLInputElement | null>(null);
 const tagTarget = ref<MediaItem | null>(null);
 const draftTags = ref<string[]>([]);
@@ -340,20 +375,57 @@ onBeforeUnmount(() => {
             }}</span>
           </header>
           <div class="filters-scroll">
-            <div class="search-box">
-              <AppIcon name="search" :size="17" /><input
-                ref="searchInput"
-                v-model="search"
-                aria-label="Search media"
-                placeholder="Search..."
-              /><button
-                v-if="search"
-                class="icon-button"
-                aria-label="Clear search"
-                @click="search = ''"
+            <div class="metadata-search">
+              <div class="search-box">
+                <AppIcon name="search" :size="17" /><input
+                  ref="searchInput"
+                  v-model="search"
+                  aria-label="Search metadata"
+                  placeholder="Metadata, separated by semicolons"
+                  role="combobox"
+                  aria-autocomplete="list"
+                  :aria-expanded="searchFocused && suggestions.length > 0"
+                  aria-controls="metadata-suggestions"
+                  :aria-activedescendant="
+                    searchFocused && suggestionIndex >= 0
+                      ? `metadata-option-${suggestionIndex}`
+                      : undefined
+                  "
+                  @focus="searchFocused = true"
+                  @input="searchFocused = true"
+                  @blur="searchFocused = false"
+                  @keydown="searchKeydown"
+                /><button
+                  v-if="search"
+                  class="icon-button"
+                  aria-label="Clear search"
+                  @click="library.clearSearch()"
+                >
+                  <AppIcon name="close" :size="14" /></button
+                ><kbd v-else>Ctrl F</kbd>
+              </div>
+              <div
+                v-if="searchFocused && suggestions.length"
+                id="metadata-suggestions"
+                class="metadata-suggestions"
+                role="listbox"
+                aria-label="Matching metadata"
               >
-                <AppIcon name="close" :size="14" /></button
-              ><kbd v-else>Ctrl F</kbd>
+                <button
+                  v-for="(suggestion, index) in suggestions"
+                  :id="`metadata-option-${index}`"
+                  :key="`${suggestion.category}:${suggestion.name}`"
+                  type="button"
+                  role="option"
+                  :aria-selected="suggestionIndex === index"
+                  :class="{ active: suggestionIndex === index }"
+                  @mousedown.prevent
+                  @click="chooseSearchSuggestion(suggestion.name)"
+                >
+                  <span>{{ suggestion.name }}</span
+                  ><small>{{ suggestion.category }}</small>
+                </button>
+              </div>
             </div>
             <section class="filter-section type-section">
               <h3>File type</h3>
@@ -382,9 +454,7 @@ onBeforeUnmount(() => {
                   v-for="tag in displayedTags"
                   :key="tag.name"
                   class="filter-tag"
-                  :class="{ active: selectedTags.includes(tag.name) }"
-                  :aria-pressed="selectedTags.includes(tag.name)"
-                  @click="library.toggleTag(tag.name)"
+                  @click="library.addSearch(tag.name)"
                 >
                   <span>{{ tag.name }}</span
                   ><small>{{ tag.count }}</small>
@@ -398,21 +468,34 @@ onBeforeUnmount(() => {
                 {{ showAllTags ? "Show fewer" : "Show all tags"
                 }}<AppIcon name="down" :size="13" />
               </button>
-              <p v-if="selectedTags.length > 1" class="filter-hint">
-                Matching all selected tags
-              </p>
             </section>
             <section class="filter-section additional-section">
               <h3>Additional</h3>
               <label
-                ><input v-model="favoritesOnly" type="checkbox" />Favorites
-                only</label
+                ><input
+                  v-model="favoritesOnly"
+                  type="checkbox"
+                  role="switch"
+                />Favorites only</label
               ><label
-                ><input v-model="taggedOnly" type="checkbox" />Tagged
-                only</label
+                ><input
+                  v-model="taggedOnly"
+                  type="checkbox"
+                  role="switch"
+                />Tagged only</label
               ><label
-                ><input v-model="hideUntagged" type="checkbox" />Hide
-                untagged</label
+                ><input
+                  v-model="hideUntagged"
+                  type="checkbox"
+                  role="switch"
+                />Hide untagged</label
+              >
+              <label
+                ><input
+                  v-model="showPreviews"
+                  type="checkbox"
+                  role="switch"
+                />Show previews</label
               >
             </section>
           </div>
@@ -424,6 +507,7 @@ onBeforeUnmount(() => {
         </aside>
         <MediaCollection
           :items="results"
+          :show-previews="showPreviews"
           :mode="mode"
           :selected-id="selectedId"
           :heading="heading"
@@ -436,9 +520,11 @@ onBeforeUnmount(() => {
         <FileDetails
           v-if="selected"
           :item="selected"
+          :show-previews="showPreviews"
           @close="selectedId = null"
           @favorite="library.toggleFavorite(selected)"
           @tags="editTags(selected)"
+          @search="library.addSearch"
           @action="previewAction($event, selected)"
         />
       </template>

@@ -6,9 +6,9 @@ export function useLibrary() {
   const media = ref(createMockMedia());
   const scope = ref<"gallery" | "favorites">("gallery");
   const search = ref("");
+  const appliedSearch = ref("");
   const kind = ref<"all" | MediaKind>("all");
   const sortMode = ref<"newest" | "older" | "name-asc" | "name-desc">("newest");
-  const selectedTags = ref<string[]>([]);
   const favoritesOnly = ref(false);
   const taggedOnly = ref(false);
   const hideUntagged = ref(false);
@@ -30,19 +30,24 @@ export function useLibrary() {
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
   });
   const results = computed(() => {
-    const query = search.value.trim().toLocaleLowerCase();
+    const queries = appliedSearch.value
+      .split(";")
+      .map((value) => value.trim().toLocaleLowerCase())
+      .filter(Boolean);
     return scopedMedia.value
       .filter(
         (item) =>
           (kind.value === "all" || item.kind === kind.value) &&
           (!favoritesOnly.value || item.favorite) &&
           (!(taggedOnly.value || hideUntagged.value) || item.tags.length > 0) &&
-          selectedTags.value.every((tag) => item.tags.includes(tag)) &&
-          (!query ||
-            [item.filename, item.title ?? "", ...item.tags]
-              .join(" ")
-              .toLocaleLowerCase()
-              .includes(query)),
+          queries.every((query) =>
+            [
+              ...item.copyrights,
+              item.artist,
+              ...item.characters,
+              ...item.tags,
+            ].some((value) => value.toLocaleLowerCase() === query),
+          ),
       )
       .sort((a, b) => {
         if (sortMode.value === "name-asc" || sortMode.value === "name-desc") {
@@ -66,17 +71,16 @@ export function useLibrary() {
     () => media.value.find((item) => item.id === selectedId.value) ?? null,
   );
   const heading = computed(() =>
-    selectedTags.value.length
-      ? selectedTags.value.join(" + ")
+    appliedSearch.value
+      ? appliedSearch.value
       : scope.value === "favorites"
         ? "Favorites"
         : "All files",
   );
   const activeFilterCount = computed(
     () =>
-      Number(Boolean(search.value.trim())) +
+      Number(Boolean(appliedSearch.value.trim())) +
       Number(kind.value !== "all") +
-      selectedTags.value.length +
       Number(favoritesOnly.value) +
       Number(taggedOnly.value || hideUntagged.value),
   );
@@ -86,19 +90,69 @@ export function useLibrary() {
       selectedId.value = null;
   });
 
-  function toggleTag(tag: string) {
-    selectedTags.value = selectedTags.value.includes(tag)
-      ? selectedTags.value.filter((name) => name !== tag)
-      : [...selectedTags.value, tag];
+  const suggestions = computed(() => {
+    const parts = search.value.split(";");
+    const query = parts.pop()?.trim().toLocaleLowerCase() ?? "";
+    if (!query) return [];
+    const existing = parts.map((value) => value.trim().toLocaleLowerCase());
+    const values = new Map<string, { name: string; category: string }>();
+    for (const item of scopedMedia.value) {
+      for (const [category, names] of [
+        ["Copyright", item.copyrights],
+        ["Artist", [item.artist]],
+        ["Character", item.characters],
+        ["Tag", item.tags],
+      ] as const) {
+        for (const name of names) {
+          const normalized = name.toLocaleLowerCase();
+          if (normalized.includes(query) && !existing.includes(normalized))
+            values.set(`${category}:${normalized}`, { name, category });
+        }
+      }
+    }
+    return [...values.values()]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .slice(0, 30);
+  });
+  function commitSearch() {
+    search.value = search.value
+      .split(";")
+      .map((value) => value.trim())
+      .filter(Boolean)
+      .join("; ");
+    appliedSearch.value = search.value;
+  }
+  function chooseSuggestion(name: string) {
+    const parts = search.value.split(";");
+    parts.pop();
+    search.value = [...parts, name].join("; ");
+    commitSearch();
+  }
+  function addSearch(name: string) {
+    const parts = appliedSearch.value
+      .split(";")
+      .map((value) => value.trim())
+      .filter(Boolean);
+    if (
+      !parts.some(
+        (value) => value.toLocaleLowerCase() === name.toLocaleLowerCase(),
+      )
+    )
+      parts.push(name);
+    search.value = parts.join("; ");
+    commitSearch();
+  }
+  function clearSearch() {
+    search.value = "";
+    appliedSearch.value = "";
   }
   function toggleFavorite(item: MediaItem) {
     item.favorite = !item.favorite;
   }
   function reset() {
-    search.value = "";
+    clearSearch();
     kind.value = "all";
     sortMode.value = "newest";
-    selectedTags.value = [];
     favoritesOnly.value = false;
     taggedOnly.value = false;
     hideUntagged.value = false;
@@ -109,7 +163,7 @@ export function useLibrary() {
     search,
     kind,
     sortMode,
-    selectedTags,
+    suggestions,
     favoritesOnly,
     taggedOnly,
     hideUntagged,
@@ -120,7 +174,10 @@ export function useLibrary() {
     tags,
     typeCounts,
     activeFilterCount,
-    toggleTag,
+    commitSearch,
+    chooseSuggestion,
+    addSearch,
+    clearSearch,
     toggleFavorite,
     reset,
   };
