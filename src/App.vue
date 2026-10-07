@@ -9,6 +9,8 @@ import {
 } from "vue";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { platform, version } from "@tauri-apps/plugin-os";
+import { usesSystemWindowCorners } from "./utils/windowCorners";
 import AppIcon from "./components/AppIcon.vue";
 import SortSelect from "./components/SortSelect.vue";
 import MediaCollection from "./components/MediaCollection.vue";
@@ -85,6 +87,8 @@ const tagError = ref("");
 const optionsTarget = ref<MediaItem | null>(null);
 const toast = ref("");
 const maximized = ref(false);
+const systemWindowCorners =
+  isTauri() && usesSystemWindowCorners(platform(), version());
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
 let unlistenResize: (() => void) | undefined;
 const displayedTags = computed(() =>
@@ -244,7 +248,10 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="app-shell" :class="{ maximized }">
+  <div
+    class="app-shell"
+    :class="{ maximized, 'system-window-corners': systemWindowCorners }"
+  >
     <header class="titlebar">
       <div
         class="brand drag-region"
