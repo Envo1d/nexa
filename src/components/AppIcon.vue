@@ -4,6 +4,10 @@ import {
   ArrowRight,
   ArrowUpDown,
   Calendar,
+  Database,
+  FileText,
+  FolderInput,
+  GitBranch,
   Check,
   ChevronDown,
   Clock,
@@ -70,6 +74,10 @@ const icons: Record<string, Component> = {
   info: Info,
   play: Play,
   film: Film,
+  cache: Database,
+  logs: FileText,
+  staging: FolderInput,
+  structure: GitBranch,
 };
 const icon = computed(() => icons[props.name] ?? Info);
 </script>
