@@ -17,10 +17,12 @@ import MediaCollection from "./components/MediaCollection.vue";
 import FileDetails from "./components/FileDetails.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
 import { useLibrary } from "./composables/useLibrary";
+import { useStage } from "./composables/useStage";
 import type { MediaItem, MediaKind } from "./types/media";
 import "./styles.css";
 
 const library = useLibrary();
+const stage = useStage();
 const {
   scope,
   search,
@@ -184,13 +186,13 @@ function keyboard(event: KeyboardEvent) {
     !optionsTarget.value
   ) {
     event.preventDefault();
-    view.value = "main";
     nextTick(() => searchInput.value?.focus());
   }
   if (event.key === "Escape") {
     if (tagTarget.value) tagTarget.value = null;
     else if (view.value === "settings") view.value = "main";
     else if (optionsTarget.value) optionsTarget.value = null;
+    else if (view.value === "stage") stage.selectedId.value = null;
     else selectedId.value = null;
   }
 }
@@ -292,7 +294,7 @@ onBeforeUnmount(() => {
           :class="{ active: mode === 'grid' }"
           :aria-pressed="mode === 'grid'"
           aria-label="Grid view"
-          :disabled="view !== 'main'"
+          :disabled="view === 'settings'"
           @click="mode = 'grid'"
         >
           <AppIcon name="grid" :size="17" /></button
@@ -300,7 +302,7 @@ onBeforeUnmount(() => {
           :class="{ active: mode === 'list' }"
           :aria-pressed="mode === 'list'"
           aria-label="List view"
-          :disabled="view !== 'main'"
+          :disabled="view === 'settings'"
           @click="mode = 'list'"
         >
           <AppIcon name="list" :size="19" />
@@ -545,20 +547,61 @@ onBeforeUnmount(() => {
           notify(`${$event} is a UI preview. No settings or files are changed.`)
         "
       />
-      <section v-else class="stage-placeholder">
-        <span class="empty-icon"><AppIcon name="play" :size="38" /></span
-        ><span class="eyebrow">YOUR NEXT WORKSPACE</span>
-        <h1>Stage is coming next</h1>
-        <p>
-          A space for your media, ready for its next chapter.<br />The Stage
-          workflow will be designed separately.
-        </p>
-        <button class="primary-button" @click="view = 'main'">
-          Back to library<AppIcon name="arrow" :size="17" /></button
-        ><span class="placeholder-note"
-          >Main is ready to explore with demo media.</span
-        >
-      </section>
+      <template v-else>
+        <aside class="filters-panel" aria-label="Stage filters">
+          <header class="panel-heading"><h2>Filters</h2></header>
+          <div class="filters-scroll">
+            <div class="search-box">
+              <AppIcon name="search" :size="17" />
+              <input
+                ref="searchInput"
+                v-model="stage.search.value"
+                aria-label="Search files by name or path"
+                placeholder="File name or path"
+              />
+              <button
+                v-if="stage.search.value"
+                class="icon-button"
+                aria-label="Clear search"
+                @click="stage.clearSearch()"
+              >
+                <AppIcon name="close" :size="14" />
+              </button>
+              <kbd v-else>Ctrl F</kbd>
+            </div>
+            <section class="filter-section additional-section">
+              <h3>Additional</h3>
+              <label
+                ><input
+                  v-model="showPreviews"
+                  type="checkbox"
+                  role="switch"
+                />Show previews</label
+              >
+            </section>
+          </div>
+        </aside>
+        <MediaCollection
+          :items="stage.results.value"
+          :show-previews="showPreviews"
+          :mode="mode"
+          :selected-id="stage.selectedId.value"
+          heading="Stage"
+          :filtered="Boolean(stage.search.value.trim())"
+          stage
+          @select="stage.selectedId.value = $event.id"
+          @options="optionsTarget = $event"
+          @reset="stage.clearSearch()"
+        />
+        <FileDetails
+          v-if="stage.selected.value"
+          :item="stage.selected.value"
+          :show-previews="showPreviews"
+          stage
+          @close="stage.selectedId.value = null"
+          @action="previewAction($event, stage.selected.value)"
+        />
+      </template>
     </main>
     <Transition name="toast"
       ><div v-if="toast" class="toast-message" role="status">
@@ -662,12 +705,15 @@ onBeforeUnmount(() => {
           <div class="options-menu">
             <button
               @click="
-                selectedId = optionsTarget.id;
+                view === 'stage'
+                  ? (stage.selectedId.value = optionsTarget.id)
+                  : (selectedId = optionsTarget.id);
                 optionsTarget = null;
               "
             >
               <AppIcon name="info" :size="18" />View information</button
             ><button
+              v-if="view !== 'stage'"
               @click="
                 library.toggleFavorite(optionsTarget);
                 optionsTarget = null;
@@ -678,11 +724,25 @@ onBeforeUnmount(() => {
                   ? "Remove from favorites"
                   : "Add to favorites"
               }}</button
-            ><button @click="editTags(optionsTarget)">
+            ><button v-if="view !== 'stage'" @click="editTags(optionsTarget)">
               <AppIcon name="tag" :size="18" />Edit tags</button
-            ><button @click="previewAction('Copy path', optionsTarget)">
+            ><button
+              v-if="view !== 'stage'"
+              @click="previewAction('Copy path', optionsTarget)"
+            >
               <AppIcon name="copy" :size="18" />Preview path
             </button>
+            <template v-if="view === 'stage'">
+              <button @click="previewAction('Open file', optionsTarget)">
+                <AppIcon name="arrow" :size="18" />Open file
+              </button>
+              <button @click="previewAction('Open folder', optionsTarget)">
+                <AppIcon name="gallery" :size="18" />Open folder
+              </button>
+              <button @click="previewAction('Distribute', optionsTarget)">
+                <AppIcon name="share" :size="18" />Distribute
+              </button>
+            </template>
           </div></template
         >
       </section>

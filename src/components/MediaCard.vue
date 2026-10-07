@@ -8,6 +8,7 @@ const props = defineProps<{
   showPreviews: boolean;
   selected: boolean;
   mode: "grid" | "list";
+  stage?: boolean;
 }>();
 const displayName = computed(() =>
   props.mode === "list"
@@ -55,7 +56,7 @@ defineEmits<{ select: []; favorite: []; options: [] }>();
           {{ displayName }}
         </div>
         <time :datetime="modifiedDateTime">{{ modifiedDate }}</time>
-        <div class="card-tags">
+        <div v-if="!stage" class="card-tags">
           <span v-for="tag in item.tags" :key="tag" class="tag-chip">{{
             tag
           }}</span
@@ -64,6 +65,7 @@ defineEmits<{ select: []; favorite: []; options: [] }>();
       </div>
     </button>
     <button
+      v-if="!stage"
       class="card-favorite icon-button"
       :class="{ 'is-favorite': item.favorite }"
       :aria-label="`${item.favorite ? 'Remove' : 'Add'} ${item.filename} ${item.favorite ? 'from' : 'to'} favorites`"
