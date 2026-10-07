@@ -33,6 +33,7 @@ import {
   Square,
   Star,
   Tag,
+  Trash2,
   Video,
   X,
 } from "@lucide/vue";
@@ -67,6 +68,7 @@ const icons: Record<string, Component> = {
   size: Scan,
   calendar: Calendar,
   tag: Tag,
+  trash: Trash2,
   share: Share2,
   copy: Copy,
   arrow: ArrowRight,

@@ -654,11 +654,11 @@ svg {
   left: 0;
   right: 0;
   display: grid;
-  gap: 16px;
-  padding: 2px 2px 0;
+  gap: 1rem;
+  padding: 0.15rem 0.15rem 0;
 }
 .virtual-items.grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  justify-content: center;
 }
 .virtual-items.list {
   grid-template-columns: minmax(0, 1fr);
@@ -736,7 +736,7 @@ svg {
   min-width: 0;
 }
 .grid .card-body {
-  height: 86px;
+  height: 6.5rem;
 }
 .card-title {
   white-space: nowrap;
@@ -798,13 +798,7 @@ svg {
 .is-favorite svg {
   fill: #b781f542;
 }
-.card-options {
-  position: absolute;
-  right: 2px;
-  bottom: 5px;
-  height: 24px;
-  width: 25px;
-}
+
 .list .card-select {
   display: flex;
   align-items: stretch;
@@ -829,10 +823,7 @@ svg {
   top: 12px;
   right: 8px;
 }
-.list .card-options {
-  bottom: 8px;
-  right: 9px;
-}
+
 .list .extension {
   font-size: 8px;
   top: 5px;
@@ -1552,4 +1543,42 @@ svg {
 .detail-tag-group button.tag-chip:focus-visible {
   outline: 2px solid #be9be8;
   outline-offset: 2px;
+}
+.card-context-menu {
+  position: fixed;
+  z-index: 100;
+  display: grid;
+  gap: 3px;
+  width: 218px;
+  max-width: calc(100vw - 16px);
+  padding: 6px;
+  border: 1px solid #493459;
+  border-radius: 10px;
+  background: #211929;
+  box-shadow: 0 12px 36px #0008;
+}
+.card-context-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  text-align: left;
+}
+.card-context-menu button:hover,
+.card-context-menu button:focus-visible {
+  background: #32223f;
+  outline: none;
+}
+.card-context-menu svg {
+  color: #b891dd;
+}
+.card-context-menu .destructive {
+  margin-top: 3px;
+  border-top: 1px solid #493459;
+  color: #f292a7;
+}
+.card-context-menu .destructive svg {
+  color: inherit;
 }

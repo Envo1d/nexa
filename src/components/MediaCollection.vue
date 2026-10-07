@@ -23,7 +23,7 @@ const props = defineProps<{
 defineEmits<{
   select: [item: MediaItem];
   favorite: [item: MediaItem];
-  options: [item: MediaItem];
+  context: [item: MediaItem, event: MouseEvent | KeyboardEvent];
   reset: [];
 }>();
 const viewport = ref<HTMLElement | null>(null);
@@ -31,9 +31,25 @@ const width = ref(660);
 const height = ref(600);
 const scrollTop = ref(0);
 const loaded = ref(36);
-const columns = computed(() => (props.mode === "grid" ? 3 : 1));
+const remSize = ref(13);
+const cardWidth = computed(() => 17.5 * remSize.value);
+const gap = computed(() => remSize.value);
+const gridPadding = computed(() => 0.3 * remSize.value);
+const columns = computed(() =>
+  props.mode === "grid"
+    ? Math.max(
+        1,
+        Math.floor(
+          (width.value - gridPadding.value + gap.value) /
+            (cardWidth.value + gap.value),
+        ),
+      )
+    : 1,
+);
 const rowHeight = computed(() =>
-  props.mode === "grid" ? (((width.value - 32) / 3) * 9) / 16 + 104 : 88,
+  props.mode === "grid"
+    ? ((cardWidth.value - 2) * 9) / 16 + 6.5 * remSize.value + 2 + gap.value
+    : 88,
 );
 const loadedCount = computed(() => Math.min(loaded.value, props.items.length));
 const rowCount = computed(() => Math.ceil(loadedCount.value / columns.value));
@@ -83,6 +99,15 @@ function resetScroll() {
   scrollTop.value = 0;
   viewport.value?.scrollTo({ top: 0 });
 }
+watch(columns, async (count, previous) => {
+  if (props.mode !== "grid" || count === previous) return;
+  cancelScrollFrame();
+  const firstItem = Math.floor(scrollTop.value / rowHeight.value) * previous;
+  await nextTick();
+  if (!viewport.value) return;
+  viewport.value.scrollTop = Math.floor(firstItem / count) * rowHeight.value;
+  updateScroll();
+});
 watch(() => props.items.map((item) => item.id).join(","), resetScroll);
 watch(
   () => props.mode,
@@ -96,6 +121,9 @@ watch(
 onMounted(() => {
   observer = new ResizeObserver(([entry]) => {
     if (entry) {
+      remSize.value = parseFloat(
+        getComputedStyle(document.documentElement).fontSize,
+      );
       width.value = entry.contentRect.width;
       height.value = entry.contentRect.height;
     }
@@ -136,7 +164,9 @@ onBeforeUnmount(() => {
           :class="mode"
           :style="{
             transform: `translateY(${startRow * rowHeight}px)`,
-            gridAutoRows: `${rowHeight - 16}px`,
+            gridAutoRows: `${rowHeight - gap}px`,
+            gridTemplateColumns:
+              mode === 'grid' ? `repeat(${columns}, 17.5rem)` : undefined,
           }"
         >
           <MediaCard
@@ -149,7 +179,7 @@ onBeforeUnmount(() => {
             :selected="selectedId === item.id"
             @select="$emit('select', item)"
             @favorite="$emit('favorite', item)"
-            @options="$emit('options', item)"
+            @context="$emit('context', item, $event)"
           />
         </div>
       </div>
