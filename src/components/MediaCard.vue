@@ -24,11 +24,20 @@ const duration = computed(() =>
     ? undefined
     : formatDuration(props.item.duration),
 );
-defineEmits<{ select: []; favorite: []; options: [] }>();
+defineEmits<{
+  select: [];
+  favorite: [];
+  context: [event: MouseEvent | KeyboardEvent];
+}>();
 </script>
 
 <template>
-  <article class="media-card" :class="[mode, { selected }]">
+  <article
+    class="media-card"
+    :class="[mode, { selected }]"
+    @contextmenu.prevent.stop="$emit('context', $event)"
+    @keydown.shift.f10.prevent.stop="$emit('context', $event)"
+  >
     <button
       class="card-select"
       :aria-label="`View ${item.filename}`"
@@ -73,13 +82,6 @@ defineEmits<{ select: []; favorite: []; options: [] }>();
       @click="$emit('favorite')"
     >
       <AppIcon name="heart" :size="17" />
-    </button>
-    <button
-      class="card-options icon-button"
-      :aria-label="`Options for ${item.filename}`"
-      @click="$emit('options')"
-    >
-      <AppIcon name="more" :size="18" />
     </button>
   </article>
 </template>

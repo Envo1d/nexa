@@ -15,6 +15,8 @@ import AppIcon from "./components/AppIcon.vue";
 import SortSelect from "./components/SortSelect.vue";
 import MediaCollection from "./components/MediaCollection.vue";
 import FileDetails from "./components/FileDetails.vue";
+import CardContextMenu from "./components/CardContextMenu.vue";
+import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import SettingsPanel from "./components/SettingsPanel.vue";
 import { useLibrary } from "./composables/useLibrary";
 import { useStage } from "./composables/useStage";
@@ -86,7 +88,44 @@ const draftTags = ref<string[]>([]);
 const newTag = ref("");
 const tagError = ref("");
 
-const optionsTarget = ref<MediaItem | null>(null);
+const context = ref<{
+  item: MediaItem;
+  x: number;
+  y: number;
+  stage: boolean;
+} | null>(null);
+function openContext(item: MediaItem, event: MouseEvent | KeyboardEvent) {
+  const bounds = (event.target as HTMLElement).getBoundingClientRect();
+  context.value = {
+    item,
+    x:
+      event instanceof MouseEvent && event.clientX
+        ? event.clientX
+        : bounds.left,
+    y:
+      event instanceof MouseEvent && event.clientY
+        ? event.clientY
+        : bounds.bottom,
+    stage: view.value === "stage",
+  };
+}
+async function contextAction(action: string) {
+  const item = context.value?.item;
+  context.value = null;
+  if (!item) return;
+  if (action === "Copy filename") {
+    try {
+      if (isTauri()) await writeText(item.filename);
+      else await navigator.clipboard.writeText(item.filename);
+      notify("Filename copied.");
+    } catch {
+      notify("Could not copy the filename.");
+    }
+  } else previewAction(action, item);
+}
+watch([view, mode, results, stage.results], () => {
+  context.value = null;
+});
 const toast = ref("");
 const maximized = ref(false);
 const systemWindowCorners =
@@ -122,14 +161,14 @@ function previewAction(action: string, item: MediaItem) {
       `${action} is a UI preview. Real file actions will be connected after UI approval.`,
     );
   }
-  optionsTarget.value = null;
+  context.value = null;
 }
 async function editTags(item: MediaItem) {
   tagTarget.value = item;
   draftTags.value = [...item.tags];
   newTag.value = "";
   tagError.value = "";
-  optionsTarget.value = null;
+  context.value = null;
   await nextTick();
   tagInput.value?.focus();
 }
@@ -177,13 +216,16 @@ async function startDrag(event: PointerEvent) {
     notify("Window dragging is unavailable.");
   }
 }
+function preventBrowserContextMenu(event: MouseEvent) {
+  event.preventDefault();
+}
 function keyboard(event: KeyboardEvent) {
   if (
     (event.ctrlKey || event.metaKey) &&
     event.key.toLowerCase() === "f" &&
     !tagTarget.value &&
     view.value !== "settings" &&
-    !optionsTarget.value
+    !context.value
   ) {
     event.preventDefault();
     nextTick(() => searchInput.value?.focus());
@@ -191,7 +233,7 @@ function keyboard(event: KeyboardEvent) {
   if (event.key === "Escape") {
     if (tagTarget.value) tagTarget.value = null;
     else if (view.value === "settings") view.value = "main";
-    else if (optionsTarget.value) optionsTarget.value = null;
+    else if (context.value) context.value = null;
     else if (view.value === "stage") stage.selectedId.value = null;
     else selectedId.value = null;
   }
@@ -199,9 +241,7 @@ function keyboard(event: KeyboardEvent) {
 // Keep keyboard focus inside modal previews and restore it when they close.
 const modalElement = ref<HTMLElement | null>(null);
 let modalTrigger: HTMLElement | null = null;
-const modalOpen = computed(() =>
-  Boolean(tagTarget.value || optionsTarget.value),
-);
+const modalOpen = computed(() => Boolean(tagTarget.value));
 watch(modalOpen, async (open) => {
   if (open) {
     modalTrigger =
@@ -233,6 +273,7 @@ function trapFocus(event: KeyboardEvent) {
   }
 }
 onMounted(async () => {
+  document.addEventListener("contextmenu", preventBrowserContextMenu, true);
   document.addEventListener("keydown", keyboard);
   if (isTauri()) {
     const appWindow = getCurrentWindow();
@@ -243,6 +284,7 @@ onMounted(async () => {
   }
 });
 onBeforeUnmount(() => {
+  document.removeEventListener("contextmenu", preventBrowserContextMenu, true);
   document.removeEventListener("keydown", keyboard);
   clearTimeout(toastTimer);
   unlistenResize?.();
@@ -526,7 +568,7 @@ onBeforeUnmount(() => {
           :filtered="activeFilterCount > 0"
           @select="selectedId = $event.id"
           @favorite="library.toggleFavorite"
-          @options="optionsTarget = $event"
+          @context="openContext"
           @reset="library.reset()"
         />
         <FileDetails
@@ -590,7 +632,7 @@ onBeforeUnmount(() => {
           :filtered="Boolean(stage.search.value.trim())"
           stage
           @select="stage.selectedId.value = $event.id"
-          @options="optionsTarget = $event"
+          @context="openContext"
           @reset="stage.clearSearch()"
         />
         <FileDetails
@@ -614,15 +656,16 @@ onBeforeUnmount(() => {
           <AppIcon name="close" :size="16" />
         </button></div
     ></Transition>
-    <div
-      v-if="modalOpen"
-      class="modal-backdrop"
-      @click.self="
-        tagTarget = null;
-
-        optionsTarget = null;
-      "
-    >
+    <CardContextMenu
+      v-if="context"
+      :item="context.item"
+      :stage="context.stage"
+      :x="context.x"
+      :y="context.y"
+      @close="context = null"
+      @action="contextAction"
+    />
+    <div v-if="modalOpen" class="modal-backdrop" @click.self="tagTarget = null">
       <section
         ref="modalElement"
         class="modal"
@@ -689,61 +732,6 @@ onBeforeUnmount(() => {
               Cancel</button
             ><button class="primary-button" @click="saveTags">Save tags</button>
           </footer></template
-        >
-        <template v-else-if="optionsTarget"
-          ><header class="panel-heading">
-            <h2 id="modal-title">File options</h2>
-            <button
-              class="icon-button"
-              aria-label="Close file options"
-              @click="optionsTarget = null"
-            >
-              <AppIcon name="close" :size="18" />
-            </button>
-          </header>
-          <p class="modal-subtitle">{{ optionsTarget.filename }}</p>
-          <div class="options-menu">
-            <button
-              @click="
-                view === 'stage'
-                  ? (stage.selectedId.value = optionsTarget.id)
-                  : (selectedId = optionsTarget.id);
-                optionsTarget = null;
-              "
-            >
-              <AppIcon name="info" :size="18" />View information</button
-            ><button
-              v-if="view !== 'stage'"
-              @click="
-                library.toggleFavorite(optionsTarget);
-                optionsTarget = null;
-              "
-            >
-              <AppIcon name="heart" :size="18" />{{
-                optionsTarget.favorite
-                  ? "Remove from favorites"
-                  : "Add to favorites"
-              }}</button
-            ><button v-if="view !== 'stage'" @click="editTags(optionsTarget)">
-              <AppIcon name="tag" :size="18" />Edit tags</button
-            ><button
-              v-if="view !== 'stage'"
-              @click="previewAction('Copy path', optionsTarget)"
-            >
-              <AppIcon name="copy" :size="18" />Preview path
-            </button>
-            <template v-if="view === 'stage'">
-              <button @click="previewAction('Open file', optionsTarget)">
-                <AppIcon name="arrow" :size="18" />Open file
-              </button>
-              <button @click="previewAction('Open folder', optionsTarget)">
-                <AppIcon name="gallery" :size="18" />Open folder
-              </button>
-              <button @click="previewAction('Distribute', optionsTarget)">
-                <AppIcon name="share" :size="18" />Distribute
-              </button>
-            </template>
-          </div></template
         >
       </section>
     </div>
