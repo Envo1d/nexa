@@ -1,8 +1,27 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import type { MediaItem } from "../types/media";
 import { formatDate, formatDuration } from "../types/media";
 import AppIcon from "./AppIcon.vue";
-defineProps<{ item: MediaItem; selected: boolean; mode: "grid" | "list" }>();
+const props = defineProps<{
+  item: MediaItem;
+  selected: boolean;
+  mode: "grid" | "list";
+}>();
+const displayName = computed(() =>
+  props.mode === "list"
+    ? props.item.filename
+    : props.item.filename.replace(/\.[^.]+$/, ""),
+);
+const modifiedDate = computed(() => formatDate(props.item.modifiedAt));
+const modifiedDateTime = computed(() =>
+  new Date(props.item.modifiedAt).toISOString(),
+);
+const duration = computed(() =>
+  props.item.duration === undefined
+    ? undefined
+    : formatDuration(props.item.duration),
+);
 defineEmits<{ select: []; favorite: []; options: [] }>();
 </script>
 
@@ -19,20 +38,21 @@ defineEmits<{ select: []; favorite: []; options: [] }>();
           :src="item.preview"
           :alt="item.filename"
           loading="lazy"
+          decoding="async"
+          width="640"
+          height="360"
           draggable="false"
         />
         <span class="extension">{{ item.extension }}</span>
-        <span v-if="item.duration !== undefined" class="duration">{{
-          formatDuration(item.duration)
+        <span v-if="duration !== undefined" class="duration">{{
+          duration
         }}</span>
       </div>
       <div class="card-body">
-        <div v-if="mode === 'list' || item.title" class="card-title">
-          {{ mode === "list" ? item.filename : item.title }}
+        <div class="card-title" :title="displayName">
+          {{ displayName }}
         </div>
-        <time :datetime="new Date(item.modifiedAt).toISOString()">{{
-          formatDate(item.modifiedAt)
-        }}</time>
+        <time :datetime="modifiedDateTime">{{ modifiedDate }}</time>
         <div class="card-tags">
           <span v-for="tag in item.tags" :key="tag" class="tag-chip">{{
             tag

@@ -7,7 +7,7 @@ export function useLibrary() {
   const scope = ref<"gallery" | "favorites">("gallery");
   const search = ref("");
   const kind = ref<"all" | MediaKind>("all");
-  const sortDirection = ref<"desc" | "asc">("desc");
+  const sortMode = ref<"newest" | "older" | "name-asc" | "name-desc">("newest");
   const selectedTags = ref<string[]>([]);
   const favoritesOnly = ref(false);
   const taggedOnly = ref(false);
@@ -44,11 +44,23 @@ export function useLibrary() {
               .toLocaleLowerCase()
               .includes(query)),
       )
-      .sort((a, b) =>
-        sortDirection.value === "desc"
-          ? b.modifiedAt - a.modifiedAt
-          : a.modifiedAt - b.modifiedAt,
-      );
+      .sort((a, b) => {
+        if (sortMode.value === "name-asc" || sortMode.value === "name-desc") {
+          const order = a.filename.localeCompare(b.filename, "en", {
+            numeric: true,
+            sensitivity: "base",
+          });
+          return (
+            (sortMode.value === "name-asc" ? order : -order) ||
+            a.id.localeCompare(b.id)
+          );
+        }
+        return (
+          (sortMode.value === "newest"
+            ? b.modifiedAt - a.modifiedAt
+            : a.modifiedAt - b.modifiedAt) || a.id.localeCompare(b.id)
+        );
+      });
   });
   const selected = computed(
     () => media.value.find((item) => item.id === selectedId.value) ?? null,
@@ -85,7 +97,7 @@ export function useLibrary() {
   function reset() {
     search.value = "";
     kind.value = "all";
-    sortDirection.value = "desc";
+    sortMode.value = "newest";
     selectedTags.value = [];
     favoritesOnly.value = false;
     taggedOnly.value = false;
@@ -96,7 +108,7 @@ export function useLibrary() {
     scope,
     search,
     kind,
-    sortDirection,
+    sortMode,
     selectedTags,
     favoritesOnly,
     taggedOnly,
