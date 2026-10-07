@@ -1,160 +1,638 @@
 <script setup lang="ts">
-import { ref } from "vue";
-import { invoke } from "@tauri-apps/api/core";
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+} from "vue";
+import { isTauri } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import AppIcon from "./components/AppIcon.vue";
+import MediaCollection from "./components/MediaCollection.vue";
+import FileDetails from "./components/FileDetails.vue";
+import { useLibrary } from "./composables/useLibrary";
+import type { MediaItem, MediaKind } from "./types/media";
+import "./styles.css";
 
-const greetMsg = ref("");
-const name = ref("");
+const library = useLibrary();
+const {
+  scope,
+  search,
+  kind,
+  sortDirection,
+  selectedTags,
+  favoritesOnly,
+  taggedOnly,
+  hideUntagged,
+  selectedId,
+  selected,
+  results,
+  heading,
+  tags,
+  typeCounts,
+  activeFilterCount,
+} = library;
+const view = ref<"main" | "stage">("main");
+const mode = ref<"grid" | "list">("grid");
+const sidebarExpanded = ref(false);
+const showAllTags = ref(false);
+const searchInput = ref<HTMLInputElement | null>(null);
+const tagInput = ref<HTMLInputElement | null>(null);
+const tagTarget = ref<MediaItem | null>(null);
+const draftTags = ref<string[]>([]);
+const newTag = ref("");
+const tagError = ref("");
+const settingsOpen = ref(false);
+const optionsTarget = ref<MediaItem | null>(null);
+const toast = ref("");
+const maximized = ref(false);
+let toastTimer: ReturnType<typeof setTimeout> | undefined;
+let unlistenResize: (() => void) | undefined;
+const displayedTags = computed(() =>
+  showAllTags.value ? tags.value : tags.value.slice(0, 8),
+);
+const typeOptions: { value: "all" | MediaKind; label: string; icon: string }[] =
+  [
+    { value: "all", label: "All files", icon: "files" },
+    { value: "video", label: "Videos", icon: "video" },
+    { value: "image", label: "Images", icon: "image" },
+  ];
 
-async function greet() {
-  // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-  greetMsg.value = await invoke("greet", { name: name.value });
+function notify(message: string) {
+  toast.value = message;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    toast.value = "";
+  }, 4500);
 }
+function navigate(nextScope: "gallery" | "favorites") {
+  scope.value = nextScope;
+  view.value = "main";
+}
+function previewAction(action: string, item: MediaItem) {
+  if (action === "Copy path") {
+    notify(`Demo path: ${item.path}`);
+  } else {
+    notify(
+      `${action} is a UI preview. Real file actions will be connected after UI approval.`,
+    );
+  }
+  optionsTarget.value = null;
+}
+async function editTags(item: MediaItem) {
+  tagTarget.value = item;
+  draftTags.value = [...item.tags];
+  newTag.value = "";
+  tagError.value = "";
+  optionsTarget.value = null;
+  await nextTick();
+  tagInput.value?.focus();
+}
+function addDraftTag() {
+  const value = newTag.value.trim();
+  if (!value) return;
+  if (value.length > 24) {
+    tagError.value = "Keep tag names within 24 characters.";
+    return;
+  }
+  if (!draftTags.value.some((tag) => tag.toLowerCase() === value.toLowerCase()))
+    draftTags.value.push(value);
+  newTag.value = "";
+  tagError.value = "";
+}
+function saveTags() {
+  addDraftTag();
+  if (tagError.value || !tagTarget.value) return;
+  tagTarget.value.tags = [...draftTags.value];
+  tagTarget.value = null;
+  notify("Tags updated in the demo library.");
+}
+async function windowAction(action: "minimize" | "maximize" | "close") {
+  if (!isTauri()) {
+    notify("Window controls are available in the Nexa desktop app.");
+    return;
+  }
+  try {
+    const appWindow = getCurrentWindow();
+    if (action === "minimize") await appWindow.minimize();
+    else if (action === "close") await appWindow.close();
+    else {
+      await appWindow.toggleMaximize();
+      maximized.value = await appWindow.isMaximized();
+    }
+  } catch {
+    notify("The window action could not be completed.");
+  }
+}
+async function startDrag(event: PointerEvent) {
+  if (event.button !== 0 || !isTauri()) return;
+  try {
+    await getCurrentWindow().startDragging();
+  } catch {
+    notify("Window dragging is unavailable.");
+  }
+}
+function keyboard(event: KeyboardEvent) {
+  if (
+    (event.ctrlKey || event.metaKey) &&
+    event.key.toLowerCase() === "f" &&
+    !tagTarget.value &&
+    !settingsOpen.value &&
+    !optionsTarget.value
+  ) {
+    event.preventDefault();
+    view.value = "main";
+    nextTick(() => searchInput.value?.focus());
+  }
+  if (event.key === "Escape") {
+    if (tagTarget.value) tagTarget.value = null;
+    else if (settingsOpen.value) settingsOpen.value = false;
+    else if (optionsTarget.value) optionsTarget.value = null;
+    else selectedId.value = null;
+  }
+}
+// Keep keyboard focus inside modal previews and restore it when they close.
+const modalElement = ref<HTMLElement | null>(null);
+let modalTrigger: HTMLElement | null = null;
+const modalOpen = computed(() =>
+  Boolean(tagTarget.value || settingsOpen.value || optionsTarget.value),
+);
+watch(modalOpen, async (open) => {
+  if (open) {
+    modalTrigger =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    await nextTick();
+    const focusTarget = tagTarget.value
+      ? tagInput.value
+      : modalElement.value?.querySelector<HTMLElement>("button, input");
+    focusTarget?.focus();
+  } else modalTrigger?.focus();
+});
+function trapFocus(event: KeyboardEvent) {
+  if (event.key !== "Tab" || !modalElement.value) return;
+  const focusable = [
+    ...modalElement.value.querySelectorAll<HTMLElement>(
+      "button:not([disabled]), input, [tabindex='0']",
+    ),
+  ];
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last?.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first?.focus();
+  }
+}
+onMounted(async () => {
+  document.addEventListener("keydown", keyboard);
+  if (isTauri()) {
+    const appWindow = getCurrentWindow();
+    maximized.value = await appWindow.isMaximized();
+    unlistenResize = await appWindow.onResized(async () => {
+      maximized.value = await appWindow.isMaximized();
+    });
+  }
+});
+onBeforeUnmount(() => {
+  document.removeEventListener("keydown", keyboard);
+  clearTimeout(toastTimer);
+  unlistenResize?.();
+});
 </script>
 
 <template>
-  <main class="container">
-    <h1>Welcome to Tauri + Vue</h1>
-
-    <div class="row">
-      <a href="https://vite.dev" target="_blank">
-        <img src="/vite.svg" class="logo vite" alt="Vite logo" />
-      </a>
-      <a href="https://tauri.app" target="_blank">
-        <img src="/tauri.svg" class="logo tauri" alt="Tauri logo" />
-      </a>
-      <a href="https://vuejs.org/" target="_blank">
-        <img src="./assets/vue.svg" class="logo vue" alt="Vue logo" />
-      </a>
+  <div class="app-shell" :class="{ maximized }">
+    <header class="titlebar">
+      <div
+        class="brand drag-region"
+        @pointerdown="startDrag"
+        @dblclick="windowAction('maximize')"
+      >
+        <img class="brand-mark" src="/icon.png" alt="" draggable="false" /><span
+          >Nexa</span
+        >
+      </div>
+      <div
+        class="titlebar-drag drag-region"
+        @pointerdown="startDrag"
+        @dblclick="windowAction('maximize')"
+      ></div>
+      <nav class="view-tabs" aria-label="Workspace">
+        <button
+          :class="{ active: view === 'main' }"
+          :aria-pressed="view === 'main'"
+          @click="view = 'main'"
+        >
+          Main <span>View</span></button
+        ><button
+          :class="{ active: view === 'stage' }"
+          :aria-pressed="view === 'stage'"
+          @click="view = 'stage'"
+        >
+          Stage <span>View</span>
+        </button>
+      </nav>
+      <div
+        class="titlebar-drag drag-region"
+        @pointerdown="startDrag"
+        @dblclick="windowAction('maximize')"
+      ></div>
+      <div class="layout-toggle" aria-label="Collection layout">
+        <button
+          :class="{ active: mode === 'grid' }"
+          :aria-pressed="mode === 'grid'"
+          aria-label="Grid view"
+          :disabled="view !== 'main'"
+          @click="mode = 'grid'"
+        >
+          <AppIcon name="grid" :size="17" /></button
+        ><button
+          :class="{ active: mode === 'list' }"
+          :aria-pressed="mode === 'list'"
+          aria-label="List view"
+          :disabled="view !== 'main'"
+          @click="mode = 'list'"
+        >
+          <AppIcon name="list" :size="19" />
+        </button>
+      </div>
+      <div class="window-controls">
+        <button aria-label="Minimize window" @click="windowAction('minimize')">
+          <AppIcon name="minimize" :size="17" /></button
+        ><button
+          :aria-label="maximized ? 'Restore window' : 'Maximize window'"
+          @click="windowAction('maximize')"
+        >
+          <AppIcon
+            :name="maximized ? 'restore' : 'maximize'"
+            :size="15"
+          /></button
+        ><button
+          class="window-close"
+          aria-label="Close window"
+          @click="windowAction('close')"
+        >
+          <AppIcon name="close" :size="18" />
+        </button>
+      </div>
+    </header>
+    <main class="workspace">
+      <nav
+        class="navigation"
+        :class="{ expanded: sidebarExpanded }"
+        aria-label="Library navigation"
+      >
+        <button
+          class="nav-item collapse-button"
+          :aria-label="sidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'"
+          :aria-expanded="sidebarExpanded"
+          @click="sidebarExpanded = !sidebarExpanded"
+        >
+          <AppIcon name="menu" /><span v-if="sidebarExpanded">Library</span>
+        </button>
+        <div class="nav-main">
+          <button
+            class="nav-item"
+            :class="{ active: scope === 'gallery' && view === 'main' }"
+            title="Gallery"
+            :aria-current="
+              scope === 'gallery' && view === 'main' ? 'page' : undefined
+            "
+            @click="navigate('gallery')"
+          >
+            <AppIcon name="gallery" /><span v-if="sidebarExpanded">Gallery</span
+            ><span v-else class="sr-only">Gallery</span></button
+          ><button
+            class="nav-item"
+            :class="{ active: scope === 'favorites' && view === 'main' }"
+            title="Favorites"
+            :aria-current="
+              scope === 'favorites' && view === 'main' ? 'page' : undefined
+            "
+            @click="navigate('favorites')"
+          >
+            <AppIcon name="star" /><span v-if="sidebarExpanded">Favorites</span
+            ><span v-else class="sr-only">Favorites</span>
+          </button>
+        </div>
+        <button
+          class="nav-item settings-button"
+          title="Settings"
+          @click="settingsOpen = true"
+        >
+          <AppIcon name="settings" /><span v-if="sidebarExpanded">Settings</span
+          ><span v-else class="sr-only">Settings</span>
+        </button>
+      </nav>
+      <template v-if="view === 'main'">
+        <aside class="filters-panel" aria-label="Library filters">
+          <header class="panel-heading">
+            <h2>Filters</h2>
+            <span v-if="activeFilterCount" class="filter-count">{{
+              activeFilterCount
+            }}</span>
+          </header>
+          <div class="filters-scroll">
+            <div class="search-box">
+              <AppIcon name="search" :size="17" /><input
+                ref="searchInput"
+                v-model="search"
+                aria-label="Search media"
+                placeholder="Search..."
+              /><button
+                v-if="search"
+                class="icon-button"
+                aria-label="Clear search"
+                @click="search = ''"
+              >
+                <AppIcon name="close" :size="14" /></button
+              ><kbd v-else>Ctrl F</kbd>
+            </div>
+            <section class="filter-section type-section">
+              <h3>File type</h3>
+              <button
+                v-for="option in typeOptions"
+                :key="option.value"
+                class="type-option"
+                :class="{ active: kind === option.value }"
+                :aria-pressed="kind === option.value"
+                @click="kind = option.value"
+              >
+                <AppIcon :name="option.icon" :size="17" /><span>{{
+                  option.label
+                }}</span
+                ><span class="type-count">{{ typeCounts[option.value] }}</span>
+              </button>
+            </section>
+            <section class="filter-section">
+              <h3>Sorting</h3>
+              <div class="select-wrap">
+                <select aria-label="Sort criterion">
+                  <option>Modification date</option></select
+                ><AppIcon name="down" :size="15" />
+              </div>
+              <div class="sort-row">
+                <div class="select-wrap">
+                  <select v-model="sortDirection" aria-label="Sort direction">
+                    <option value="desc">Newest first</option>
+                    <option value="asc">Oldest first</option></select
+                  ><AppIcon name="down" :size="15" />
+                </div>
+                <button
+                  class="secondary-button sort-button"
+                  aria-label="Reverse sort direction"
+                  @click="
+                    sortDirection = sortDirection === 'desc' ? 'asc' : 'desc'
+                  "
+                >
+                  <AppIcon name="sort" :size="17" />
+                </button>
+              </div>
+            </section>
+            <section class="filter-section">
+              <h3>Tags</h3>
+              <div class="filter-tags">
+                <button
+                  v-for="tag in displayedTags"
+                  :key="tag.name"
+                  class="filter-tag"
+                  :class="{ active: selectedTags.includes(tag.name) }"
+                  :aria-pressed="selectedTags.includes(tag.name)"
+                  @click="library.toggleTag(tag.name)"
+                >
+                  <span>{{ tag.name }}</span
+                  ><small>{{ tag.count }}</small>
+                </button>
+              </div>
+              <button
+                v-if="tags.length > 8"
+                class="text-button show-tags"
+                @click="showAllTags = !showAllTags"
+              >
+                {{ showAllTags ? "Show fewer" : "Show all tags"
+                }}<AppIcon name="down" :size="13" />
+              </button>
+              <p v-if="selectedTags.length > 1" class="filter-hint">
+                Matching all selected tags
+              </p>
+            </section>
+            <section class="filter-section additional-section">
+              <h3>Additional</h3>
+              <label
+                ><input v-model="favoritesOnly" type="checkbox" />Favorites
+                only</label
+              ><label
+                ><input v-model="taggedOnly" type="checkbox" />Tagged
+                only</label
+              ><label
+                ><input v-model="hideUntagged" type="checkbox" />Hide
+                untagged</label
+              >
+            </section>
+          </div>
+          <div class="filter-reset">
+            <button class="secondary-button" @click="library.reset()">
+              <AppIcon name="reset" :size="16" />Reset filters
+            </button>
+          </div>
+        </aside>
+        <MediaCollection
+          :items="results"
+          :mode="mode"
+          :selected-id="selectedId"
+          :heading="heading"
+          :filtered="activeFilterCount > 0"
+          @select="selectedId = $event.id"
+          @favorite="library.toggleFavorite"
+          @options="optionsTarget = $event"
+          @reset="library.reset()"
+        />
+        <FileDetails
+          v-if="selected"
+          :item="selected"
+          @close="selectedId = null"
+          @favorite="library.toggleFavorite(selected)"
+          @tags="editTags(selected)"
+          @action="previewAction($event, selected)"
+        />
+      </template>
+      <section v-else class="stage-placeholder">
+        <span class="empty-icon"><AppIcon name="play" :size="38" /></span
+        ><span class="eyebrow">YOUR NEXT WORKSPACE</span>
+        <h1>Stage is coming next</h1>
+        <p>
+          A space for your media, ready for its next chapter.<br />The Stage
+          workflow will be designed separately.
+        </p>
+        <button class="primary-button" @click="view = 'main'">
+          Back to library<AppIcon name="arrow" :size="17" /></button
+        ><span class="placeholder-note"
+          >Main is ready to explore with demo media.</span
+        >
+      </section>
+    </main>
+    <Transition name="toast"
+      ><div v-if="toast" class="toast-message" role="status">
+        <AppIcon name="info" :size="18" /><span>{{ toast }}</span
+        ><button
+          class="icon-button"
+          aria-label="Dismiss message"
+          @click="toast = ''"
+        >
+          <AppIcon name="close" :size="16" />
+        </button></div
+    ></Transition>
+    <div
+      v-if="modalOpen"
+      class="modal-backdrop"
+      @click.self="
+        tagTarget = null;
+        settingsOpen = false;
+        optionsTarget = null;
+      "
+    >
+      <section
+        ref="modalElement"
+        class="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modal-title"
+        @keydown="trapFocus"
+      >
+        <template v-if="tagTarget"
+          ><header class="panel-heading">
+            <h2 id="modal-title">Edit tags</h2>
+            <button
+              class="icon-button"
+              aria-label="Close tag editor"
+              @click="tagTarget = null"
+            >
+              <AppIcon name="close" :size="18" />
+            </button>
+          </header>
+          <p class="modal-subtitle">{{ tagTarget.filename }}</p>
+          <div class="draft-tags">
+            <button
+              v-for="tag in draftTags"
+              :key="tag"
+              class="tag-chip"
+              :aria-label="`Remove ${tag} tag`"
+              @click="draftTags = draftTags.filter((name) => name !== tag)"
+            >
+              {{ tag }}<AppIcon name="close" :size="12" /></button
+            ><span v-if="!draftTags.length" class="muted"
+              >Add a little context to this file.</span
+            >
+          </div>
+          <form class="tag-form" @submit.prevent="addDraftTag">
+            <input
+              ref="tagInput"
+              v-model="newTag"
+              aria-label="New tag"
+              placeholder="Add a tag..."
+              maxlength="25"
+            /><button class="secondary-button" type="submit">Add</button>
+          </form>
+          <p v-if="tagError" class="error-message" role="alert">
+            {{ tagError }}
+          </p>
+          <p class="modal-note">
+            Choose an existing tag or create your own. Changes are stored for
+            this demo session.
+          </p>
+          <div class="suggested-tags">
+            <button
+              v-for="tag in tags
+                .filter((entry) => !draftTags.includes(entry.name))
+                .slice(0, 8)"
+              :key="tag.name"
+              class="tag-chip"
+              @click="draftTags.push(tag.name)"
+            >
+              <AppIcon name="plus" :size="12" />{{ tag.name }}
+            </button>
+          </div>
+          <footer class="modal-footer">
+            <button class="secondary-button" @click="tagTarget = null">
+              Cancel</button
+            ><button class="primary-button" @click="saveTags">Save tags</button>
+          </footer></template
+        >
+        <template v-else-if="settingsOpen"
+          ><header class="panel-heading">
+            <h2 id="modal-title">Settings</h2>
+            <button
+              class="icon-button"
+              aria-label="Close settings"
+              @click="settingsOpen = false"
+            >
+              <AppIcon name="close" :size="18" />
+            </button>
+          </header>
+          <div class="settings-preview">
+            <img class="brand-mark" src="/icon.png" alt="" draggable="false" />
+            <h3>Your library, your space.</h3>
+            <p>
+              This preview uses 480 local demo records. Favorites and tags reset
+              when you reload.
+            </p>
+            <div class="settings-info">
+              <span>Appearance</span><span>Midnight violet</span>
+            </div>
+            <div class="settings-info">
+              <span>Media source</span><span>Demo library</span>
+            </div>
+            <p class="modal-note">
+              Library folders, persistence, and other settings will follow UI
+              approval.
+            </p>
+          </div></template
+        >
+        <template v-else-if="optionsTarget"
+          ><header class="panel-heading">
+            <h2 id="modal-title">File options</h2>
+            <button
+              class="icon-button"
+              aria-label="Close file options"
+              @click="optionsTarget = null"
+            >
+              <AppIcon name="close" :size="18" />
+            </button>
+          </header>
+          <p class="modal-subtitle">{{ optionsTarget.filename }}</p>
+          <div class="options-menu">
+            <button
+              @click="
+                selectedId = optionsTarget.id;
+                optionsTarget = null;
+              "
+            >
+              <AppIcon name="info" :size="18" />View information</button
+            ><button
+              @click="
+                library.toggleFavorite(optionsTarget);
+                optionsTarget = null;
+              "
+            >
+              <AppIcon name="heart" :size="18" />{{
+                optionsTarget.favorite
+                  ? "Remove from favorites"
+                  : "Add to favorites"
+              }}</button
+            ><button @click="editTags(optionsTarget)">
+              <AppIcon name="tag" :size="18" />Edit tags</button
+            ><button @click="previewAction('Copy path', optionsTarget)">
+              <AppIcon name="copy" :size="18" />Preview path
+            </button>
+          </div></template
+        >
+      </section>
     </div>
-    <p>Click on the Tauri, Vite, and Vue logos to learn more.</p>
-
-    <form class="row" @submit.prevent="greet">
-      <input id="greet-input" v-model="name" placeholder="Enter a name..." />
-      <button type="submit">Greet</button>
-    </form>
-    <p>{{ greetMsg }}</p>
-  </main>
+  </div>
 </template>
-
-<style scoped>
-.logo.vite:hover {
-  filter: drop-shadow(0 0 2em #747bff);
-}
-
-.logo.vue:hover {
-  filter: drop-shadow(0 0 2em #249b73);
-}
-
-</style>
-<style>
-:root {
-  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 16px;
-  line-height: 24px;
-  font-weight: 400;
-
-  color: #0f0f0f;
-  background-color: #f6f6f6;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  -webkit-text-size-adjust: 100%;
-}
-
-.container {
-  margin: 0;
-  padding-top: 10vh;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  text-align: center;
-}
-
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: 0.75s;
-}
-
-.logo.tauri:hover {
-  filter: drop-shadow(0 0 2em #24c8db);
-}
-
-.row {
-  display: flex;
-  justify-content: center;
-}
-
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-
-a:hover {
-  color: #535bf2;
-}
-
-h1 {
-  text-align: center;
-}
-
-input,
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  color: #0f0f0f;
-  background-color: #ffffff;
-  transition: border-color 0.25s;
-  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.2);
-}
-
-button {
-  cursor: pointer;
-}
-
-button:hover {
-  border-color: #396cd8;
-}
-button:active {
-  border-color: #396cd8;
-  background-color: #e8e8e8;
-}
-
-input,
-button {
-  outline: none;
-}
-
-#greet-input {
-  margin-right: 5px;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    color: #f6f6f6;
-    background-color: #2f2f2f;
-  }
-
-  a:hover {
-    color: #24c8db;
-  }
-
-  input,
-  button {
-    color: #ffffff;
-    background-color: #0f0f0f98;
-  }
-  button:active {
-    background-color: #0f0f0f69;
-  }
-}
-
-</style>
