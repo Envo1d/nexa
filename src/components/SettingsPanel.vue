@@ -137,33 +137,27 @@ function resetDrafts() {
           <div class="settings-card">
             <div
               v-if="section.id === 'library' || section.id === 'staging'"
-              class="settings-card-row settings-folder-row"
+              class="settings-card-row"
             >
-              <label :for="`directory-${section.id}`">{{
-                section.id === "library"
-                  ? "Sorted library path"
-                  : "Staging folder"
-              }}</label>
-              <div class="settings-path-row">
-                <div class="settings-path-input">
-                  <AppIcon :name="section.icon" :size="16" /><input
-                    :id="`directory-${section.id}`"
-                    value="Not selected"
-                    readonly
-                  />
-                </div>
-                <button
-                  class="secondary-button"
-                  @click="
-                    $emit(
-                      'preview',
-                      `Browse ${section.label.toLowerCase()} directory`,
-                    )
-                  "
-                >
-                  <AppIcon name="gallery" :size="16" />Browse
-                </button>
-              </div>
+              <span>
+                <strong>{{
+                  section.id === "library"
+                    ? "Sorted library path"
+                    : "Staging folder"
+                }}</strong>
+                <small>Not selected</small>
+              </span>
+              <button
+                class="secondary-button"
+                @click="
+                  $emit(
+                    'preview',
+                    `Browse ${section.label.toLowerCase()} directory`,
+                  )
+                "
+              >
+                <AppIcon name="gallery" :size="16" />Browse
+              </button>
             </div>
             <template v-else-if="section.id === 'structure'">
               <label class="settings-card-row" for="character-separator"

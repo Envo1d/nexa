@@ -1293,8 +1293,7 @@ svg {
 .settings-card-row:last-child {
   border-bottom: 0;
 }
-.settings-card strong,
-.settings-folder-row > label {
+.settings-card strong {
   display: block;
   color: #eeedf6;
   font-size: 13px;
@@ -1326,36 +1325,8 @@ svg {
   opacity: 0.55;
   cursor: not-allowed;
 }
-.settings-folder-row,
 .settings-cache-row {
   display: block;
-}
-.settings-path-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 12px;
-}
-.settings-path-input {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  flex: 1;
-  min-width: 0;
-  border: 1px solid #302944;
-  border-radius: 12px;
-  background: #11101b;
-  padding: 12px;
-  color: #9691a8;
-}
-.settings-path-input input {
-  width: 100%;
-  min-width: 0;
-  border: 0;
-  background: transparent;
-  color: #a6a1b8;
-  font-size: 13px;
-  text-overflow: ellipsis;
 }
 .settings-workspace .secondary-button,
 .settings-workspace .primary-button {
