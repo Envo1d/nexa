@@ -13,6 +13,7 @@ import AppIcon from "./components/AppIcon.vue";
 import SortSelect from "./components/SortSelect.vue";
 import MediaCollection from "./components/MediaCollection.vue";
 import FileDetails from "./components/FileDetails.vue";
+import SettingsPanel from "./components/SettingsPanel.vue";
 import { useLibrary } from "./composables/useLibrary";
 import type { MediaItem, MediaKind } from "./types/media";
 import "./styles.css";
@@ -35,7 +36,7 @@ const {
   typeCounts,
   activeFilterCount,
 } = library;
-const view = ref<"main" | "stage">("main");
+const view = ref<"main" | "stage" | "settings">("main");
 const mode = ref<"grid" | "list">("grid");
 const showPreviews = ref(true);
 const sidebarExpanded = ref(false);
@@ -80,7 +81,7 @@ const tagTarget = ref<MediaItem | null>(null);
 const draftTags = ref<string[]>([]);
 const newTag = ref("");
 const tagError = ref("");
-const settingsOpen = ref(false);
+
 const optionsTarget = ref<MediaItem | null>(null);
 const toast = ref("");
 const maximized = ref(false);
@@ -175,7 +176,7 @@ function keyboard(event: KeyboardEvent) {
     (event.ctrlKey || event.metaKey) &&
     event.key.toLowerCase() === "f" &&
     !tagTarget.value &&
-    !settingsOpen.value &&
+    view.value !== "settings" &&
     !optionsTarget.value
   ) {
     event.preventDefault();
@@ -184,7 +185,7 @@ function keyboard(event: KeyboardEvent) {
   }
   if (event.key === "Escape") {
     if (tagTarget.value) tagTarget.value = null;
-    else if (settingsOpen.value) settingsOpen.value = false;
+    else if (view.value === "settings") view.value = "main";
     else if (optionsTarget.value) optionsTarget.value = null;
     else selectedId.value = null;
   }
@@ -193,7 +194,7 @@ function keyboard(event: KeyboardEvent) {
 const modalElement = ref<HTMLElement | null>(null);
 let modalTrigger: HTMLElement | null = null;
 const modalOpen = computed(() =>
-  Boolean(tagTarget.value || settingsOpen.value || optionsTarget.value),
+  Boolean(tagTarget.value || optionsTarget.value),
 );
 watch(modalOpen, async (open) => {
   if (open) {
@@ -360,7 +361,9 @@ onBeforeUnmount(() => {
         <button
           class="nav-item settings-button"
           title="Settings"
-          @click="settingsOpen = true"
+          :class="{ active: view === 'settings' }"
+          :aria-current="view === 'settings' ? 'page' : undefined"
+          @click="view = 'settings'"
         >
           <AppIcon name="settings" /><span v-if="sidebarExpanded">Settings</span
           ><span v-else class="sr-only">Settings</span>
@@ -528,6 +531,13 @@ onBeforeUnmount(() => {
           @action="previewAction($event, selected)"
         />
       </template>
+      <SettingsPanel
+        v-else-if="view === 'settings'"
+        @close="view = 'main'"
+        @preview="
+          notify(`${$event} is a UI preview. No settings or files are changed.`)
+        "
+      />
       <section v-else class="stage-placeholder">
         <span class="empty-icon"><AppIcon name="play" :size="38" /></span
         ><span class="eyebrow">YOUR NEXT WORKSPACE</span>
@@ -559,7 +569,7 @@ onBeforeUnmount(() => {
       class="modal-backdrop"
       @click.self="
         tagTarget = null;
-        settingsOpen = false;
+
         optionsTarget = null;
       "
     >
@@ -629,36 +639,6 @@ onBeforeUnmount(() => {
               Cancel</button
             ><button class="primary-button" @click="saveTags">Save tags</button>
           </footer></template
-        >
-        <template v-else-if="settingsOpen"
-          ><header class="panel-heading">
-            <h2 id="modal-title">Settings</h2>
-            <button
-              class="icon-button"
-              aria-label="Close settings"
-              @click="settingsOpen = false"
-            >
-              <AppIcon name="close" :size="18" />
-            </button>
-          </header>
-          <div class="settings-preview">
-            <img class="brand-mark" src="/icon.png" alt="" draggable="false" />
-            <h3>Your library, your space.</h3>
-            <p>
-              This preview uses 480 local demo records. Favorites and tags reset
-              when you reload.
-            </p>
-            <div class="settings-info">
-              <span>Appearance</span><span>Midnight violet</span>
-            </div>
-            <div class="settings-info">
-              <span>Media source</span><span>Demo library</span>
-            </div>
-            <p class="modal-note">
-              Library folders, persistence, and other settings will follow UI
-              approval.
-            </p>
-          </div></template
         >
         <template v-else-if="optionsTarget"
           ><header class="panel-heading">
