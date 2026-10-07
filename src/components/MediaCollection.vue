@@ -18,6 +18,7 @@ const props = defineProps<{
   selectedId: string | null;
   heading: string;
   filtered: boolean;
+  stage?: boolean;
 }>();
 defineEmits<{
   select: [item: MediaItem];
@@ -114,7 +115,9 @@ onBeforeUnmount(() => {
         <h1>{{ heading }}</h1>
         <span>{{ items.length.toLocaleString() }} files</span>
       </div>
-      <span class="demo-badge"><span></span> Demo library</span>
+      <span class="demo-badge"
+        ><span></span> {{ stage ? "Demo staging" : "Demo library" }}</span
+      >
     </header>
     <div
       ref="viewport"
@@ -140,6 +143,7 @@ onBeforeUnmount(() => {
             v-for="item in visibleItems"
             :key="item.id"
             :item="item"
+            :stage="stage"
             :show-previews="showPreviews"
             :mode="mode"
             :selected="selectedId === item.id"
@@ -151,12 +155,22 @@ onBeforeUnmount(() => {
       </div>
       <div v-else class="empty-state">
         <span class="empty-icon"><AppIcon name="search" :size="32" /></span>
-        <h2>{{ filtered ? "No matching files" : "No favorites yet" }}</h2>
+        <h2>
+          {{
+            filtered
+              ? "No matching files"
+              : stage
+                ? "No staged files"
+                : "No favorites yet"
+          }}
+        </h2>
         <p>
           {{
             filtered
               ? "Try another search or adjust your filters."
-              : "Tap the heart on a file to keep it here."
+              : stage
+                ? "Your staging files will appear here."
+                : "Tap the heart on a file to keep it here."
           }}
         </p>
         <button

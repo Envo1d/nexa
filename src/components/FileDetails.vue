@@ -3,7 +3,11 @@ import { computed } from "vue";
 import type { MediaItem } from "../types/media";
 import { formatDate, formatDuration, formatSize } from "../types/media";
 import AppIcon from "./AppIcon.vue";
-const props = defineProps<{ item: MediaItem; showPreviews: boolean }>();
+const props = defineProps<{
+  item: MediaItem;
+  showPreviews: boolean;
+  stage?: boolean;
+}>();
 defineEmits<{
   close: [];
   favorite: [];
@@ -102,7 +106,7 @@ const metadata = computed(() => [
           formatDuration(item.duration)
         }}</span>
       </div>
-      <div class="detail-attribution">
+      <div v-if="!stage" class="detail-attribution">
         <section
           v-for="group in attribution"
           :key="group.category"
@@ -140,10 +144,20 @@ const metadata = computed(() => [
           @click="$emit('action', 'Open folder')"
         >
           <AppIcon name="gallery" :size="17" />Open folder</button
-        ><button class="secondary-button" @click="$emit('action', 'Copy path')">
+        ><button
+          v-if="stage"
+          class="secondary-button"
+          @click="$emit('action', 'Distribute')"
+        >
+          <AppIcon name="share" :size="17" />Distribute</button
+        ><button
+          v-else
+          class="secondary-button"
+          @click="$emit('action', 'Copy path')"
+        >
           <AppIcon name="copy" :size="16" />Copy path
         </button>
-        <div class="action-row">
+        <div v-if="!stage" class="action-row">
           <button
             class="secondary-button"
             :class="{ 'is-favorite': item.favorite }"
