@@ -5,6 +5,7 @@ import { formatDate, formatDuration } from "../types/media";
 import AppIcon from "./AppIcon.vue";
 const props = defineProps<{
   item: MediaItem;
+  showPreviews: boolean;
   selected: boolean;
   mode: "grid" | "list";
 }>();
@@ -35,6 +36,7 @@ defineEmits<{ select: []; favorite: []; options: [] }>();
     >
       <div class="card-preview">
         <img
+          v-if="showPreviews"
           :src="item.preview"
           :alt="item.filename"
           loading="lazy"

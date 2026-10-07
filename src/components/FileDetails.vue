@@ -3,8 +3,14 @@ import { computed } from "vue";
 import type { MediaItem } from "../types/media";
 import { formatDate, formatDuration, formatSize } from "../types/media";
 import AppIcon from "./AppIcon.vue";
-const props = defineProps<{ item: MediaItem }>();
-defineEmits<{ close: []; favorite: []; tags: []; action: [name: string] }>();
+const props = defineProps<{ item: MediaItem; showPreviews: boolean }>();
+defineEmits<{
+  close: [];
+  favorite: [];
+  tags: [];
+  action: [name: string];
+  search: [value: string];
+}>();
 const attribution = computed(() => [
   { label: "Copyright", category: "copyright", values: props.item.copyrights },
   { label: "Artist", category: "artist", values: [props.item.artist] },
@@ -88,7 +94,7 @@ const metadata = computed(() => [
     </header>
     <div class="details-scroll">
       <h3 class="detail-filename">{{ item.filename }}</h3>
-      <div class="detail-preview">
+      <div v-if="showPreviews" class="detail-preview">
         <img :src="item.preview" :alt="item.filename" /><span
           class="preview-label"
           >{{ item.kind === "video" ? "Video preview" : "Image preview" }}</span
@@ -105,9 +111,15 @@ const metadata = computed(() => [
         >
           <h3>{{ group.label }}</h3>
           <div>
-            <span v-for="value in group.values" :key="value" class="tag-chip">{{
-              value
-            }}</span>
+            <button
+              v-for="value in group.values"
+              :key="value"
+              type="button"
+              class="tag-chip"
+              @click="$emit('search', value)"
+            >
+              {{ value }}
+            </button>
             <span v-if="!group.values.length" class="muted">{{
               group.category === "tags" ? "No tags yet" : "Unavailable"
             }}</span>
