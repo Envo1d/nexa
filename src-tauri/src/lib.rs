@@ -1,34 +1,61 @@
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
+mod config;
+mod logging;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    use tauri::Manager;
+    let paths = config::AppPaths::resolve().expect("Could not resolve NexaNew storage");
+    let log_guard = logging::init(&paths.logs_path).expect("Could not initialize NexaNew tracing");
+    tracing::info!(version = env!("CARGO_PKG_VERSION"), "Starting NexaNew");
     let builder = tauri::Builder::default();
 
     #[cfg(desktop)]
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
         use tauri::Manager;
+        let _span = tracing::info_span!("activate_existing_instance").entered();
+        tracing::info!("Repeated launch detected");
 
         if let Some(window) = app.get_webview_window("main") {
-            for result in [window.show(), window.unminimize(), window.set_focus()] {
+            for (operation, result) in [
+                ("show", window.show()),
+                ("unminimize", window.unminimize()),
+                ("focus", window.set_focus()),
+            ] {
                 if let Err(error) = result {
-                    log::warn!("Could not activate the main window: {error}");
+                    tracing::warn!(operation, %error, "Could not activate the main window");
+                } else {
+                    tracing::debug!(operation, "Window activation step completed");
                 }
             }
+        } else {
+            tracing::warn!("Main window unavailable for repeated launch");
         }
     }));
 
-    builder
+    let result = builder
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_log::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_os::init())
-        .invoke_handler(tauri::generate_handler![greet])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .setup(move |app| {
+            let _span = tracing::info_span!("application_setup").entered();
+            let store = config::ConfigStore::load(paths).map_err(std::io::Error::other)?;
+            app.manage(store);
+            tracing::info!("Application setup completed");
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            config::get_config,
+            config::save_config,
+            config::open_logs
+        ])
+        .run(tauri::generate_context!());
+    match &result {
+        Ok(()) => tracing::info!("Application stopped"),
+        Err(error) => tracing::error!(%error, "Application failed"),
+    }
+    // Flush the worker explicitly before a possible panic in aborting release builds.
+    drop(log_guard);
+    result.expect("error while running tauri application");
 }

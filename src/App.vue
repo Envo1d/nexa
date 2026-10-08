@@ -621,6 +621,7 @@ onBeforeUnmount(() => {
       <SettingsPanel
         v-else-if="view === 'settings'"
         @close="view = 'main'"
+        @saved="notify('Settings saved.')"
         @preview="
           notify(`${$event} is a UI preview. No settings or files are changed.`)
         "
