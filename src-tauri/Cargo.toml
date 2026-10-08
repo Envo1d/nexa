@@ -31,6 +31,12 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 directories = "6.0.0"
 tempfile = "3.27.0"
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "macros"] }
+thiserror = "2.0.21"
+tokio = { version = "1.53.2", features = ["fs"] }
+
+[dev-dependencies]
+tokio = { version = "1.53.2", features = ["macros", "rt-multi-thread"] }
 
 [target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
 tauri-plugin-single-instance = "2.5.2"

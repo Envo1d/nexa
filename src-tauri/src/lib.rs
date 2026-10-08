@@ -1,4 +1,5 @@
 mod config;
+pub mod database;
 mod logging;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -40,8 +41,12 @@ pub fn run() {
         .plugin(tauri_plugin_os::init())
         .setup(move |app| {
             let _span = tracing::info_span!("application_setup").entered();
+            let database_path = paths.database_path.clone();
             let store = config::ConfigStore::load(paths).map_err(std::io::Error::other)?;
+            let database =
+                tauri::async_runtime::block_on(database::Database::open(&database_path))?;
             app.manage(store);
+            app.manage(database);
             tracing::info!("Application setup completed");
             Ok(())
         })
@@ -50,7 +55,14 @@ pub fn run() {
             config::save_config,
             config::open_logs
         ])
-        .run(tauri::generate_context!());
+        .build(tauri::generate_context!());
+    let result = result.map(|app| {
+        app.run(|app, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                tauri::async_runtime::block_on(app.state::<database::Database>().close());
+            }
+        });
+    });
     match &result {
         Ok(()) => tracing::info!("Application stopped"),
         Err(error) => tracing::error!(%error, "Application failed"),
