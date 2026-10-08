@@ -16,12 +16,16 @@ const props = defineProps<{
   showPreviews: boolean;
   mode: "grid" | "list";
   selectedId: string | null;
+  selectedIds?: string[];
   heading: string;
   filtered: boolean;
   stage?: boolean;
 }>();
-defineEmits<{
-  select: [item: MediaItem];
+const emit = defineEmits<{
+  select: [item: MediaItem, event: MouseEvent];
+  selectMany: [ids: string[]];
+  selectionEnd: [ids: string[]];
+  distribute: [];
   favorite: [item: MediaItem];
   context: [item: MediaItem, event: MouseEvent | KeyboardEvent];
   reset: [];
@@ -70,6 +74,115 @@ const visibleItems = computed(() =>
 );
 let observer: ResizeObserver | undefined;
 let scrollFrame: number | undefined;
+const drag = ref<{
+  x: number;
+  y: number;
+  endX: number;
+  endY: number;
+  base: string[];
+  pointerId: number;
+} | null>(null);
+let dragFrame: number | undefined;
+let pointerY = 0;
+let pointerX = 0;
+const selectionBox = computed(() =>
+  drag.value
+    ? {
+        left: `${Math.min(drag.value.x, drag.value.endX)}px`,
+        top: `${Math.min(drag.value.y, drag.value.endY)}px`,
+        width: `${Math.abs(drag.value.x - drag.value.endX)}px`,
+        height: `${Math.abs(drag.value.y - drag.value.endY)}px`,
+      }
+    : {},
+);
+function updateDrag() {
+  const area = viewport.value;
+  const current = drag.value;
+  if (!area || !current) return;
+  const bounds = area.getBoundingClientRect();
+  current.endX = Math.max(
+    0,
+    Math.min(area.clientWidth, pointerX - bounds.left),
+  );
+  current.endY = Math.max(0, pointerY - bounds.top + area.scrollTop);
+  const left = Math.min(current.x, current.endX);
+  const right = Math.max(current.x, current.endX);
+  const top = Math.min(current.y, current.endY);
+  const bottom = Math.max(current.y, current.endY);
+  const gridWidth =
+    columns.value * cardWidth.value + (columns.value - 1) * gap.value;
+  const offset = props.mode === "grid" ? (width.value - gridWidth) / 2 : 0;
+  const ids = props.items
+    .slice(0, loadedCount.value)
+    .filter((_, index) => {
+      const x =
+        offset + (index % columns.value) * (cardWidth.value + gap.value);
+      const y = Math.floor(index / columns.value) * rowHeight.value;
+      const w = props.mode === "grid" ? cardWidth.value : width.value;
+      return (
+        x < right &&
+        x + w > left &&
+        y < bottom &&
+        y + rowHeight.value - gap.value > top
+      );
+    })
+    .map((item) => item.id);
+  emit("selectMany", [...new Set([...current.base, ...ids])]);
+}
+function dragTick() {
+  const area = viewport.value;
+  if (!drag.value || !area) return;
+  const bounds = area.getBoundingClientRect();
+  const speed =
+    pointerY < bounds.top + 32 ? -12 : pointerY > bounds.bottom - 32 ? 12 : 0;
+  if (speed) {
+    area.scrollTop += speed;
+    updateScroll();
+  }
+  updateDrag();
+  dragFrame = requestAnimationFrame(dragTick);
+}
+function startSelection(event: PointerEvent) {
+  if (
+    !props.stage ||
+    event.button !== 0 ||
+    (event.target as HTMLElement).closest("button, .media-card")
+  )
+    return;
+  const area = viewport.value;
+  if (!area) return;
+  event.preventDefault();
+  const bounds = area.getBoundingClientRect();
+  pointerX = event.clientX;
+  pointerY = event.clientY;
+  const x = event.clientX - bounds.left;
+  const y = event.clientY - bounds.top + area.scrollTop;
+  drag.value = {
+    x,
+    y,
+    endX: x,
+    endY: y,
+    base: event.ctrlKey || event.metaKey ? [...(props.selectedIds ?? [])] : [],
+    pointerId: event.pointerId,
+  };
+  area.setPointerCapture(event.pointerId);
+  dragTick();
+}
+function moveSelection(event: PointerEvent) {
+  if (!drag.value) return;
+  pointerX = event.clientX;
+  pointerY = event.clientY;
+  updateDrag();
+}
+function endSelection() {
+  if (dragFrame !== undefined) cancelAnimationFrame(dragFrame);
+  dragFrame = undefined;
+  const id = drag.value?.pointerId;
+  drag.value = null;
+  if (id !== undefined) emit("selectionEnd", props.selectedIds ?? []);
+  if (id !== undefined && viewport.value?.hasPointerCapture(id))
+    viewport.value.releasePointerCapture(id);
+}
 
 function onScroll() {
   // Read the latest position once per frame, even when scroll events arrive faster.
@@ -94,6 +207,7 @@ function updateScroll() {
     loaded.value = Math.min(loaded.value + 36, props.items.length);
 }
 function resetScroll() {
+  endSelection();
   cancelScrollFrame();
   loaded.value = 36;
   scrollTop.value = 0;
@@ -112,6 +226,7 @@ watch(() => props.items.map((item) => item.id).join(","), resetScroll);
 watch(
   () => props.mode,
   async () => {
+    endSelection();
     cancelScrollFrame();
     scrollTop.value = 0;
     await nextTick();
@@ -131,6 +246,7 @@ onMounted(() => {
   if (viewport.value) observer.observe(viewport.value);
 });
 onBeforeUnmount(() => {
+  endSelection();
   observer?.disconnect();
   cancelScrollFrame();
 });
@@ -143,7 +259,14 @@ onBeforeUnmount(() => {
         <h1>{{ heading }}</h1>
         <span>{{ items.length.toLocaleString() }} files</span>
       </div>
-      <span class="demo-badge"
+      <button
+        v-if="stage && selectedIds?.length"
+        class="secondary-button"
+        @click="emit('distribute')"
+      >
+        Distribute {{ selectedIds.length }} files
+      </button>
+      <span v-else class="demo-badge"
         ><span></span> {{ stage ? "Demo staging" : "Demo library" }}</span
       >
     </header>
@@ -153,6 +276,11 @@ onBeforeUnmount(() => {
       tabindex="0"
       aria-label="Loaded media"
       @scroll.passive="onScroll"
+      @pointerdown="startSelection"
+      @pointermove="moveSelection"
+      @pointerup="endSelection"
+      @pointercancel="endSelection"
+      @lostpointercapture="endSelection"
     >
       <div
         v-if="items.length"
@@ -176,14 +304,19 @@ onBeforeUnmount(() => {
             :stage="stage"
             :show-previews="showPreviews"
             :mode="mode"
-            :selected="selectedId === item.id"
-            @select="$emit('select', item)"
+            :selected="
+              stage
+                ? Boolean(selectedIds?.includes(item.id))
+                : selectedId === item.id
+            "
+            @select="$emit('select', item, $event)"
             @favorite="$emit('favorite', item)"
             @context="$emit('context', item, $event)"
           />
         </div>
       </div>
-      <div v-else class="empty-state">
+      <div v-if="drag" class="selection-rectangle" :style="selectionBox"></div>
+      <div v-if="!items.length" class="empty-state">
         <span class="empty-icon"><AppIcon name="search" :size="32" /></span>
         <h2>
           {{

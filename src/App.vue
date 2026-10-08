@@ -18,6 +18,7 @@ import FileDetails from "./components/FileDetails.vue";
 import CardContextMenu from "./components/CardContextMenu.vue";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import SettingsPanel from "./components/SettingsPanel.vue";
+import DistributionDialog from "./components/DistributionDialog.vue";
 import { useLibrary } from "./composables/useLibrary";
 import { useStage } from "./composables/useStage";
 import type { MediaItem, MediaKind } from "./types/media";
@@ -25,6 +26,14 @@ import "./styles.css";
 
 const library = useLibrary();
 const stage = useStage();
+const distributionQueue = ref<MediaItem[]>([]);
+function distribute(item?: MediaItem) {
+  if (item && !stage.selectedIds.value.includes(item.id)) stage.select(item);
+  distributionQueue.value = stage.results.value.filter((entry) =>
+    stage.selectedIds.value.includes(entry.id),
+  );
+  context.value = null;
+}
 const {
   scope,
   search,
@@ -154,6 +163,10 @@ function navigate(nextScope: "gallery" | "favorites") {
   view.value = "main";
 }
 function previewAction(action: string, item: MediaItem) {
+  if (action === "Distribute" && view.value === "stage") {
+    distribute(item);
+    return;
+  }
   if (action === "Copy path") {
     notify(`Demo path: ${item.path}`);
   } else {
@@ -224,6 +237,7 @@ function keyboard(event: KeyboardEvent) {
     (event.ctrlKey || event.metaKey) &&
     event.key.toLowerCase() === "f" &&
     !tagTarget.value &&
+    !distributionQueue.value.length &&
     view.value !== "settings" &&
     !context.value
   ) {
@@ -231,10 +245,11 @@ function keyboard(event: KeyboardEvent) {
     nextTick(() => searchInput.value?.focus());
   }
   if (event.key === "Escape") {
-    if (tagTarget.value) tagTarget.value = null;
+    if (distributionQueue.value.length) distributionQueue.value = [];
+    else if (tagTarget.value) tagTarget.value = null;
     else if (view.value === "settings") view.value = "main";
     else if (context.value) context.value = null;
-    else if (view.value === "stage") stage.selectedId.value = null;
+    else if (view.value === "stage") stage.clearSelection();
     else selectedId.value = null;
   }
 }
@@ -628,10 +643,14 @@ onBeforeUnmount(() => {
           :show-previews="showPreviews"
           :mode="mode"
           :selected-id="stage.selectedId.value"
+          :selected-ids="stage.selectedIds.value"
           heading="Stage"
           :filtered="Boolean(stage.search.value.trim())"
           stage
-          @select="stage.selectedId.value = $event.id"
+          @select="stage.select"
+          @select-many="stage.selectMany($event, false)"
+          @selection-end="stage.selectMany"
+          @distribute="distribute()"
           @context="openContext"
           @reset="stage.clearSearch()"
         />
@@ -640,7 +659,7 @@ onBeforeUnmount(() => {
           :item="stage.selected.value"
           :show-previews="showPreviews"
           stage
-          @close="stage.selectedId.value = null"
+          @close="stage.clearSelection()"
           @action="previewAction($event, stage.selected.value)"
         />
       </template>
@@ -664,6 +683,19 @@ onBeforeUnmount(() => {
       :y="context.y"
       @close="context = null"
       @action="contextAction"
+    />
+    <DistributionDialog
+      v-if="distributionQueue.length"
+      :items="distributionQueue"
+      :library="library.media.value"
+      :show-previews="showPreviews"
+      @close="distributionQueue = []"
+      @open="previewAction('Open file', $event)"
+      @processed="
+        notify(
+          `${$event} file(s) processed in the demo queue. No files were saved.`,
+        )
+      "
     />
     <div v-if="modalOpen" class="modal-backdrop" @click.self="tagTarget = null">
       <section

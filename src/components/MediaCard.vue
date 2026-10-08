@@ -25,7 +25,7 @@ const duration = computed(() =>
     : formatDuration(props.item.duration),
 );
 defineEmits<{
-  select: [];
+  select: [event: MouseEvent];
   favorite: [];
   context: [event: MouseEvent | KeyboardEvent];
 }>();
@@ -34,6 +34,7 @@ defineEmits<{
 <template>
   <article
     class="media-card"
+    :data-media-id="item.id"
     :class="[mode, { selected }]"
     @contextmenu.prevent.stop="$emit('context', $event)"
     @keydown.shift.f10.prevent.stop="$emit('context', $event)"
@@ -42,7 +43,7 @@ defineEmits<{
       class="card-select"
       :aria-label="`View ${item.filename}`"
       :aria-pressed="selected"
-      @click="$emit('select')"
+      @click="$emit('select', $event)"
     >
       <div class="card-preview">
         <img

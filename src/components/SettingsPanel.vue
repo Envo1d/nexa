@@ -6,6 +6,8 @@ import AppIcon from "./AppIcon.vue";
 defineEmits<{ preview: [action: string]; close: [] }>();
 const characterSeparator = ref(" х ");
 const videoFolder = ref("Videos");
+const copyrightDirectory = ref(true);
+const artistDirectory = ref(true);
 const syncStructure = ref(false);
 const autoIndex = ref(false);
 const autoUpdate = ref(false);
@@ -87,6 +89,8 @@ function trackSection() {
 function resetDrafts() {
   characterSeparator.value = " х ";
   videoFolder.value = "Videos";
+  copyrightDirectory.value = true;
+  artistDirectory.value = true;
   syncStructure.value = false;
   autoIndex.value = false;
   autoUpdate.value = false;
@@ -160,6 +164,27 @@ function resetDrafts() {
               </button>
             </div>
             <template v-else-if="section.id === 'structure'">
+              <label class="settings-card-row settings-switch-row"
+                ><span
+                  ><strong>Copyright directory</strong
+                  ><small
+                    >Include a copyright directory in the library
+                    structure.</small
+                  ></span
+                ><input
+                  v-model="copyrightDirectory"
+                  type="checkbox"
+                  role="switch"
+              /></label>
+              <label class="settings-card-row settings-switch-row"
+                ><span
+                  ><strong>Artist directory</strong
+                  ><small
+                    >Include an artist directory in the library
+                    structure.</small
+                  ></span
+                ><input v-model="artistDirectory" type="checkbox" role="switch"
+              /></label>
               <label class="settings-card-row" for="character-separator"
                 ><span
                   ><strong>Character separator</strong
