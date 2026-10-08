@@ -30,6 +30,8 @@ tracing-appender = "0.2.5"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 directories = "6.0.0"
+caseless = "0.2.2"
+unicode-normalization = "0.1.25"
 tempfile = "3.27.0"
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "macros"] }
 thiserror = "2.0.21"

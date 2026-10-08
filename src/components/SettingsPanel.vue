@@ -17,6 +17,42 @@ const ready = ref(!native);
 const busy = ref(false);
 const error = ref("");
 const saved = ref(false);
+const legacyFound = ref(false);
+const importing = ref(false);
+const importMessage = ref("");
+const importError = ref("");
+
+async function checkLegacyDatabase() {
+  if (!native) return;
+  try {
+    legacyFound.value = await invoke<boolean>("find_legacy_database");
+  } catch (cause) {
+    legacyFound.value = false;
+    importError.value = `Could not check for old Nexa data: ${String(cause)}`;
+  }
+}
+
+async function importLegacyDatabase() {
+  importing.value = true;
+  busy.value = true;
+  importError.value = "";
+  importMessage.value = "Importing old Nexa data…";
+  try {
+    const result = await invoke<{
+      libraryAdded: number;
+      stageAdded: number;
+      skipped: number;
+    }>("import_legacy_database");
+    importMessage.value = `Import complete: ${result.libraryAdded} Library files and ${result.stageAdded} Stage files added. ${result.skipped} existing files skipped.`;
+  } catch (cause) {
+    importMessage.value = "";
+    importError.value = `Import failed: ${String(cause)}`;
+    await checkLegacyDatabase();
+  } finally {
+    importing.value = false;
+    busy.value = false;
+  }
+}
 watch(
   draft,
   () => {
@@ -26,6 +62,7 @@ watch(
 );
 onMounted(async () => {
   if (!native) return;
+  await checkLegacyDatabase();
   try {
     const snapshot = await invoke<ConfigSnapshot>("get_config");
     draft.value = snapshot.settings;
@@ -143,6 +180,7 @@ const sections = [
   },
 ];
 function goToSection(id: string) {
+  if (id === "indexing" && !importing.value) void checkLegacyDatabase();
   const area = scrollArea.value;
   const target = area?.querySelector<HTMLElement>(`#settings-${id}`);
   if (!area || !target) return;
@@ -334,6 +372,34 @@ function resetDrafts() {
                     ><span class="settings-status">Idle</span>
                   </div>
                   <p>No scans yet. Indexing is available as a UI preview.</p>
+                </div>
+                <SettingsRow
+                  v-if="legacyFound"
+                  title="Import from old Nexa"
+                  description="Copy Library, Stage and metadata into the new database. Old data and media files stay unchanged. Existing files are skipped."
+                >
+                  <button
+                    class="secondary-button"
+                    :disabled="importing"
+                    @click="importLegacyDatabase"
+                  >
+                    <AppIcon name="size" :size="16" />
+                    {{ importing ? "Importing…" : "Import old database" }}
+                  </button>
+                </SettingsRow>
+                <div
+                  v-if="legacyFound || importMessage || importError"
+                  class="settings-scan-summary"
+                >
+                  <p v-if="legacyFound">
+                    Characters keep their copyright; tags are shared without
+                    duplicates. Imported roots are retained without changing
+                    your settings. Library and Stage still show demo files.
+                  </p>
+                  <p v-if="importMessage" role="status" aria-live="polite">
+                    {{ importMessage }}
+                  </p>
+                  <p v-if="importError" role="alert">{{ importError }}</p>
                 </div>
               </template>
               <template v-else-if="section.id === 'cache'">
