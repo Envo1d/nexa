@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { MediaItem } from "../types/media";
-import { formatDate, formatDuration } from "../types/media";
+import { formatDate } from "../types/media";
+import MediaPreview from "./MediaPreview.vue";
 import AppIcon from "./AppIcon.vue";
 const props = defineProps<{
   item: MediaItem;
@@ -18,11 +19,6 @@ const displayName = computed(() =>
 const modifiedDate = computed(() => formatDate(props.item.modifiedAt));
 const modifiedDateTime = computed(() =>
   new Date(props.item.modifiedAt).toISOString(),
-);
-const duration = computed(() =>
-  props.item.duration === undefined
-    ? undefined
-    : formatDuration(props.item.duration),
 );
 defineEmits<{
   select: [event: MouseEvent];
@@ -45,22 +41,7 @@ defineEmits<{
       :aria-pressed="selected"
       @click="$emit('select', $event)"
     >
-      <div class="card-preview">
-        <img
-          v-if="showPreviews"
-          :src="item.preview"
-          :alt="item.filename"
-          loading="lazy"
-          decoding="async"
-          width="640"
-          height="360"
-          draggable="false"
-        />
-        <span class="extension">{{ item.extension }}</span>
-        <span v-if="duration !== undefined" class="duration">{{
-          duration
-        }}</span>
-      </div>
+      <MediaPreview :item="item" :show-previews="showPreviews" variant="card" />
       <div class="card-body">
         <div class="card-title" :title="displayName">
           {{ displayName }}

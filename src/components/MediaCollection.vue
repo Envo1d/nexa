@@ -24,6 +24,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   select: [item: MediaItem, event: MouseEvent];
   selectMany: [ids: string[]];
+  selectionStart: [];
   selectionEnd: [ids: string[]];
   distribute: [];
   favorite: [item: MediaItem];
@@ -85,6 +86,7 @@ const drag = ref<{
 let dragFrame: number | undefined;
 let pointerY = 0;
 let pointerX = 0;
+let gesturePointer: number | undefined;
 const selectionBox = computed(() =>
   drag.value
     ? {
@@ -142,9 +144,8 @@ function dragTick() {
   updateDrag();
   dragFrame = requestAnimationFrame(dragTick);
 }
-function startSelection(event: PointerEvent) {
+async function startSelection(event: PointerEvent) {
   if (
-    !props.stage ||
     event.button !== 0 ||
     (event.target as HTMLElement).closest("button, .media-card")
   )
@@ -152,9 +153,18 @@ function startSelection(event: PointerEvent) {
   const area = viewport.value;
   if (!area) return;
   event.preventDefault();
-  const bounds = area.getBoundingClientRect();
   pointerX = event.clientX;
   pointerY = event.clientY;
+  gesturePointer = event.pointerId;
+  area.setPointerCapture(event.pointerId);
+  emit("selectionStart");
+  // Measure after details disappear and the responsive grid has resized.
+  await nextTick();
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  if (gesturePointer !== event.pointerId) return;
+  width.value = area.clientWidth;
+  height.value = area.clientHeight;
+  const bounds = area.getBoundingClientRect();
   const x = event.clientX - bounds.left;
   const y = event.clientY - bounds.top + area.scrollTop;
   drag.value = {
@@ -165,11 +175,10 @@ function startSelection(event: PointerEvent) {
     base: event.ctrlKey || event.metaKey ? [...(props.selectedIds ?? [])] : [],
     pointerId: event.pointerId,
   };
-  area.setPointerCapture(event.pointerId);
   dragTick();
 }
 function moveSelection(event: PointerEvent) {
-  if (!drag.value) return;
+  if (gesturePointer === undefined) return;
   pointerX = event.clientX;
   pointerY = event.clientY;
   updateDrag();
@@ -177,7 +186,8 @@ function moveSelection(event: PointerEvent) {
 function endSelection() {
   if (dragFrame !== undefined) cancelAnimationFrame(dragFrame);
   dragFrame = undefined;
-  const id = drag.value?.pointerId;
+  const id = gesturePointer;
+  gesturePointer = undefined;
   drag.value = null;
   if (id !== undefined) emit("selectionEnd", props.selectedIds ?? []);
   if (id !== undefined && viewport.value?.hasPointerCapture(id))
@@ -305,8 +315,8 @@ onBeforeUnmount(() => {
             :show-previews="showPreviews"
             :mode="mode"
             :selected="
-              stage
-                ? Boolean(selectedIds?.includes(item.id))
+              selectedIds
+                ? selectedIds.includes(item.id)
                 : selectedId === item.id
             "
             @select="$emit('select', item, $event)"

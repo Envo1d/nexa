@@ -12,6 +12,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { platform, version } from "@tauri-apps/plugin-os";
 import { usesSystemWindowCorners } from "./utils/windowCorners";
 import AppIcon from "./components/AppIcon.vue";
+import ToggleSwitch from "./components/ToggleSwitch.vue";
 import SortSelect from "./components/SortSelect.vue";
 import MediaCollection from "./components/MediaCollection.vue";
 import FileDetails from "./components/FileDetails.vue";
@@ -21,13 +22,15 @@ import SettingsPanel from "./components/SettingsPanel.vue";
 import DistributionDialog from "./components/DistributionDialog.vue";
 import { useLibrary } from "./composables/useLibrary";
 import { useStage } from "./composables/useStage";
-import type { MediaItem, MediaKind } from "./types/media";
+import type { MediaItem, MediaKind, MediaMetadataDraft } from "./types/media";
 import "./styles.css";
 
 const library = useLibrary();
 const stage = useStage();
 const distributionQueue = ref<MediaItem[]>([]);
+const editingMetadata = ref(false);
 function distribute(item?: MediaItem) {
+  editingMetadata.value = false;
   if (item && !stage.selectedIds.value.includes(item.id)) stage.select(item);
   distributionQueue.value = stage.results.value.filter((entry) =>
     stage.selectedIds.value.includes(entry.id),
@@ -104,6 +107,9 @@ const context = ref<{
   stage: boolean;
 } | null>(null);
 function openContext(item: MediaItem, event: MouseEvent | KeyboardEvent) {
+  const selection = view.value === "stage" ? stage : library;
+  if (!selection.selectedIds.value.includes(item.id))
+    selection.selectMany([item.id], false);
   const bounds = (event.target as HTMLElement).getBoundingClientRect();
   context.value = {
     item,
@@ -120,8 +126,23 @@ function openContext(item: MediaItem, event: MouseEvent | KeyboardEvent) {
 }
 async function contextAction(action: string) {
   const item = context.value?.item;
+  const selection = context.value?.stage ? stage : library;
+  const targets = selection.results.value.filter((entry) =>
+    selection.selectedIds.value.includes(entry.id),
+  );
   context.value = null;
   if (!item) return;
+  if (action === "Edit metadata") {
+    editingMetadata.value = true;
+    distributionQueue.value = targets.length ? targets : [item];
+    return;
+  }
+  if (action === "Delete file") {
+    notify(
+      `Delete ${targets.length || 1} file(s) is a UI preview. No files were deleted.`,
+    );
+    return;
+  }
   if (action === "Copy filename") {
     try {
       if (isTauri()) await writeText(item.filename);
@@ -131,6 +152,18 @@ async function contextAction(action: string) {
       notify("Could not copy the filename.");
     }
   } else previewAction(action, item);
+}
+function saveMetadata(ids: string[], draft: MediaMetadataDraft) {
+  for (const item of library.media.value) {
+    if (!ids.includes(item.id)) continue;
+    item.copyrights = [...draft.copyrights];
+    item.artists = [...draft.artists];
+    item.artist = draft.artists.join(", ");
+    item.characterCopyrights = draft.characters.map((entry) => ({ ...entry }));
+    item.characters = [...new Set(draft.characters.map((entry) => entry.name))];
+    item.tags = [...draft.tags];
+    if (item.kind === "video") item.videoTitle = draft.videoTitle;
+  }
 }
 watch([view, mode, results, stage.results], () => {
   context.value = null;
@@ -250,7 +283,7 @@ function keyboard(event: KeyboardEvent) {
     else if (view.value === "settings") view.value = "main";
     else if (context.value) context.value = null;
     else if (view.value === "stage") stage.clearSelection();
-    else selectedId.value = null;
+    else library.clearSelection();
   }
 }
 // Keep keyboard focus inside modal previews and restore it when they close.
@@ -532,40 +565,24 @@ onBeforeUnmount(() => {
               <button
                 v-if="tags.length > 8"
                 class="text-button show-tags"
+                :aria-expanded="showAllTags"
                 @click="showAllTags = !showAllTags"
               >
                 {{ showAllTags ? "Show fewer" : "Show all tags"
-                }}<AppIcon name="down" :size="13" />
+                }}<AppIcon
+                  name="down"
+                  :size="13"
+                  class="show-tags-arrow"
+                  :class="{ expanded: showAllTags }"
+                />
               </button>
             </section>
             <section class="filter-section additional-section">
               <h3>Additional</h3>
-              <label
-                ><input
-                  v-model="favoritesOnly"
-                  type="checkbox"
-                  role="switch"
-                />Favorites only</label
-              ><label
-                ><input
-                  v-model="taggedOnly"
-                  type="checkbox"
-                  role="switch"
-                />Tagged only</label
-              ><label
-                ><input
-                  v-model="hideUntagged"
-                  type="checkbox"
-                  role="switch"
-                />Hide untagged</label
-              >
-              <label
-                ><input
-                  v-model="showPreviews"
-                  type="checkbox"
-                  role="switch"
-                />Show previews</label
-              >
+              <ToggleSwitch v-model="favoritesOnly">Favorites only</ToggleSwitch
+              ><ToggleSwitch v-model="taggedOnly">Tagged only</ToggleSwitch
+              ><ToggleSwitch v-model="hideUntagged">Hide untagged</ToggleSwitch>
+              <ToggleSwitch v-model="showPreviews">Show previews</ToggleSwitch>
             </section>
           </div>
           <div class="filter-reset">
@@ -579,9 +596,13 @@ onBeforeUnmount(() => {
           :show-previews="showPreviews"
           :mode="mode"
           :selected-id="selectedId"
+          :selected-ids="library.selectedIds.value"
           :heading="heading"
           :filtered="activeFilterCount > 0"
-          @select="selectedId = $event.id"
+          @select="library.select"
+          @selection-start="library.beginSelection"
+          @select-many="library.selectMany($event, false)"
+          @selection-end="library.selectMany"
           @favorite="library.toggleFavorite"
           @context="openContext"
           @reset="library.reset()"
@@ -590,7 +611,7 @@ onBeforeUnmount(() => {
           v-if="selected"
           :item="selected"
           :show-previews="showPreviews"
-          @close="selectedId = null"
+          @close="library.clearSelection()"
           @favorite="library.toggleFavorite(selected)"
           @tags="editTags(selected)"
           @search="library.addSearch"
@@ -628,13 +649,7 @@ onBeforeUnmount(() => {
             </div>
             <section class="filter-section additional-section">
               <h3>Additional</h3>
-              <label
-                ><input
-                  v-model="showPreviews"
-                  type="checkbox"
-                  role="switch"
-                />Show previews</label
-              >
+              <ToggleSwitch v-model="showPreviews">Show previews</ToggleSwitch>
             </section>
           </div>
         </aside>
@@ -648,6 +663,7 @@ onBeforeUnmount(() => {
           :filtered="Boolean(stage.search.value.trim())"
           stage
           @select="stage.select"
+          @selection-start="stage.beginSelection"
           @select-many="stage.selectMany($event, false)"
           @selection-end="stage.selectMany"
           @distribute="distribute()"
@@ -679,6 +695,11 @@ onBeforeUnmount(() => {
       v-if="context"
       :item="context.item"
       :stage="context.stage"
+      :selected-count="
+        context.stage
+          ? stage.selectedIds.value.length
+          : library.selectedIds.value.length
+      "
       :x="context.x"
       :y="context.y"
       @close="context = null"
@@ -689,11 +710,15 @@ onBeforeUnmount(() => {
       :items="distributionQueue"
       :library="library.media.value"
       :show-previews="showPreviews"
+      :editing="editingMetadata"
       @close="distributionQueue = []"
       @open="previewAction('Open file', $event)"
+      @save="saveMetadata"
       @processed="
         notify(
-          `${$event} file(s) processed in the demo queue. No files were saved.`,
+          editingMetadata
+            ? `${$event} file(s) updated for this demo session.`
+            : `${$event} file(s) processed in the demo queue. No files were saved.`,
         )
       "
     />

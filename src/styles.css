@@ -479,6 +479,12 @@ svg {
   align-items: center;
   gap: 5px;
 }
+.show-tags-arrow {
+  transition: transform 180ms ease;
+}
+.show-tags-arrow.expanded {
+  transform: rotate(180deg);
+}
 .filter-hint {
   color: #8e80a5;
   font-size: 10px;

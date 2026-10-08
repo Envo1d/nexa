@@ -12,6 +12,7 @@ import AppIcon from "./AppIcon.vue";
 const props = defineProps<{
   item: MediaItem;
   stage: boolean;
+  selectedCount?: number;
   x: number;
   y: number;
 }>();
@@ -20,18 +21,32 @@ const menu = ref<HTMLElement | null>(null);
 const left = ref(props.x);
 const top = ref(props.y);
 let trigger: HTMLElement | null = null;
-const actions = computed(() => [
-  { label: props.stage ? "Open" : "Open file", icon: "arrow" },
-  { label: "Show in Explorer", icon: "gallery" },
-  {
-    label: props.stage ? "Distribute" : "Edit metadata",
-    icon: props.stage ? "share" : "tag",
-  },
-  ...(!props.stage && props.item.kind === "video"
-    ? [{ label: "Copy filename", icon: "copy" }]
-    : []),
-  { label: "Delete file", icon: "trash" },
-]);
+const actions = computed<{ label: string; action?: string; icon: string }[]>(
+  () => [
+    { label: props.stage ? "Open" : "Open file", icon: "arrow" },
+    { label: "Show in Explorer", icon: "gallery" },
+    {
+      label: props.stage
+        ? (props.selectedCount ?? 1) > 1
+          ? `Distribute ${props.selectedCount} files`
+          : "Distribute"
+        : "Edit metadata",
+      action: props.stage ? "Distribute" : "Edit metadata",
+      icon: props.stage ? "share" : "tag",
+    },
+    ...(!props.stage && props.item.kind === "video"
+      ? [{ label: "Copy filename", icon: "copy" }]
+      : []),
+    {
+      label:
+        (props.selectedCount ?? 1) > 1
+          ? `Delete ${props.selectedCount} files`
+          : "Delete file",
+      action: "Delete file",
+      icon: "trash",
+    },
+  ],
+);
 async function position() {
   await nextTick();
   if (!menu.value) return;
@@ -105,8 +120,8 @@ onBeforeUnmount(() => {
         :key="action.label"
         role="menuitem"
         tabindex="-1"
-        :class="{ destructive: action.label === 'Delete file' }"
-        @click="$emit('action', action.label)"
+        :class="{ destructive: action.action === 'Delete file' }"
+        @click="$emit('action', action.action ?? action.label)"
       >
         <AppIcon :name="action.icon" :size="16" />{{ action.label }}
       </button>
