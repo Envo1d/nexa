@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { version } from "../../package.json";
+import ToggleSwitch from "./ToggleSwitch.vue";
+import SettingsRow from "./SettingsRow.vue";
 import AppIcon from "./AppIcon.vue";
 
 defineEmits<{ preview: [action: string]; close: [] }>();
@@ -139,18 +141,15 @@ function resetDrafts() {
             <p>{{ section.description }}</p>
           </header>
           <div class="settings-card">
-            <div
+            <SettingsRow
               v-if="section.id === 'library' || section.id === 'staging'"
-              class="settings-card-row"
+              :title="
+                section.id === 'library'
+                  ? 'Sorted library path'
+                  : 'Staging folder'
+              "
+              description="Not selected"
             >
-              <span>
-                <strong>{{
-                  section.id === "library"
-                    ? "Sorted library path"
-                    : "Staging folder"
-                }}</strong>
-                <small>Not selected</small>
-              </span>
               <button
                 class="secondary-button"
                 @click="
@@ -162,60 +161,66 @@ function resetDrafts() {
               >
                 <AppIcon name="gallery" :size="16" />Browse
               </button>
-            </div>
+            </SettingsRow>
             <template v-else-if="section.id === 'structure'">
-              <label class="settings-card-row settings-switch-row"
+              <ToggleSwitch
+                v-model="copyrightDirectory"
+                trailing
+                class="settings-card-row settings-switch-row"
                 ><span
                   ><strong>Copyright directory</strong
                   ><small
                     >Include a copyright directory in the library
                     structure.</small
                   ></span
-                ><input
-                  v-model="copyrightDirectory"
-                  type="checkbox"
-                  role="switch"
-              /></label>
-              <label class="settings-card-row settings-switch-row"
+                ></ToggleSwitch
+              >
+              <ToggleSwitch
+                v-model="artistDirectory"
+                trailing
+                class="settings-card-row settings-switch-row"
                 ><span
                   ><strong>Artist directory</strong
                   ><small
                     >Include an artist directory in the library
                     structure.</small
                   ></span
-                ><input v-model="artistDirectory" type="checkbox" role="switch"
-              /></label>
-              <label class="settings-card-row" for="character-separator"
-                ><span
-                  ><strong>Character separator</strong
-                  ><small
-                    >Separator between character names in filenames.</small
-                  ></span
+                ></ToggleSwitch
+              >
+              <SettingsRow
+                for="character-separator"
+                as="label"
+                title="Character separator"
+                description="Separator between character names in filenames."
                 ><input
                   id="character-separator"
                   v-model="characterSeparator"
                   type="text"
                   spellcheck="false"
-              /></label>
-              <label class="settings-card-row" for="video-subfolder"
-                ><span
-                  ><strong>Video subfolder name</strong
-                  ><small>Name of the subfolder for video files.</small></span
+              /></SettingsRow>
+              <SettingsRow
+                for="video-subfolder"
+                as="label"
+                title="Video subfolder name"
+                description="Name of the subfolder for video files."
                 ><input
                   id="video-subfolder"
                   v-model="videoFolder"
                   type="text"
                   spellcheck="false"
-              /></label>
-              <label class="settings-card-row settings-switch-row"
+              /></SettingsRow>
+              <ToggleSwitch
+                v-model="syncStructure"
+                trailing
+                class="settings-card-row settings-switch-row"
                 ><span
                   ><strong>Sync structure with disk</strong
                   ><small
                     >When off, folders will not be created from the configured
                     structure.</small
                   ></span
-                ><input v-model="syncStructure" type="checkbox" role="switch"
-              /></label>
+                ></ToggleSwitch
+              >
             </template>
             <template v-else-if="section.id === 'indexing'">
               <div class="settings-card-row settings-actions">
@@ -231,14 +236,17 @@ function resetDrafts() {
                   <AppIcon name="search" :size="16" />Scan Stage folder
                 </button>
               </div>
-              <label class="settings-card-row settings-switch-row"
+              <ToggleSwitch
+                v-model="autoIndex"
+                trailing
+                class="settings-card-row settings-switch-row"
                 ><span
                   ><strong>Auto scan on startup</strong
                   ><small
                     >Scan both libraries each time Nexa opens.</small
                   ></span
-                ><input v-model="autoIndex" type="checkbox" role="switch"
-              /></label>
+                ></ToggleSwitch
+              >
               <div class="settings-scan-summary">
                 <div>
                   <AppIcon name="info" :size="16" /><strong>Last scan</strong
@@ -265,63 +273,63 @@ function resetDrafts() {
                   25%
                 </progress>
               </div>
-              <div class="settings-card-row">
-                <span
-                  ><strong>Clear cache</strong
-                  ><small
-                    >Remove cached thumbnails and temporary files.</small
-                  ></span
+              <SettingsRow
+                title="Clear cache"
+                description="Remove cached thumbnails and temporary files."
                 ><button
                   class="secondary-button"
                   @click="$emit('preview', 'Clear thumbnail cache')"
                 >
                   <AppIcon name="reset" :size="16" />Clear cache
                 </button>
-              </div>
+              </SettingsRow>
             </template>
-            <div v-else-if="section.id === 'logs'" class="settings-card-row">
-              <span
-                ><strong>Application logs</strong
-                ><small>Logs folder: Not configured</small></span
+            <SettingsRow
+              v-else-if="section.id === 'logs'"
+              title="Application logs"
+              description="Logs folder: Not configured"
               ><button
                 class="secondary-button"
                 @click="$emit('preview', 'Open logs folder')"
               >
                 <AppIcon name="gallery" :size="16" />Open logs
               </button>
-            </div>
+            </SettingsRow>
             <template v-else-if="section.id === 'updates'">
-              <div class="settings-card-row">
-                <span
-                  ><strong>Current version</strong
-                  ><small>Nexa {{ version }}</small></span
+              <SettingsRow
+                title="Current version"
+                :description="`Nexa ${version}`"
                 ><span class="settings-status" role="status">Not checked</span>
-              </div>
-              <label class="settings-card-row settings-switch-row"
+              </SettingsRow>
+              <ToggleSwitch
+                v-model="autoUpdate"
+                trailing
+                class="settings-card-row settings-switch-row"
                 ><span
                   ><strong>Auto check on startup</strong
                   ><small>Check for updates each time Nexa opens.</small></span
-                ><input v-model="autoUpdate" type="checkbox" role="switch"
-              /></label>
-              <div class="settings-card-row">
-                <span
-                  ><strong>Check now</strong
-                  ><small>Manually check for a newer version.</small></span
+                ></ToggleSwitch
+              >
+              <SettingsRow
+                title="Check now"
+                description="Manually check for a newer version."
                 ><button
                   class="secondary-button"
                   @click="$emit('preview', 'Check for updates')"
                 >
                   <AppIcon name="reset" :size="16" />Check now
                 </button>
-              </div>
+              </SettingsRow>
             </template>
-            <label v-else class="settings-card-row" for="settings-theme"
-              ><span
-                ><strong>Theme</strong
-                ><small>More themes will be available later.</small></span
+            <SettingsRow
+              v-else
+              for="settings-theme"
+              as="label"
+              title="Theme"
+              description="More themes will be available later."
               ><select id="settings-theme" disabled>
                 <option>Midnight violet</option>
-              </select></label
+              </select></SettingsRow
             >
           </div>
         </section>

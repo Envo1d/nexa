@@ -2,6 +2,8 @@
 import { computed } from "vue";
 import type { MediaItem } from "../types/media";
 import { formatDate, formatDuration, formatSize } from "../types/media";
+import MediaPreview from "./MediaPreview.vue";
+import MetadataRow from "./MetadataRow.vue";
 import AppIcon from "./AppIcon.vue";
 const props = defineProps<{
   item: MediaItem;
@@ -17,7 +19,11 @@ defineEmits<{
 }>();
 const attribution = computed(() => [
   { label: "Copyright", category: "copyright", values: props.item.copyrights },
-  { label: "Artist", category: "artist", values: [props.item.artist] },
+  {
+    label: "Artist",
+    category: "artist",
+    values: props.item.artists ?? [props.item.artist],
+  },
   {
     label: "Characters",
     category: "characters",
@@ -98,14 +104,12 @@ const metadata = computed(() => [
     </header>
     <div class="details-scroll">
       <h3 class="detail-filename">{{ item.filename }}</h3>
-      <div v-if="showPreviews" class="detail-preview">
-        <img :src="item.preview" :alt="item.filename" /><span
-          class="preview-label"
-          >{{ item.kind === "video" ? "Video preview" : "Image preview" }}</span
-        ><span v-if="item.duration !== undefined" class="duration">{{
-          formatDuration(item.duration)
-        }}</span>
-      </div>
+      <MediaPreview
+        v-if="showPreviews"
+        :item="item"
+        :show-previews="showPreviews"
+        variant="detail"
+      />
       <div v-if="!stage" class="detail-attribution">
         <section
           v-for="group in attribution"
@@ -131,10 +135,13 @@ const metadata = computed(() => [
         </section>
       </div>
       <dl class="metadata">
-        <div v-for="field in metadata" :key="field.label">
-          <dt><AppIcon :name="field.icon" :size="16" />{{ field.label }}</dt>
-          <dd>{{ field.value }}</dd>
-        </div>
+        <MetadataRow
+          v-for="field in metadata"
+          :key="field.label"
+          :label="field.label"
+          :icon="field.icon"
+          :value="field.value"
+        />
       </dl>
       <div class="detail-actions">
         <button class="primary-button" @click="$emit('action', 'Open file')">

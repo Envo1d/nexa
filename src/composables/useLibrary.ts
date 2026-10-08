@@ -1,4 +1,5 @@
-import { computed, ref, watch } from "vue";
+import { computed, ref } from "vue";
+import { useMediaSelection } from "./useMediaSelection";
 import { createMockMedia } from "../data/mockMedia";
 import type { MediaItem, MediaKind } from "../types/media";
 
@@ -12,7 +13,6 @@ export function useLibrary() {
   const favoritesOnly = ref(false);
   const taggedOnly = ref(false);
   const hideUntagged = ref(false);
-  const selectedId = ref<string | null>(null);
   const scopedMedia = computed(() =>
     media.value.filter((item) => scope.value === "gallery" || item.favorite),
   );
@@ -43,7 +43,7 @@ export function useLibrary() {
           queries.every((query) =>
             [
               ...item.copyrights,
-              item.artist,
+              ...(item.artists ?? [item.artist]),
               ...item.characters,
               ...item.tags,
             ].some((value) => value.toLocaleLowerCase() === query),
@@ -67,9 +67,7 @@ export function useLibrary() {
         );
       });
   });
-  const selected = computed(
-    () => media.value.find((item) => item.id === selectedId.value) ?? null,
-  );
+  const selection = useMediaSelection(results);
   const heading = computed(() =>
     appliedSearch.value
       ? appliedSearch.value
@@ -85,11 +83,6 @@ export function useLibrary() {
       Number(taggedOnly.value || hideUntagged.value),
   );
 
-  watch(results, (items) => {
-    if (selectedId.value && !items.some((item) => item.id === selectedId.value))
-      selectedId.value = null;
-  });
-
   const suggestions = computed(() => {
     const parts = search.value.split(";");
     const query = parts.pop()?.trim().toLocaleLowerCase() ?? "";
@@ -99,7 +92,7 @@ export function useLibrary() {
     for (const item of scopedMedia.value) {
       for (const [category, names] of [
         ["Copyright", item.copyrights],
-        ["Artist", [item.artist]],
+        ["Artist", item.artists ?? [item.artist]],
         ["Character", item.characters],
         ["Tag", item.tags],
       ] as const) {
@@ -167,8 +160,7 @@ export function useLibrary() {
     favoritesOnly,
     taggedOnly,
     hideUntagged,
-    selectedId,
-    selected,
+    ...selection,
     results,
     heading,
     tags,

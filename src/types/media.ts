@@ -20,8 +20,19 @@ export interface MediaItem {
   favorite: boolean;
   copyrights: string[];
   artist: string;
+  artists?: string[];
   characters: string[];
+  characterCopyrights?: { name: string; copyright: string }[];
+  videoTitle?: string;
   tags: string[];
+}
+
+export interface MediaMetadataDraft {
+  copyrights: string[];
+  artists: string[];
+  characters: { name: string; copyright: string }[];
+  tags: string[];
+  videoTitle: string;
 }
 
 export function formatDate(timestamp: number): string {

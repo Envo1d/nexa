@@ -7,19 +7,24 @@ import {
   ref,
   watch,
 } from "vue";
-import type { MediaItem } from "../types/media";
+import type { MediaItem, MediaMetadataDraft } from "../types/media";
 import { formatDate, formatDuration, formatSize } from "../types/media";
 import MetadataInput, { type MetadataValue } from "./MetadataInput.vue";
+import ToggleSwitch from "./ToggleSwitch.vue";
+import MediaPreview from "./MediaPreview.vue";
+import MetadataRow from "./MetadataRow.vue";
 import AppIcon from "./AppIcon.vue";
 const props = defineProps<{
   items: MediaItem[];
   library: MediaItem[];
   showPreviews: boolean;
+  editing?: boolean;
 }>();
 const emit = defineEmits<{
   close: [];
   open: [item: MediaItem];
   processed: [count: number];
+  save: [ids: string[], draft: MediaMetadataDraft];
 }>();
 const position = ref(0);
 const current = computed(() => props.items[position.value]!);
@@ -47,7 +52,7 @@ const done = ref(false);
 const targets = computed(() =>
   allFiles.value ? props.items.slice(position.value) : [current.value],
 );
-const summary = computed(() => [
+const summary = computed<[string, string][]>(() => [
   ["Copyrights", copyrights.value.map((value) => value.name).join(", ")],
   ["Artists", artists.value.map((value) => value.name).join(", ")],
   [
@@ -81,8 +86,8 @@ function navigate(value: number) {
   error.value = "";
   step.value = value;
 }
-function values(names: string[]): MetadataValue[] {
-  return [
+function values(names: string[], sort = true): MetadataValue[] {
+  const entries = [
     ...new Map(
       names
         .filter(Boolean)
@@ -91,21 +96,87 @@ function values(names: string[]): MetadataValue[] {
           { id: name.toLocaleLowerCase(), name },
         ]),
     ).values(),
-  ].sort((a, b) => a.name.localeCompare(b.name));
+  ];
+  return sort ? entries.sort((a, b) => a.name.localeCompare(b.name)) : entries;
 }
 const copyrightOptions = computed(() =>
   values(props.library.flatMap((item) => item.copyrights)),
 );
 const artistOptions = computed(() =>
-  values(props.library.map((item) => item.artist)),
+  values(props.library.flatMap((item) => item.artists ?? [item.artist])),
 );
 const tagOptions = computed(() =>
   values(props.library.flatMap((item) => item.tags)),
 );
+function loadMetadata(item: MediaItem) {
+  copyrights.value = values(item.copyrights, false);
+  artists.value = values(
+    item.artists ?? (item.artist ? [item.artist] : []),
+    false,
+  );
+  tags.value = values(item.tags, false);
+  const inferCopyright = (name: string) => [
+    ...new Set(
+      props.library
+        .filter(
+          (source) =>
+            source.copyrights.length === 1 &&
+            source.characters.some(
+              (character) =>
+                character.toLocaleLowerCase() === name.toLocaleLowerCase(),
+            ),
+        )
+        .flatMap((source) => source.copyrights)
+        .filter((copyright) => item.copyrights.includes(copyright)),
+    ),
+  ];
+  const knownCopyrights = [
+    ...new Set(
+      item.characters.flatMap((name) => {
+        const candidates = inferCopyright(name);
+        return candidates.length === 1 ? candidates : [];
+      }),
+    ),
+  ];
+  const qualified =
+    item.characterCopyrights ??
+    item.characters.map((name) => {
+      // Legacy fixtures have names only; use unambiguous single-copyright examples.
+      const candidates = inferCopyright(name);
+      return {
+        name,
+        copyright:
+          candidates.length === 1
+            ? candidates[0]!
+            : knownCopyrights.length === 1
+              ? knownCopyrights[0]!
+              : (item.copyrights[0] ?? ""),
+      };
+    });
+  characters.value = qualified.map((entry) => ({
+    ...entry,
+    id: JSON.stringify([
+      entry.copyright.toLocaleLowerCase(),
+      entry.name.toLocaleLowerCase(),
+    ]),
+  }));
+  title.value =
+    item.kind === "video"
+      ? (item.videoTitle ??
+        item.filename.match(/ - (.*) \[[^\]]+\]\.[^.]+$/)?.[1] ??
+        item.title ??
+        "")
+      : "";
+}
 const characterOptions = computed(() => {
   const entries = new Map<string, MetadataValue>();
-  for (const item of props.library)
-    for (const copyright of item.copyrights) {
+  for (const item of props.library) {
+    const pairs =
+      item.characterCopyrights ??
+      item.copyrights.flatMap((copyright) =>
+        item.characters.map((name) => ({ name, copyright })),
+      );
+    for (const { name, copyright } of pairs) {
       if (
         !copyrights.value.some(
           (value) =>
@@ -113,14 +184,13 @@ const characterOptions = computed(() => {
         )
       )
         continue;
-      for (const name of item.characters) {
-        const id = JSON.stringify([
-          copyright.toLocaleLowerCase(),
-          name.toLocaleLowerCase(),
-        ]);
-        entries.set(id, { id, name, copyright });
-      }
+      const id = JSON.stringify([
+        copyright.toLocaleLowerCase(),
+        name.toLocaleLowerCase(),
+      ]);
+      entries.set(id, { id, name, copyright });
     }
+  }
   return [...entries.values()].sort(
     (a, b) =>
       a.name.localeCompare(b.name) ||
@@ -154,12 +224,29 @@ function process() {
     return;
   }
   completedCount.value = targets.value.length;
+  if (props.editing) {
+    emit(
+      "save",
+      targets.value.map((item) => item.id),
+      {
+        copyrights: copyrights.value.map((value) => value.name),
+        artists: artists.value.map((value) => value.name),
+        characters: characters.value.map((value) => ({
+          name: value.name,
+          copyright: value.copyright ?? "",
+        })),
+        tags: tags.value.map((value) => value.name),
+        videoTitle: title.value.trim(),
+      },
+    );
+  }
   done.value = true;
   emit("processed", completedCount.value);
 }
 function nextFile() {
   position.value += completedCount.value;
-  if (!retain.value) {
+  if (props.editing) loadMetadata(current.value);
+  else if (!retain.value) {
     copyrights.value = [];
     artists.value = [];
     characters.value = [];
@@ -195,6 +282,7 @@ function keyboard(event: KeyboardEvent) {
 }
 let trigger: HTMLElement | null = null;
 onMounted(() => {
+  if (props.editing) loadMetadata(current.value);
   trigger =
     document.activeElement instanceof HTMLElement
       ? document.activeElement
@@ -221,7 +309,9 @@ onBeforeUnmount(() => trigger?.focus());
               ><AppIcon name="staging" :size="19"
             /></span>
             <div>
-              <h2 id="distribution-title">Distribute to Library</h2>
+              <h2 id="distribution-title">
+                {{ editing ? "Edit metadata" : "Distribute to Library" }}
+              </h2>
               <p class="muted">
                 {{
                   done
@@ -235,13 +325,18 @@ onBeforeUnmount(() => trigger?.focus());
           </div>
           <button
             class="icon-button"
-            aria-label="Close distribution"
+            :aria-label="
+              editing ? 'Close metadata editor' : 'Close distribution'
+            "
             @click="emit('close')"
           >
             <AppIcon name="close" :size="18" />
           </button>
         </header>
-        <nav class="wizard-steps" aria-label="Distribution steps">
+        <nav
+          class="wizard-steps"
+          :aria-label="editing ? 'Metadata steps' : 'Distribution steps'"
+        >
           <button
             v-for="(label, index) in steps"
             :key="label"
@@ -280,35 +375,37 @@ onBeforeUnmount(() => trigger?.focus());
               {{
                 completedCount === 1 ? "The file" : `${completedCount} files`
               }}
-              completed the distribution demo.
+              {{
+                editing
+                  ? "updated for this demo session."
+                  : "completed the distribution demo."
+              }}
             </p>
             <dl class="wizard-summary">
-              <div>
-                <dt>Action</dt>
-                <dd>Distribution preview completed</dd>
-              </div>
-              <div>
-                <dt>Files</dt>
-                <dd>{{ completedCount }}</dd>
-              </div>
-              <div>
-                <dt>Queue</dt>
-                <dd>{{ remaining - completedCount }} remaining</dd>
-              </div>
-              <div v-if="remaining > completedCount">
-                <dt>Next file</dt>
-                <dd>{{ items[position + completedCount]?.filename }}</dd>
-              </div>
-              <div v-if="remaining > completedCount">
-                <dt>Entered details</dt>
-                <dd>
-                  {{
-                    retain
+              <MetadataRow label="Action">{{
+                editing ? "Metadata updated" : "Distribution preview completed"
+              }}</MetadataRow>
+              <MetadataRow label="Files">{{ completedCount }}</MetadataRow>
+              <MetadataRow label="Queue"
+                >{{ remaining - completedCount }} remaining</MetadataRow
+              >
+              <MetadataRow
+                v-if="remaining > completedCount"
+                label="Next file"
+                >{{ items[position + completedCount]?.filename }}</MetadataRow
+              >
+              <MetadataRow
+                v-if="remaining > completedCount"
+                label="Entered details"
+              >
+                {{
+                  editing
+                    ? "Load the next file's metadata"
+                    : retain
                       ? "Keep for the next file"
                       : "Clear for the next file"
-                  }}
-                </dd>
-              </div>
+                }}
+              </MetadataRow>
             </dl>
           </div>
           <template v-else>
@@ -317,22 +414,19 @@ onBeforeUnmount(() => trigger?.focus());
                 File information
               </h3>
               <p class="wizard-description">
-                Review the source file before adding its library details.
+                {{
+                  editing
+                    ? "Review the file before editing its library details."
+                    : "Review the source file before adding its library details."
+                }}
               </p>
               <div class="wizard-information">
                 <div class="wizard-source">
-                  <div class="wizard-preview">
-                    <img
-                      v-if="showPreviews"
-                      :src="current.preview"
-                      alt="Source media preview"
-                    /><AppIcon v-else :name="current.kind" :size="56" /><span
-                      class="wizard-extension"
-                      >{{ current.extension }}</span
-                    ><span v-if="current.duration" class="wizard-duration">{{
-                      formatDuration(current.duration)
-                    }}</span>
-                  </div>
+                  <MediaPreview
+                    :item="current"
+                    :show-previews="showPreviews"
+                    variant="wizard"
+                  />
                   <button
                     class="secondary-button"
                     @click="emit('open', current)"
@@ -341,48 +435,39 @@ onBeforeUnmount(() => trigger?.focus());
                   </button>
                 </div>
                 <dl class="wizard-technical">
-                  <div>
-                    <dt>Filename</dt>
-                    <dd>{{ current.filename }}</dd>
-                  </div>
-                  <div>
-                    <dt>Staging path</dt>
-                    <dd>{{ current.path }}</dd>
-                  </div>
-                  <div>
-                    <dt>File type</dt>
-                    <dd>
-                      {{ current.kind === "video" ? "Video" : "Image" }} ({{
-                        current.extension
-                      }})
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Modified</dt>
-                    <dd>{{ formatDate(current.modifiedAt) }}</dd>
-                  </div>
+                  <MetadataRow label="Filename">{{
+                    current.filename
+                  }}</MetadataRow>
+                  <MetadataRow
+                    :label="editing ? 'Library path' : 'Staging path'"
+                    >{{ current.path }}</MetadataRow
+                  >
+                  <MetadataRow label="File type">
+                    {{ current.kind === "video" ? "Video" : "Image" }} ({{
+                      current.extension
+                    }})
+                  </MetadataRow>
+                  <MetadataRow label="Modified">{{
+                    formatDate(current.modifiedAt)
+                  }}</MetadataRow>
                   <div class="wizard-technical-pair">
-                    <div>
-                      <dt>Size</dt>
-                      <dd>{{ formatSize(current.size) }}</dd>
-                    </div>
-                    <div>
-                      <dt>Resolution</dt>
-                      <dd>{{ current.width }} × {{ current.height }}</dd>
-                    </div>
+                    <MetadataRow label="Size">{{
+                      formatSize(current.size)
+                    }}</MetadataRow>
+                    <MetadataRow label="Resolution"
+                      >{{ current.width }} × {{ current.height }}</MetadataRow
+                    >
                   </div>
                   <div
                     v-if="current.kind === 'video'"
                     class="wizard-technical-pair"
                   >
-                    <div>
-                      <dt>Duration</dt>
-                      <dd>{{ formatDuration(current.duration ?? 0, true) }}</dd>
-                    </div>
-                    <div>
-                      <dt>FPS</dt>
-                      <dd>{{ current.fps ?? "—" }}</dd>
-                    </div>
+                    <MetadataRow label="Duration">{{
+                      formatDuration(current.duration ?? 0, true)
+                    }}</MetadataRow>
+                    <MetadataRow label="FPS">{{
+                      current.fps ?? "—"
+                    }}</MetadataRow>
                   </div>
                 </dl>
               </div>
@@ -452,7 +537,9 @@ onBeforeUnmount(() => trigger?.focus());
             </template>
             <template v-else>
               <h3 class="wizard-page-heading" tabindex="-1">
-                Confirm distribution
+                {{
+                  editing ? "Confirm metadata changes" : "Confirm distribution"
+                }}
               </h3>
               <p class="wizard-description">
                 Review the details before confirming.
@@ -490,13 +577,19 @@ onBeforeUnmount(() => trigger?.focus());
                 </div>
               </div>
               <dl class="wizard-summary">
-                <div v-for="[label, value] in summary" :key="label">
-                  <dt>{{ label }}</dt>
-                  <dd>{{ value || "—" }}</dd>
-                </div>
+                <MetadataRow
+                  v-for="[label, value] in summary"
+                  :key="label"
+                  :label="label"
+                  :value="value || '—'"
+                />
               </dl>
               <details v-if="allFiles" class="wizard-batch-files" open>
-                <summary>Files to distribute ({{ targets.length }})</summary>
+                <summary>
+                  {{ editing ? "Files to update" : "Files to distribute" }} ({{
+                    targets.length
+                  }})
+                </summary>
                 <ul>
                   <li v-for="item in targets" :key="item.id">
                     <span>{{ item.filename }}</span
@@ -510,18 +603,24 @@ onBeforeUnmount(() => trigger?.focus());
             </template>
           </template>
           <p class="modal-note wizard-demo-note">
-            Demo workflow · No files are moved or saved yet.
+            {{
+              editing
+                ? "Demo session · Metadata changes are not persisted to disk."
+                : "Demo workflow · No files are moved or saved yet."
+            }}
           </p>
         </div>
-        <label
-          v-if="items.length > 1 && !done"
+        <ToggleSwitch
+          v-if="items.length > 1 && !done && !editing"
+          v-model="retain"
+          trailing
           class="settings-switch-row distribution-retain"
           ><span
             >Keep entered details between files<small
               >Copyrights, artists, characters, tags and video title</small
             ></span
-          ><input v-model="retain" type="checkbox" role="switch"
-        /></label>
+          ></ToggleSwitch
+        >
         <footer class="modal-footer">
           <template v-if="done"
             ><button
@@ -563,7 +662,14 @@ onBeforeUnmount(() => trigger?.focus());
             >
               Next<AppIcon name="arrow" :size="16" /></button
             ><button v-else class="primary-button" @click="process()">
-              {{ allFiles ? `Distribute all (${remaining})` : "Distribute file"
+              {{
+                editing
+                  ? allFiles
+                    ? `Save all (${remaining})`
+                    : "Save changes"
+                  : allFiles
+                    ? `Distribute all (${remaining})`
+                    : "Distribute file"
               }}<AppIcon name="check" :size="16" /></button
           ></template>
         </footer>
