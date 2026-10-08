@@ -1,5 +1,6 @@
 mod config;
 pub mod database;
+mod legacy_import;
 mod logging;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -47,13 +48,16 @@ pub fn run() {
                 tauri::async_runtime::block_on(database::Database::open(&database_path))?;
             app.manage(store);
             app.manage(database);
+            app.manage(legacy_import::ImportState::default());
             tracing::info!("Application setup completed");
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             config::get_config,
             config::save_config,
-            config::open_logs
+            config::open_logs,
+            legacy_import::find_legacy_database,
+            legacy_import::import_legacy_database
         ])
         .build(tauri::generate_context!());
     let result = result.map(|app| {
