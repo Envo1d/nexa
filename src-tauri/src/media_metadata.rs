@@ -26,6 +26,8 @@ pub struct MediaMetadata {
     /// Windows 100 ns ticks truncated to whole milliseconds. Zero is valid.
     pub duration_ms: Option<u64>,
     pub frame_rate: Option<FrameRate>,
+    pub codec: Option<String>,
+    pub bitrate_bps: Option<u32>,
     /// Missing properties are normal; failed or malformed properties appear here.
     pub issues: Vec<PropertyIssue>,
 }
@@ -36,6 +38,8 @@ pub enum MetadataProperty {
     Height,
     Duration,
     FrameRate,
+    Codec,
+    Bitrate,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -88,7 +92,9 @@ pub fn query_media_metadata(path: &Path, kind: MediaKind) -> Result<MediaMetadat
             known_fields = usize::from(metadata.width.is_some())
                 + usize::from(metadata.height.is_some())
                 + usize::from(metadata.duration_ms.is_some())
-                + usize::from(metadata.frame_rate.is_some()),
+                + usize::from(metadata.frame_rate.is_some())
+                + usize::from(metadata.codec.is_some())
+                + usize::from(metadata.bitrate_bps.is_some()),
             issues = metadata.issues.len(),
             "Metadata query completed"
         ),
@@ -115,6 +121,26 @@ pub fn query_media_metadata(path: &Path, kind: MediaKind) -> Result<MediaMetadat
 }
 
 #[cfg(windows)]
+fn codec_label(value: &str) -> String {
+    let normalized = value.trim_matches(['{', '}']).to_ascii_lowercase();
+    if let Some(prefix) = normalized.strip_suffix("-0000-0010-8000-00aa00389b71") {
+        let known = match prefix {
+            "34363248" | "31435641" => Some("H.264"),
+            "43564548" | "35363248" | "31637668" | "31766568" => Some("HEVC"),
+            "30395056" => Some("VP9"),
+            "30385056" => Some("VP8"),
+            "31305641" => Some("AV1"),
+            "47504a4d" => Some("Motion JPEG"),
+            _ => None,
+        };
+        if let Some(known) = known {
+            return known.into();
+        }
+    }
+    value.to_owned()
+}
+
+#[cfg(windows)]
 mod windows_provider {
     use super::*;
     use crate::windows_com::Apartment;
@@ -124,11 +150,12 @@ mod windows_provider {
             Foundation::PROPERTYKEY,
             Storage::EnhancedStorage::{
                 PKEY_Image_HorizontalSize, PKEY_Image_VerticalSize, PKEY_Media_Duration,
-                PKEY_Video_FrameHeight, PKEY_Video_FrameRate, PKEY_Video_FrameWidth,
+                PKEY_Video_Compression, PKEY_Video_EncodingBitrate, PKEY_Video_FrameHeight,
+                PKEY_Video_FrameRate, PKEY_Video_FrameWidth,
             },
             System::{
                 Com::StructuredStorage::{PROPVARIANT, PropVariantClear},
-                Variant::{VT_EMPTY, VT_NULL, VT_UI4, VT_UI8},
+                Variant::{VT_CLSID, VT_EMPTY, VT_LPWSTR, VT_NULL, VT_UI4, VT_UI8},
             },
             UI::Shell::{
                 IShellItem2,
@@ -209,6 +236,18 @@ mod windows_provider {
             &mut metadata.issues,
         );
         if kind == MediaKind::Video {
+            metadata.bitrate_bps = positive(
+                read(
+                    &store,
+                    &PKEY_Video_EncodingBitrate,
+                    MetadataProperty::Bitrate,
+                    false,
+                    &mut metadata.issues,
+                ),
+                MetadataProperty::Bitrate,
+                &mut metadata.issues,
+            );
+            metadata.codec = read_codec(&store, &mut metadata.issues);
             metadata.duration_ms = read(
                 &store,
                 &PKEY_Media_Duration,
@@ -259,6 +298,42 @@ mod windows_provider {
             }
         };
         decode(&value, property, wide, issues)
+    }
+
+    fn read_codec(store: &IPropertyStore, issues: &mut Vec<PropertyIssue>) -> Option<String> {
+        // SAFETY: valid store; the wrapper owns and clears the returned variant.
+        let value = match unsafe { store.GetValue(&PKEY_Video_Compression) } {
+            Ok(value) => PropertyValue(value),
+            Err(error) => {
+                issues.push(PropertyIssue::ReadFailed {
+                    property: MetadataProperty::Codec,
+                    hresult: error.code().0,
+                });
+                return None;
+            }
+        };
+        // SAFETY: discriminate before accessing pointers owned by the property value.
+        unsafe {
+            let inner = &value.0.Anonymous.Anonymous;
+            match inner.vt {
+                VT_EMPTY | VT_NULL => None,
+                VT_LPWSTR if !inner.Anonymous.pwszVal.is_null() => {
+                    let text = inner.Anonymous.pwszVal.to_string().ok()?;
+                    let text = text.trim();
+                    (!text.is_empty()).then(|| codec_label(text))
+                }
+                VT_CLSID if !inner.Anonymous.puuid.is_null() => {
+                    Some(format!("{:?}", *inner.Anonymous.puuid))
+                }
+                vt => {
+                    issues.push(PropertyIssue::UnexpectedType {
+                        property: MetadataProperty::Codec,
+                        variant_type: vt.0,
+                    });
+                    None
+                }
+            }
+        }
     }
 
     fn decode(

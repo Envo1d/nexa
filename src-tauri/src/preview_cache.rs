@@ -151,6 +151,7 @@ pub enum RemapOutcome {
 pub struct PreviewCache {
     root: PathBuf,
     operations: Mutex<()>,
+    generations: Mutex<std::collections::HashMap<String, std::sync::Weak<Mutex<()>>>>,
 }
 
 impl PreviewCache {
@@ -158,6 +159,7 @@ impl PreviewCache {
         Self {
             root,
             operations: Mutex::new(()),
+            generations: Mutex::new(std::collections::HashMap::new()),
         }
     }
 
@@ -180,11 +182,28 @@ impl PreviewCache {
         let _span = tracing::debug_span!("preview_cache_load", requested_edge = size).entered();
         tracing::debug!("Preview lookup started");
         validate_size(size)?;
-        let _lock = self.lock()?;
         let source = std::path::absolute(path)?;
         let before = revision(&source)?;
         let key = CacheKey::new(&source, before.clone(), size)?;
-        match self.read(&key) {
+        // Deduplicate the same source while letting different sources extract in parallel.
+        let generation = {
+            let mut locks = self.generations.lock().map_err(|_| CacheError::Poisoned)?;
+            locks.retain(|_, lock| lock.strong_count() > 0);
+            match locks.get(&key.filename).and_then(std::sync::Weak::upgrade) {
+                Some(lock) => lock,
+                None => {
+                    let lock = std::sync::Arc::new(Mutex::new(()));
+                    locks.insert(key.filename.clone(), std::sync::Arc::downgrade(&lock));
+                    lock
+                }
+            }
+        };
+        let _generation = generation.lock().map_err(|_| CacheError::Poisoned)?;
+        let cached = {
+            let _lock = self.lock()?;
+            self.read(&key)
+        };
+        match cached {
             Ok(Some(image)) => {
                 if revision(&source)? != before {
                     return Err(CacheError::SourceChanged);
@@ -204,7 +223,11 @@ impl PreviewCache {
         if revision(&source)? != before {
             return Err(CacheError::SourceChanged);
         }
-        let persistence_error = self.write(&key, &image).err();
+        // Slow Shell extraction does not hold the shared maintenance/read lock.
+        let persistence_error = {
+            let _lock = self.lock()?;
+            self.write(&key, &image).err()
+        };
         if persistence_error.is_some() {
             tracing::warn!("Preview generated but cache persistence failed");
         }
@@ -617,6 +640,46 @@ mod tests {
         });
         assert_eq!(calls.load(Ordering::SeqCst), 1);
         assert_eq!(cache.usage().unwrap().entries, 1);
+    }
+
+    #[test]
+    fn different_sources_extract_concurrently_without_global_cache_lock() {
+        let (_temporary, source, cache) = fixture();
+        let other = source.with_extension("second");
+        fs::write(&other, b"source").unwrap();
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        std::thread::scope(|scope| {
+            let mut releases = Vec::new();
+            let mut handles = Vec::new();
+            for path in [&source, &other] {
+                let (release_tx, release_rx) = std::sync::mpsc::channel();
+                releases.push(release_tx);
+                let started = started_tx.clone();
+                let cache = &cache;
+                handles.push(scope.spawn(move || {
+                    cache
+                        .load_with(path, 32, |path, size| {
+                            started.send(()).unwrap();
+                            release_rx.recv().unwrap();
+                            pixels(path, size)
+                        })
+                        .unwrap()
+                }));
+            }
+            let first = started_rx.recv_timeout(std::time::Duration::from_secs(5));
+            let second = started_rx.recv_timeout(std::time::Duration::from_secs(5));
+            for release in releases {
+                release.send(()).unwrap();
+            }
+            for handle in handles {
+                handle.join().unwrap();
+            }
+            assert!(
+                first.is_ok() && second.is_ok(),
+                "Extraction was globally serialized"
+            );
+        });
+        assert_eq!(cache.usage().unwrap().entries, 2);
     }
 
     #[test]

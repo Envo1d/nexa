@@ -1,38 +1,48 @@
-import { computed, ref } from "vue";
+import { computed, ref, shallowRef, watch, onScopeDispose } from "vue";
 import { useMediaSelection } from "./useMediaSelection";
 import { createMockMedia } from "../data/mockMedia";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import type { MediaItem, MediaKind } from "../types/media";
 
 export function useStage() {
-  const media = ref<MediaItem[]>(
-    createMockMedia()
-      .slice(0, 96)
-      .map((item, index) => {
-        const filename = `Capture ${String(index + 1).padStart(3, "0")}.${item.extension.toLowerCase()}`;
-        return {
-          ...item,
-          id: `stage-${index + 1}`,
-          filename,
-          path: `C:\\Media\\Nexa staging\\${item.kind === "video" ? "Videos" : "Images"}\\${filename}`,
-          favorite: false,
-          copyrights: [],
-          artist: "",
-          characters: [],
-          tags: [],
-        };
-      }),
+  const makeMediaRef = isTauri() ? shallowRef : ref;
+  const media = makeMediaRef<MediaItem[]>(
+    (isTauri() ? [] : createMockMedia()).slice(0, 96).map((item, index) => {
+      const filename = `Capture ${String(index + 1).padStart(3, "0")}.${item.extension.toLowerCase()}`;
+      return {
+        ...item,
+        id: `stage-${index + 1}`,
+        filename,
+        path: `C:\\Media\\Nexa staging\\${item.kind === "video" ? "Videos" : "Images"}\\${filename}`,
+        favorite: false,
+        copyrights: [],
+        artist: "",
+        characters: [],
+        tags: [],
+      };
+    }),
   );
   const search = ref("");
+  const total = ref(0);
+  const loading = ref(false);
+  const error = ref("");
+  const hasMore = computed(() => isTauri() && media.value.length < total.value);
+  let cursor: string | null = null;
   let refreshVersion = 0;
-  async function refreshRedistribution() {
+  async function loadPage(append = false) {
     if (!isTauri()) return;
-    const version = ++refreshVersion;
-    const files = await invoke<
-      {
+    if (append && loading.value) return;
+    const version = append ? refreshVersion : ++refreshVersion;
+    loading.value = true;
+    error.value = "";
+    try {
+      type NativeFile = {
         id: string;
-        root: string;
-        relativePath: string;
+        path: string;
+        filename: string;
+        nativeRedistribution: boolean;
+        revision: string | null;
+        availability: string;
         kind: MediaKind;
         extension: string;
         size: number | null;
@@ -41,35 +51,74 @@ export function useStage() {
         modifiedAt: number | null;
         createdAt: number | null;
         duration: number | null;
-      }[]
-    >("get_redistribution_files");
-    if (version !== refreshVersion) return;
-    const queued: MediaItem[] = files.map((file) => ({
-      id: `database-${file.id}`,
-      nativeRedistribution: true,
-      filename: file.relativePath.split(/[\\/]/).pop() ?? file.relativePath,
-      path: `${file.root.replace(/[\\/]$/, "")}/${file.relativePath}`,
-      kind: file.kind,
-      extension: file.extension,
-      preview: "",
-      size: file.size ?? -1,
-      width: file.width ?? 0,
-      height: file.height ?? 0,
-      modifiedAt: file.modifiedAt ?? 0,
-      createdAt: file.createdAt ?? 0,
-      duration: file.duration === null ? undefined : file.duration / 1000,
-      favorite: false,
-      copyrights: [],
-      artist: "",
-      characters: [],
-      tags: [],
-    }));
-    media.value = [
-      ...media.value.filter((item) => !item.nativeRedistribution),
-      ...queued,
-    ];
+        fps: number | null;
+        codec: string | null;
+        bitrate: number | null;
+      };
+      const page = await invoke<{ files: NativeFile[]; total: number }>(
+        "get_stage_files",
+        { after: append ? cursor : null, search: search.value },
+      );
+      if (version !== refreshVersion) return;
+      const queued: MediaItem[] = page.files.map((file) => ({
+        id: `database-${file.id}`,
+        nativeId: file.id,
+        nativeRevision: file.revision ?? "imported",
+        availability: file.availability,
+        nativeRedistribution: file.nativeRedistribution,
+        filename: file.filename,
+        path: file.path,
+        kind: file.kind,
+        extension: file.extension,
+        preview: "",
+        size: file.size ?? -1,
+        width: file.width ?? 0,
+        height: file.height ?? 0,
+        modifiedAt: file.modifiedAt ?? 0,
+        createdAt: file.createdAt ?? 0,
+        duration: file.duration === null ? undefined : file.duration / 1000,
+        fps: file.fps ?? undefined,
+        codec: file.codec ?? undefined,
+        bitrate: file.bitrate ?? undefined,
+        favorite: false,
+        copyrights: [],
+        artist: "",
+        characters: [],
+        tags: [],
+      }));
+      total.value = page.total;
+      cursor = page.files[page.files.length - 1]?.id ?? cursor;
+      media.value = append ? [...media.value, ...queued] : queued;
+    } catch (cause) {
+      if (version === refreshVersion)
+        error.value = `Could not load Stage: ${String(cause)}`;
+    } finally {
+      if (version === refreshVersion) loading.value = false;
+    }
   }
+  async function refreshRedistribution() {
+    await loadPage();
+  }
+  async function loadMore() {
+    if (hasMore.value) await loadPage(true);
+  }
+  let searchTimer: ReturnType<typeof setTimeout> | undefined;
+  watch(search, () => {
+    if (!isTauri()) return;
+    ++refreshVersion;
+    clearTimeout(searchTimer);
+    media.value = [];
+    total.value = 0;
+    searchTimer = setTimeout(() => {
+      void loadPage();
+    }, 150);
+  });
+  onScopeDispose(() => {
+    ++refreshVersion;
+    clearTimeout(searchTimer);
+  });
   const results = computed(() => {
+    if (isTauri()) return media.value;
     const query = search.value.trim().toLocaleLowerCase().replace(/\\/g, "/");
     return media.value.filter((item) =>
       [item.filename, item.path].some((value) =>
@@ -83,6 +132,11 @@ export function useStage() {
   }
   return {
     media,
+    total,
+    hasMore,
+    loading,
+    error,
+    loadMore,
     refreshRedistribution,
     search,
     results,

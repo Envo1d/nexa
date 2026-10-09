@@ -23,3 +23,7 @@ The initial schema permits an unknown artist/title on unprocessed discoveries. A
 ## Redistribution Workflow — Version 2
 
 0002_redistribution.sql adds the persistent media.needs_distribution boolean and its partial index without modifying version 1 or adding tables. Copyright/artist deletion sets this flag within the same transaction that removes dictionary relations. Physical source/path identity and technical metadata_state stay unchanged. The version-1 upgrade test verifies existing records and metadata survive with the default zero flag. Future Library/scanner/distribution services must respect this workflow flag; the current preview wizard does not clear it.
+
+## Stage Indexing — Version 3
+
+0003_stage_scan.sql adds source revision, extractor version, searchable path keys and a Stage browse index. It changes no prior migration or table count. Fresh, reopen, version-1 upgrade and migration integrity tests cover the current three-version schema; custom pending/failing migration fixtures now use version 4. The Stage repository fills search keys on discovery or lazily for imported/redistribution records without filesystem reads.

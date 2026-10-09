@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, toRef } from "vue";
+import { useNativePreview } from "../composables/useNativePreview";
 import type { MediaItem } from "../types/media";
 import { formatDuration } from "../types/media";
 import AppIcon from "./AppIcon.vue";
@@ -9,13 +10,19 @@ const props = defineProps<{
   variant: "card" | "detail" | "wizard";
 }>();
 const duration = computed(() => formatDuration(props.item.duration ?? 0));
+const nativePreview = useNativePreview(
+  toRef(props, "item"),
+  toRef(props, "showPreviews"),
+  props.variant !== "card",
+);
+const preview = computed(() => props.item.preview || nativePreview.value);
 </script>
 
 <template>
   <div :class="variant === 'wizard' ? 'wizard-preview' : `${variant}-preview`">
     <img
-      v-if="showPreviews && item.preview"
-      :src="item.preview"
+      v-if="showPreviews && preview"
+      :src="preview"
       :alt="variant === 'wizard' ? 'Source media preview' : item.filename"
       :loading="variant === 'card' ? 'lazy' : undefined"
       :decoding="variant === 'card' ? 'async' : undefined"
@@ -24,7 +31,7 @@ const duration = computed(() => formatDuration(props.item.duration ?? 0));
       :draggable="variant === 'card' ? false : undefined"
     />
     <AppIcon
-      v-else-if="variant === 'wizard' || !item.preview"
+      v-else-if="variant === 'wizard' || !preview"
       :name="item.kind"
       :size="56"
     />

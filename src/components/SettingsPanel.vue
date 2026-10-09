@@ -7,6 +7,20 @@ import { version } from "../../package.json";
 import ToggleSwitch from "./ToggleSwitch.vue";
 import SettingsRow from "./SettingsRow.vue";
 import AppIcon from "./AppIcon.vue";
+import { useStageScan } from "../composables/useStageScan";
+const stageScan = useStageScan();
+async function scanStage() {
+  if (!native) {
+    emit("preview", "Scan Stage folder");
+    return;
+  }
+  error.value = "";
+  try {
+    await stageScan.start();
+  } catch (cause) {
+    error.value = String(cause);
+  }
+}
 
 const emit = defineEmits<{ preview: [action: string]; close: []; saved: [] }>();
 const native = isTauri();
@@ -62,6 +76,11 @@ watch(
 );
 onMounted(async () => {
   if (!native) return;
+  try {
+    await stageScan.connect();
+  } catch (cause) {
+    error.value = String(cause);
+  }
   await checkLegacyDatabase();
   try {
     const snapshot = await invoke<ConfigSnapshot>("get_config");
@@ -243,7 +262,7 @@ function resetDrafts() {
                 ? "UI preview · Changes are not applied or saved."
                 : saved
                   ? "Settings saved."
-                  : "Changes apply after Save changes. Scanning, disk synchronization and updates are not available yet.")
+                  : "Changes apply after Save changes. Stage scanning uses the saved directory. Library scanning, disk synchronization and updates are not available yet.")
           }}
         </p>
         <fieldset
@@ -350,7 +369,8 @@ function resetDrafts() {
                     <AppIcon name="size" :size="16" />Scan library</button
                   ><button
                     class="secondary-button"
-                    @click="$emit('preview', 'Scan Stage folder')"
+                    :disabled="stageScan.status.value.running"
+                    @click="scanStage"
                   >
                     <AppIcon name="search" :size="16" />Scan Stage folder
                   </button>
@@ -362,16 +382,24 @@ function resetDrafts() {
                   ><span
                     ><strong>Auto scan on startup</strong
                     ><small
-                      >Scan both libraries each time Nexa opens.</small
+                      >Scan Stage each time Nexa opens. Library scanning is
+                      pending.</small
                     ></span
                   ></ToggleSwitch
                 >
                 <div class="settings-scan-summary">
                   <div>
                     <AppIcon name="info" :size="16" /><strong>Last scan</strong
-                    ><span class="settings-status">Idle</span>
+                    ><span class="settings-status">{{
+                      stageScan.status.value.running ? "Scanning" : "Idle"
+                    }}</span>
                   </div>
-                  <p>No scans yet. Indexing is available as a UI preview.</p>
+                  <p role="status" aria-live="polite">
+                    {{ stageScan.status.value.message }} ·
+                    {{ stageScan.status.value.scanned }} files ·
+                    {{ stageScan.status.value.extracted }} extracted ·
+                    {{ stageScan.status.value.errors }} issues
+                  </p>
                 </div>
                 <SettingsRow
                   v-if="legacyFound"
@@ -394,7 +422,8 @@ function resetDrafts() {
                   <p v-if="legacyFound">
                     Characters keep their copyright; tags are shared without
                     duplicates. Imported roots are retained without changing
-                    your settings. Library and Stage still show demo files.
+                    your settings. Stage shows files from its saved directory
+                    and redistribution queue. Library still shows demo files.
                   </p>
                   <p v-if="importMessage" role="status" aria-live="polite">
                     {{ importMessage }}
