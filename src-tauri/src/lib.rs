@@ -4,6 +4,7 @@ mod legacy_import;
 mod logging;
 pub mod media_metadata;
 pub mod media_thumbnail;
+pub mod preview_cache;
 mod taxonomy;
 #[cfg(windows)]
 mod windows_com;
