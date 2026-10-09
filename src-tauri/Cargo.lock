@@ -4233,6 +4233,7 @@ version = "0.1.0"
 dependencies = [
  "caseless",
  "directories",
+ "image",
  "serde",
  "serde_json",
  "sqlx",
@@ -4251,6 +4252,7 @@ dependencies = [
  "tracing-appender",
  "tracing-subscriber",
  "unicode-normalization",
+ "windows",
 ]
 
 [[package]]
