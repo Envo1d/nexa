@@ -2,7 +2,11 @@ mod config;
 pub mod database;
 mod legacy_import;
 mod logging;
+pub mod media_metadata;
+pub mod media_thumbnail;
 mod taxonomy;
+#[cfg(windows)]
+mod windows_com;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
