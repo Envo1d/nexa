@@ -37,11 +37,18 @@ const metadata = computed(() => [
     label: "File type",
     value: `${props.item.extension} (${props.item.kind === "video" ? "Video" : "Image"})`,
   },
-  { icon: "files", label: "Size", value: formatSize(props.item.size) },
+  {
+    icon: "files",
+    label: "Size",
+    value: props.item.size < 0 ? "Unavailable" : formatSize(props.item.size),
+  },
   {
     icon: "size",
     label: "Resolution",
-    value: `${props.item.width} × ${props.item.height}`,
+    value:
+      props.item.width && props.item.height
+        ? `${props.item.width} × ${props.item.height}`
+        : "Unavailable",
   },
   ...(props.item.kind === "video"
     ? [
@@ -63,12 +70,18 @@ const metadata = computed(() => [
   {
     icon: "calendar",
     label: "Modified",
-    value: formatDate(props.item.modifiedAt),
+    value:
+      props.item.nativeRedistribution && !props.item.modifiedAt
+        ? "Unavailable"
+        : formatDate(props.item.modifiedAt),
   },
   {
     icon: "calendar",
     label: "Created",
-    value: formatDate(props.item.createdAt),
+    value:
+      props.item.nativeRedistribution && !props.item.createdAt
+        ? "Unavailable"
+        : formatDate(props.item.createdAt),
   },
   ...(props.item.kind === "video"
     ? [
@@ -104,6 +117,10 @@ const metadata = computed(() => [
     </header>
     <div class="details-scroll">
       <h3 class="detail-filename">{{ item.filename }}</h3>
+      <p v-if="item.nativeRedistribution" class="muted">
+        Needs redistribution · file remains at {{ item.path }}. Distribution is
+        currently a preview.
+      </p>
       <MediaPreview
         v-if="showPreviews"
         :item="item"

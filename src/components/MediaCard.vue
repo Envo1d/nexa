@@ -16,9 +16,15 @@ const displayName = computed(() =>
     ? props.item.filename
     : props.item.filename.replace(/\.[^.]+$/, ""),
 );
-const modifiedDate = computed(() => formatDate(props.item.modifiedAt));
+const modifiedDate = computed(() =>
+  props.item.nativeRedistribution && !props.item.modifiedAt
+    ? "Date unavailable"
+    : formatDate(props.item.modifiedAt),
+);
 const modifiedDateTime = computed(() =>
-  new Date(props.item.modifiedAt).toISOString(),
+  props.item.nativeRedistribution && !props.item.modifiedAt
+    ? undefined
+    : new Date(props.item.modifiedAt).toISOString(),
 );
 defineEmits<{
   select: [event: MouseEvent];

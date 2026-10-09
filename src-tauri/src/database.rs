@@ -163,7 +163,55 @@ mod tests {
             include_str!("../migrations/0001_init.sql"),
         )
         .unwrap();
+        std::fs::write(
+            directory.join("0002_redistribution.sql"),
+            include_str!("../migrations/0002_redistribution.sql"),
+        )
+        .unwrap();
         directory
+    }
+
+    #[tokio::test]
+    async fn upgrades_version_one_without_changing_media_identity_or_metadata() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("vault.db");
+        let directory = root.path().join("version_one");
+        std::fs::create_dir(&directory).unwrap();
+        std::fs::write(
+            directory.join("0001_init.sql"),
+            include_str!("../migrations/0001_init.sql"),
+        )
+        .unwrap();
+        let migrator = Migrator::new(directory.as_path()).await.unwrap();
+        let database = Database::open_with_migrator(&path, &migrator)
+            .await
+            .unwrap();
+        seed(database.pool()).await;
+        database.close().await;
+        let database = Database::open(&path).await.unwrap();
+        assert_eq!(
+            count(
+                database.pool(),
+                "SELECT count(*) FROM media WHERE needs_distribution = 0 AND artist_id = 1"
+            )
+            .await,
+            2
+        );
+        assert_eq!(
+            count(database.pool(), "SELECT count(*) FROM media_characters").await,
+            1
+        );
+        assert_eq!(
+            count(database.pool(), "SELECT count(*) FROM media_tags").await,
+            1
+        );
+        let filename: String =
+            sqlx::query_scalar("SELECT original_filename FROM media WHERE id = 1")
+                .fetch_one(database.pool())
+                .await
+                .unwrap();
+        assert_eq!(filename, "image.png");
+        database.close().await;
     }
 
     #[tokio::test]
@@ -203,7 +251,7 @@ mod tests {
         let database = Database::open(&path).await.unwrap();
         assert_eq!(
             count(database.pool(), "SELECT count(*) FROM _sqlx_migrations").await,
-            1
+            2
         );
         assert_eq!(
             count(
@@ -483,7 +531,7 @@ mod tests {
         database.close().await;
         let directory = migration_directory(root.path());
         std::fs::write(
-            directory.join("0002_upgrade.sql"),
+            directory.join("0003_upgrade.sql"),
             "CREATE TABLE upgrade_marker(id INTEGER PRIMARY KEY) STRICT;",
         )
         .unwrap();
@@ -497,7 +545,7 @@ mod tests {
                 "SELECT count(*) FROM _sqlx_migrations WHERE success = 1"
             )
             .await,
-            2
+            3
         );
         assert_eq!(
             count(database.pool(), "SELECT count(*) FROM media").await,
@@ -518,7 +566,7 @@ mod tests {
         database.close().await;
         let directory = migration_directory(root.path());
         std::fs::write(
-            directory.join("0002_broken.sql"),
+            directory.join("0003_broken.sql"),
             "CREATE TABLE rollback_marker(id INTEGER PRIMARY KEY); DELETE FROM media; INVALID SQL;",
         )
         .unwrap();
@@ -534,7 +582,7 @@ mod tests {
         );
         assert_eq!(
             count(database.pool(), "SELECT count(*) FROM _sqlx_migrations").await,
-            1
+            2
         );
         assert_eq!(
             count(
