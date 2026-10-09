@@ -80,6 +80,8 @@ pub fn run() {
             stage::start_stage_scan,
             stage::get_stage_scan_status,
             stage::get_stage_files,
+            stage::stage_file_action,
+            stage::get_cache_usage,
             stage::get_stage_preview
         ])
         .build(tauri::generate_context!());

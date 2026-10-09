@@ -7,7 +7,8 @@ import {
   ref,
   watch,
 } from "vue";
-import { isTauri } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "@tauri-apps/api/core";
+import { confirm } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { platform, version } from "@tauri-apps/plugin-os";
 import { usesSystemWindowCorners } from "./utils/windowCorners";
@@ -25,6 +26,10 @@ import { useDemoTaxonomy } from "./composables/useDemoTaxonomy";
 import { useLibrary } from "./composables/useLibrary";
 import { useStage } from "./composables/useStage";
 import { useStageScan } from "./composables/useStageScan";
+import { useCacheUsage } from "./composables/useCacheUsage";
+const cacheUsage = useCacheUsage();
+let stopCacheUsage: (() => void) | undefined;
+let cacheUsageDisposed = false;
 import type { MediaItem, MediaKind, MediaMetadataDraft } from "./types/media";
 import "./styles.css";
 
@@ -147,6 +152,7 @@ function openContext(item: MediaItem, event: MouseEvent | KeyboardEvent) {
 }
 async function contextAction(action: string) {
   const item = context.value?.item;
+  const stageContext = context.value?.stage;
   const selection = context.value?.stage ? stage : library;
   const targets = selection.results.value.filter((entry) =>
     selection.selectedIds.value.includes(entry.id),
@@ -159,6 +165,10 @@ async function contextAction(action: string) {
     return;
   }
   if (action === "Delete file") {
+    if (stageContext && isTauri() && item.nativeId) {
+      await stageFileAction(action, targets.length ? targets : [item]);
+      return;
+    }
     notify(
       `Delete ${targets.length || 1} file(s) is a UI preview. No files were deleted.`,
     );
@@ -216,9 +226,65 @@ function navigate(nextScope: "gallery" | "favorites") {
   scope.value = nextScope;
   view.value = "main";
 }
-function previewAction(action: string, item: MediaItem) {
+const fileActionBusy = ref(false);
+async function stageFileAction(action: string, items: MediaItem[]) {
+  if (fileActionBusy.value) return;
+  const operation =
+    action === "Delete file"
+      ? "delete"
+      : action === "Open file" || action === "Open"
+        ? "open"
+        : "reveal";
+  fileActionBusy.value = true;
+  context.value = null;
+  try {
+    if (operation === "delete") {
+      const names = items
+        .slice(0, 5)
+        .map((item) => item.filename)
+        .join("\n");
+      const accepted = await confirm(
+        `Delete ${items.length} file(s) from disk?\n\n${names}${items.length > 5 ? "\n…" : ""}\n\nFiles will be moved to the Recycle Bin when available. Windows will ask before permanently deleting files that cannot be recycled.`,
+        {
+          title: "Delete Stage files",
+          kind: "warning",
+          okLabel: "Delete files",
+          cancelLabel: "Cancel",
+        },
+      );
+      if (!accepted) return;
+    }
+    const report = await invoke<{ succeeded: string[]; failed: string[] }>(
+      "stage_file_action",
+      { ids: items.map((item) => item.nativeId), action: operation },
+    );
+    if (operation === "delete") {
+      stage.clearSelection();
+      await stage.refreshRedistribution();
+    }
+    if (report.failed.length)
+      notify(
+        `${report.succeeded.length} completed; ${report.failed.length} failed. ${report.failed[0]}`,
+      );
+    else if (operation === "delete")
+      notify(`${report.succeeded.length} file(s) deleted.`);
+  } catch (cause) {
+    notify(`File action failed: ${String(cause)}`);
+  } finally {
+    fileActionBusy.value = false;
+  }
+}
+async function previewAction(action: string, item: MediaItem) {
   if (action === "Distribute" && view.value === "stage") {
     distribute(item);
+    return;
+  }
+  if (
+    isTauri() &&
+    item.nativeId &&
+    ["Open", "Open file", "Open folder", "Show in Explorer"].includes(action)
+  ) {
+    await stageFileAction(action, [item]);
     return;
   }
   if (action === "Copy path") {
@@ -343,6 +409,13 @@ function trapFocus(event: KeyboardEvent) {
   }
 }
 onMounted(async () => {
+  void cacheUsage
+    .connect(notify)
+    .then((stop) => {
+      if (cacheUsageDisposed) stop();
+      else stopCacheUsage = stop;
+    })
+    .catch(() => notify("Could not connect cache usage notifications."));
   void stageScan
     .connect()
     .catch(() => notify("Could not connect Stage scan progress."));
@@ -358,6 +431,8 @@ onMounted(async () => {
   }
 });
 onBeforeUnmount(() => {
+  cacheUsageDisposed = true;
+  stopCacheUsage?.();
   document.removeEventListener("contextmenu", preventBrowserContextMenu, true);
   document.removeEventListener("keydown", keyboard);
   clearTimeout(toastTimer);
