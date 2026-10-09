@@ -1,6 +1,7 @@
 export type MediaKind = "video" | "image";
 
 export interface MediaItem {
+  nativeRedistribution?: boolean;
   id: string;
   filename: string;
   path: string;
@@ -49,6 +50,7 @@ export function formatDuration(seconds: number, full = false): string {
 }
 
 export function formatSize(bytes: number): string {
+  if (bytes < 0) return "Unavailable";
   return bytes >= 1024 ** 3
     ? `${(bytes / 1024 ** 3).toFixed(2)} GB`
     : `${(bytes / 1024 ** 2).toFixed(2)} MB`;

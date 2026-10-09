@@ -28,6 +28,11 @@ const emit = defineEmits<{
 }>();
 const position = ref(0);
 const current = computed(() => props.items[position.value]!);
+const resolution = computed(() =>
+  current.value.width && current.value.height
+    ? `${current.value.width} × ${current.value.height}`
+    : "Unavailable",
+);
 const remaining = computed(() => props.items.length - position.value);
 const retain = ref(false);
 const copyrights = ref<MetadataValue[]>([]);
@@ -448,22 +453,26 @@ onBeforeUnmount(() => trigger?.focus());
                     }})
                   </MetadataRow>
                   <MetadataRow label="Modified">{{
-                    formatDate(current.modifiedAt)
+                    current.nativeRedistribution && !current.modifiedAt
+                      ? "Unavailable"
+                      : formatDate(current.modifiedAt)
                   }}</MetadataRow>
                   <div class="wizard-technical-pair">
                     <MetadataRow label="Size">{{
                       formatSize(current.size)
                     }}</MetadataRow>
-                    <MetadataRow label="Resolution"
-                      >{{ current.width }} × {{ current.height }}</MetadataRow
-                    >
+                    <MetadataRow label="Resolution">{{
+                      resolution
+                    }}</MetadataRow>
                   </div>
                   <div
                     v-if="current.kind === 'video'"
                     class="wizard-technical-pair"
                   >
                     <MetadataRow label="Duration">{{
-                      formatDuration(current.duration ?? 0, true)
+                      current.duration === undefined
+                        ? "Unavailable"
+                        : formatDuration(current.duration, true)
                     }}</MetadataRow>
                     <MetadataRow label="FPS">{{
                       current.fps ?? "—"
@@ -558,7 +567,11 @@ onBeforeUnmount(() => trigger?.focus());
                 >
               </fieldset>
               <div class="wizard-confirm-file">
-                <img v-if="showPreviews" :src="current.preview" alt="" />
+                <img
+                  v-if="showPreviews && current.preview"
+                  :src="current.preview"
+                  alt=""
+                />
                 <div>
                   <h3>
                     {{
@@ -571,7 +584,7 @@ onBeforeUnmount(() => trigger?.focus());
                     {{
                       allFiles
                         ? "The same metadata and video title will be applied to every file below."
-                        : `${formatSize(current.size)} · ${current.width} × ${current.height}`
+                        : `${formatSize(current.size)} · ${resolution}`
                     }}
                   </p>
                 </div>

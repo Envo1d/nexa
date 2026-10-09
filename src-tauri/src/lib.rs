@@ -2,6 +2,7 @@ mod config;
 pub mod database;
 mod legacy_import;
 mod logging;
+mod taxonomy;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -57,7 +58,11 @@ pub fn run() {
             config::save_config,
             config::open_logs,
             legacy_import::find_legacy_database,
-            legacy_import::import_legacy_database
+            legacy_import::import_legacy_database,
+            taxonomy::get_taxonomy,
+            taxonomy::rename_taxonomy,
+            taxonomy::delete_taxonomy,
+            taxonomy::get_redistribution_files
         ])
         .build(tauri::generate_context!());
     let result = result.map(|app| {

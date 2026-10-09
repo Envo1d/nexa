@@ -14,7 +14,7 @@ const duration = computed(() => formatDuration(props.item.duration ?? 0));
 <template>
   <div :class="variant === 'wizard' ? 'wizard-preview' : `${variant}-preview`">
     <img
-      v-if="showPreviews"
+      v-if="showPreviews && item.preview"
       :src="item.preview"
       :alt="variant === 'wizard' ? 'Source media preview' : item.filename"
       :loading="variant === 'card' ? 'lazy' : undefined"
@@ -23,7 +23,11 @@ const duration = computed(() => formatDuration(props.item.duration ?? 0));
       :height="variant === 'card' ? 360 : undefined"
       :draggable="variant === 'card' ? false : undefined"
     />
-    <AppIcon v-else-if="variant === 'wizard'" :name="item.kind" :size="56" />
+    <AppIcon
+      v-else-if="variant === 'wizard' || !item.preview"
+      :name="item.kind"
+      :size="56"
+    />
     <span v-if="variant === 'detail'" class="preview-label">{{
       item.kind === "video" ? "Video preview" : "Image preview"
     }}</span>

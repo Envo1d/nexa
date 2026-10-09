@@ -20,6 +20,8 @@ import CardContextMenu from "./components/CardContextMenu.vue";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import SettingsPanel from "./components/SettingsPanel.vue";
 import DistributionDialog from "./components/DistributionDialog.vue";
+import TagsPanel from "./components/TagsPanel.vue";
+import { useDemoTaxonomy } from "./composables/useDemoTaxonomy";
 import { useLibrary } from "./composables/useLibrary";
 import { useStage } from "./composables/useStage";
 import type { MediaItem, MediaKind, MediaMetadataDraft } from "./types/media";
@@ -27,6 +29,16 @@ import "./styles.css";
 
 const library = useLibrary();
 const stage = useStage();
+const demoTaxonomy = useDemoTaxonomy(library.media, stage.media);
+async function refreshRedistribution() {
+  try {
+    await stage.refreshRedistribution();
+  } catch {
+    notify(
+      "Could not load files queued for redistribution. Reopen Stage to retry.",
+    );
+  }
+}
 const distributionQueue = ref<MediaItem[]>([]);
 const editingMetadata = ref(false);
 function distribute(item?: MediaItem) {
@@ -54,7 +66,10 @@ const {
   typeCounts,
   activeFilterCount,
 } = library;
-const view = ref<"main" | "stage" | "settings">("main");
+const view = ref<"main" | "stage" | "settings" | "tags">("main");
+watch(view, (next) => {
+  if (next === "stage") void refreshRedistribution();
+});
 const mode = ref<"grid" | "list">("grid");
 const showPreviews = ref(true);
 const sidebarExpanded = ref(false);
@@ -271,7 +286,7 @@ function keyboard(event: KeyboardEvent) {
     event.key.toLowerCase() === "f" &&
     !tagTarget.value &&
     !distributionQueue.value.length &&
-    view.value !== "settings" &&
+    (view.value === "main" || view.value === "stage") &&
     !context.value
   ) {
     event.preventDefault();
@@ -280,7 +295,8 @@ function keyboard(event: KeyboardEvent) {
   if (event.key === "Escape") {
     if (distributionQueue.value.length) distributionQueue.value = [];
     else if (tagTarget.value) tagTarget.value = null;
-    else if (view.value === "settings") view.value = "main";
+    else if (view.value === "settings" || view.value === "tags")
+      view.value = "main";
     else if (context.value) context.value = null;
     else if (view.value === "stage") stage.clearSelection();
     else library.clearSelection();
@@ -321,6 +337,7 @@ function trapFocus(event: KeyboardEvent) {
   }
 }
 onMounted(async () => {
+  void refreshRedistribution();
   document.addEventListener("contextmenu", preventBrowserContextMenu, true);
   document.addEventListener("keydown", keyboard);
   if (isTauri()) {
@@ -384,7 +401,7 @@ onBeforeUnmount(() => {
           :class="{ active: mode === 'grid' }"
           :aria-pressed="mode === 'grid'"
           aria-label="Grid view"
-          :disabled="view === 'settings'"
+          :disabled="view === 'settings' || view === 'tags'"
           @click="mode = 'grid'"
         >
           <AppIcon name="grid" :size="17" /></button
@@ -392,7 +409,7 @@ onBeforeUnmount(() => {
           :class="{ active: mode === 'list' }"
           :aria-pressed="mode === 'list'"
           aria-label="List view"
-          :disabled="view === 'settings'"
+          :disabled="view === 'settings' || view === 'tags'"
           @click="mode = 'list'"
         >
           <AppIcon name="list" :size="19" />
@@ -455,6 +472,16 @@ onBeforeUnmount(() => {
           >
             <AppIcon name="star" /><span v-if="sidebarExpanded">Favorites</span
             ><span v-else class="sr-only">Favorites</span>
+          </button>
+          <button
+            class="nav-item"
+            title="Tags"
+            :class="{ active: view === 'tags' }"
+            :aria-current="view === 'tags' ? 'page' : undefined"
+            @click="view = 'tags'"
+          >
+            <AppIcon name="tag" /><span v-if="sidebarExpanded">Tags</span
+            ><span v-else class="sr-only">Tags</span>
           </button>
         </div>
         <button
@@ -618,6 +645,13 @@ onBeforeUnmount(() => {
           @action="previewAction($event, selected)"
         />
       </template>
+      <TagsPanel
+        v-else-if="view === 'tags'"
+        :demo-catalog="demoTaxonomy.catalog.value"
+        :change-demo="demoTaxonomy.change"
+        @changed="refreshRedistribution"
+        @notice="notify"
+      />
       <SettingsPanel
         v-else-if="view === 'settings'"
         @close="view = 'main'"

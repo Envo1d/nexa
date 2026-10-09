@@ -71,7 +71,7 @@ pub struct ImportReport {
 
 /// Version 1: canonical decomposition, full default Unicode case folding, NFC.
 /// Preserve punctuation/accents/internal spacing; trim surrounding whitespace.
-fn name_key(value: &str) -> String {
+pub(crate) fn name_key(value: &str) -> String {
     let decomposed: String = value.trim().nfd().collect();
     caseless::default_case_fold_str(&decomposed).nfc().collect()
 }
