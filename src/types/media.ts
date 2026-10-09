@@ -1,6 +1,9 @@
 export type MediaKind = "video" | "image";
 
 export interface MediaItem {
+  nativeId?: string;
+  nativeRevision?: string;
+  availability?: string;
   nativeRedistribution?: boolean;
   id: string;
   filename: string;
@@ -43,6 +46,7 @@ export function formatDate(timestamp: number): string {
 }
 
 export function formatDuration(seconds: number, full = false): string {
+  seconds = Math.max(0, Math.floor(seconds));
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor(seconds / 60) % 60;
   const pad = (value: number) => String(value).padStart(2, "0");

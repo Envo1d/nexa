@@ -20,6 +20,11 @@ const props = defineProps<{
   heading: string;
   filtered: boolean;
   stage?: boolean;
+  native?: boolean;
+  total?: number;
+  hasMore?: boolean;
+  loading?: boolean;
+  error?: string;
 }>();
 const emit = defineEmits<{
   select: [item: MediaItem, event: MouseEvent];
@@ -30,6 +35,8 @@ const emit = defineEmits<{
   favorite: [item: MediaItem];
   context: [item: MediaItem, event: MouseEvent | KeyboardEvent];
   reset: [];
+  loadMore: [];
+  retry: [];
 }>();
 const viewport = ref<HTMLElement | null>(null);
 const width = ref(660);
@@ -57,6 +64,7 @@ const rowHeight = computed(() =>
     : 88,
 );
 const loadedCount = computed(() => Math.min(loaded.value, props.items.length));
+const totalCount = computed(() => props.total ?? props.items.length);
 const rowCount = computed(() => Math.ceil(loadedCount.value / columns.value));
 const startRow = computed(() =>
   Math.max(0, Math.floor(scrollTop.value / rowHeight.value) - 2),
@@ -213,8 +221,15 @@ function updateScroll() {
   if (
     scrollTop.value + height.value >=
     rowCount.value * rowHeight.value - rowHeight.value * 3
-  )
+  ) {
     loaded.value = Math.min(loaded.value + 36, props.items.length);
+    if (
+      props.hasMore &&
+      !props.loading &&
+      loaded.value >= props.items.length - 36
+    )
+      emit("loadMore");
+  }
 }
 function resetScroll() {
   endSelection();
@@ -232,7 +247,19 @@ watch(columns, async (count, previous) => {
   viewport.value.scrollTop = Math.floor(firstItem / count) * rowHeight.value;
   updateScroll();
 });
-watch(() => props.items.map((item) => item.id).join(","), resetScroll);
+watch(
+  () => props.items,
+  (items, previous) => {
+    const appended =
+      props.native &&
+      items.length > previous.length &&
+      previous.length > 0 &&
+      previous.every((item, index) => items[index]?.id === item.id);
+    if (appended) {
+      void nextTick(updateScroll);
+    } else resetScroll();
+  },
+);
 watch(
   () => props.mode,
   async () => {
@@ -267,7 +294,7 @@ onBeforeUnmount(() => {
     <header class="collection-heading">
       <div>
         <h1>{{ heading }}</h1>
-        <span>{{ items.length.toLocaleString() }} files</span>
+        <span>{{ totalCount.toLocaleString() }} files</span>
       </div>
       <button
         v-if="stage && selectedIds?.length"
@@ -277,7 +304,10 @@ onBeforeUnmount(() => {
         Distribute {{ selectedIds.length }} files
       </button>
       <span v-else class="demo-badge"
-        ><span></span> {{ stage ? "Demo staging" : "Demo library" }}</span
+        ><span></span>
+        {{
+          native ? "Stage library" : stage ? "Demo staging" : "Demo library"
+        }}</span
       >
     </header>
     <div
@@ -330,22 +360,32 @@ onBeforeUnmount(() => {
         <span class="empty-icon"><AppIcon name="search" :size="32" /></span>
         <h2>
           {{
-            filtered
-              ? "No matching files"
-              : stage
-                ? "No staged files"
-                : "No favorites yet"
+            loading
+              ? "Loading Stage…"
+              : error
+                ? "Could not load Stage"
+                : filtered
+                  ? "No matching files"
+                  : stage
+                    ? "No staged files"
+                    : "No favorites yet"
           }}
         </h2>
         <p>
           {{
-            filtered
-              ? "Try another search or adjust your filters."
-              : stage
-                ? "Your staging files will appear here."
-                : "Tap the heart on a file to keep it here."
+            error ||
+            (loading
+              ? "Reading saved file information…"
+              : filtered
+                ? "Try another search or adjust your filters."
+                : stage
+                  ? "Your staging files will appear here."
+                  : "Tap the heart on a file to keep it here.")
           }}
         </p>
+        <button v-if="error" class="secondary-button" @click="emit('retry')">
+          Retry
+        </button>
         <button
           v-if="filtered"
           class="secondary-button"
@@ -358,16 +398,24 @@ onBeforeUnmount(() => {
     <footer class="collection-footer">
       <span
         >{{ loadedCount.toLocaleString() }} of
-        {{ items.length.toLocaleString() }} files loaded</span
+        {{ totalCount.toLocaleString() }} files loaded</span
       >
       <div class="load-track">
         <span
           :style="{
-            width: `${items.length ? (loadedCount / items.length) * 100 : 0}%`,
+            width: `${totalCount ? (loadedCount / totalCount) * 100 : 0}%`,
           }"
         ></span>
       </div>
-      <span v-if="loadedCount && loadedCount === items.length" class="load-done"
+      <button
+        v-if="hasMore"
+        class="secondary-button"
+        :disabled="loading"
+        @click="emit('loadMore')"
+      >
+        {{ loading ? "Loading…" : error ? "Retry loading" : "Load more" }}
+      </button>
+      <span v-if="loadedCount && loadedCount === totalCount" class="load-done"
         ><AppIcon name="check" :size="14" /> All loaded</span
       >
     </footer>

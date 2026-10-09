@@ -5,6 +5,7 @@ mod logging;
 pub mod media_metadata;
 pub mod media_thumbnail;
 pub mod preview_cache;
+mod stage;
 mod taxonomy;
 #[cfg(windows)]
 mod windows_com;
@@ -49,12 +50,20 @@ pub fn run() {
         .setup(move |app| {
             let _span = tracing::info_span!("application_setup").entered();
             let database_path = paths.database_path.clone();
+            let cache_path = paths.cache_path.clone();
             let store = config::ConfigStore::load(paths).map_err(std::io::Error::other)?;
+            let startup = store.snapshot().map_err(std::io::Error::other)?.settings;
             let database =
                 tauri::async_runtime::block_on(database::Database::open(&database_path))?;
             app.manage(store);
             app.manage(database);
+            app.manage(stage::StageState::new(cache_path));
             app.manage(legacy_import::ImportState::default());
+            if startup.auto_scan
+                && let Some(root) = startup.staging_path
+            {
+                stage::launch(app.handle().clone(), root).map_err(std::io::Error::other)?;
+            }
             tracing::info!("Application setup completed");
             Ok(())
         })
@@ -67,7 +76,11 @@ pub fn run() {
             taxonomy::get_taxonomy,
             taxonomy::rename_taxonomy,
             taxonomy::delete_taxonomy,
-            taxonomy::get_redistribution_files
+            taxonomy::get_redistribution_files,
+            stage::start_stage_scan,
+            stage::get_stage_scan_status,
+            stage::get_stage_files,
+            stage::get_stage_preview
         ])
         .build(tauri::generate_context!());
     let result = result.map(|app| {

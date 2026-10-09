@@ -17,12 +17,12 @@ const displayName = computed(() =>
     : props.item.filename.replace(/\.[^.]+$/, ""),
 );
 const modifiedDate = computed(() =>
-  props.item.nativeRedistribution && !props.item.modifiedAt
+  props.item.nativeId && !props.item.modifiedAt
     ? "Date unavailable"
     : formatDate(props.item.modifiedAt),
 );
 const modifiedDateTime = computed(() =>
-  props.item.nativeRedistribution && !props.item.modifiedAt
+  props.item.nativeId && !props.item.modifiedAt
     ? undefined
     : new Date(props.item.modifiedAt).toISOString(),
 );

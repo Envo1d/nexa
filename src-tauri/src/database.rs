@@ -168,6 +168,11 @@ mod tests {
             include_str!("../migrations/0002_redistribution.sql"),
         )
         .unwrap();
+        std::fs::write(
+            directory.join("0003_stage_scan.sql"),
+            include_str!("../migrations/0003_stage_scan.sql"),
+        )
+        .unwrap();
         directory
     }
 
@@ -251,7 +256,7 @@ mod tests {
         let database = Database::open(&path).await.unwrap();
         assert_eq!(
             count(database.pool(), "SELECT count(*) FROM _sqlx_migrations").await,
-            2
+            3
         );
         assert_eq!(
             count(
@@ -531,7 +536,7 @@ mod tests {
         database.close().await;
         let directory = migration_directory(root.path());
         std::fs::write(
-            directory.join("0003_upgrade.sql"),
+            directory.join("0004_upgrade.sql"),
             "CREATE TABLE upgrade_marker(id INTEGER PRIMARY KEY) STRICT;",
         )
         .unwrap();
@@ -545,7 +550,7 @@ mod tests {
                 "SELECT count(*) FROM _sqlx_migrations WHERE success = 1"
             )
             .await,
-            3
+            4
         );
         assert_eq!(
             count(database.pool(), "SELECT count(*) FROM media").await,
@@ -566,7 +571,7 @@ mod tests {
         database.close().await;
         let directory = migration_directory(root.path());
         std::fs::write(
-            directory.join("0003_broken.sql"),
+            directory.join("0004_broken.sql"),
             "CREATE TABLE rollback_marker(id INTEGER PRIMARY KEY); DELETE FROM media; INVALID SQL;",
         )
         .unwrap();
@@ -582,7 +587,7 @@ mod tests {
         );
         assert_eq!(
             count(database.pool(), "SELECT count(*) FROM _sqlx_migrations").await,
-            2
+            3
         );
         assert_eq!(
             count(

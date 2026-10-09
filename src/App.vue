@@ -24,19 +24,25 @@ import TagsPanel from "./components/TagsPanel.vue";
 import { useDemoTaxonomy } from "./composables/useDemoTaxonomy";
 import { useLibrary } from "./composables/useLibrary";
 import { useStage } from "./composables/useStage";
+import { useStageScan } from "./composables/useStageScan";
 import type { MediaItem, MediaKind, MediaMetadataDraft } from "./types/media";
 import "./styles.css";
 
 const library = useLibrary();
 const stage = useStage();
+const stageScan = useStageScan();
+watch(
+  () => stageScan.status.value.running,
+  (running, previous) => {
+    if (previous && !running) void refreshRedistribution();
+  },
+);
 const demoTaxonomy = useDemoTaxonomy(library.media, stage.media);
 async function refreshRedistribution() {
   try {
     await stage.refreshRedistribution();
   } catch {
-    notify(
-      "Could not load files queued for redistribution. Reopen Stage to retry.",
-    );
+    notify("Could not load Stage files. Reopen Stage to retry.");
   }
 }
 const distributionQueue = ref<MediaItem[]>([]);
@@ -337,6 +343,9 @@ function trapFocus(event: KeyboardEvent) {
   }
 }
 onMounted(async () => {
+  void stageScan
+    .connect()
+    .catch(() => notify("Could not connect Stage scan progress."));
   void refreshRedistribution();
   document.addEventListener("contextmenu", preventBrowserContextMenu, true);
   document.addEventListener("keydown", keyboard);
@@ -690,6 +699,11 @@ onBeforeUnmount(() => {
         </aside>
         <MediaCollection
           :items="stage.results.value"
+          :native="isTauri()"
+          :total="isTauri() ? stage.total.value : undefined"
+          :has-more="stage.hasMore.value"
+          :loading="stage.loading.value"
+          :error="stage.error.value"
           :show-previews="showPreviews"
           :mode="mode"
           :selected-id="stage.selectedId.value"
@@ -697,6 +711,8 @@ onBeforeUnmount(() => {
           heading="Stage"
           :filtered="Boolean(stage.search.value.trim())"
           stage
+          @load-more="stage.loadMore"
+          @retry="refreshRedistribution"
           @select="stage.select"
           @selection-start="stage.beginSelection"
           @select-many="stage.selectMany($event, false)"

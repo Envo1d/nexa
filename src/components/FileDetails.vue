@@ -63,7 +63,10 @@ const metadata = computed(() => [
         {
           icon: "film",
           label: "FPS",
-          value: props.item.fps?.toString() ?? "Unavailable",
+          value:
+            props.item.fps?.toLocaleString("en-US", {
+              maximumFractionDigits: 3,
+            }) ?? "Unavailable",
         },
       ]
     : []),
@@ -71,7 +74,7 @@ const metadata = computed(() => [
     icon: "calendar",
     label: "Modified",
     value:
-      props.item.nativeRedistribution && !props.item.modifiedAt
+      props.item.nativeId && !props.item.modifiedAt
         ? "Unavailable"
         : formatDate(props.item.modifiedAt),
   },
@@ -79,7 +82,7 @@ const metadata = computed(() => [
     icon: "calendar",
     label: "Created",
     value:
-      props.item.nativeRedistribution && !props.item.createdAt
+      props.item.nativeId && !props.item.createdAt
         ? "Unavailable"
         : formatDate(props.item.createdAt),
   },
@@ -95,7 +98,7 @@ const metadata = computed(() => [
           label: "Bitrate",
           value:
             props.item.bitrate !== undefined
-              ? `${props.item.bitrate} Mbit/s`
+              ? `${props.item.bitrate.toFixed(2)} Mbit/s`
               : "Unavailable",
         },
       ]
