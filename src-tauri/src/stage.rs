@@ -21,6 +21,192 @@ use tauri::{Emitter, Manager};
 const BATCH: usize = 64;
 const EXTRACTOR_VERSION: i64 = 1;
 
+struct FileActionGuard<'a>(&'a AtomicBool);
+impl Drop for FileActionGuard<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::Release);
+    }
+}
+
+fn checked_action_path(root: &Path, relative: &str) -> Result<PathBuf, String> {
+    use std::path::Component;
+    if !root.is_absolute() {
+        return Err("Source folder must be absolute".into());
+    }
+    let relative = Path::new(relative);
+    if relative.as_os_str().is_empty()
+        || relative
+            .components()
+            .any(|part| !matches!(part, Component::Normal(_)))
+    {
+        return Err("Invalid stored file path".into());
+    }
+    let path = root.join(relative);
+    let metadata = std::fs::symlink_metadata(&path).map_err(|_| "File is unavailable on disk")?;
+    if !metadata.is_file() || metadata.file_type().is_symlink() {
+        return Err("Only regular files are supported".into());
+    }
+    let canonical_root = root
+        .canonicalize()
+        .map_err(|_| "Source folder is unavailable")?;
+    let canonical = path
+        .canonicalize()
+        .map_err(|_| "File is unavailable on disk")?;
+    if !canonical.starts_with(canonical_root) {
+        return Err("File resolves outside its source folder".into());
+    }
+    Ok(path)
+}
+
+#[cfg(windows)]
+fn recycle_file(path: &Path) -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows::{
+        Win32::UI::Shell::{
+            FO_DELETE, FOF_ALLOWUNDO, FOF_NO_CONNECTED_ELEMENTS, FOF_NOCONFIRMATION,
+            FOF_WANTNUKEWARNING, SHFILEOPSTRUCTW, SHFileOperationW,
+        },
+        core::PCWSTR,
+    };
+    let wide: Vec<u16> = path.as_os_str().encode_wide().chain([0, 0]).collect();
+    if wide[..wide.len() - 2].contains(&0) {
+        return Err("Invalid file path".into());
+    }
+    let mut operation = SHFILEOPSTRUCTW {
+        wFunc: FO_DELETE,
+        pFrom: PCWSTR(wide.as_ptr()),
+        fFlags: (FOF_ALLOWUNDO.0
+            | FOF_NOCONFIRMATION.0
+            | FOF_WANTNUKEWARNING.0
+            | FOF_NO_CONNECTED_ELEMENTS.0) as u16,
+        ..Default::default()
+    };
+    // The fully qualified, double-NUL path lives through the synchronous Shell call.
+    let result = unsafe { SHFileOperationW(&mut operation) };
+    if result != 0 || operation.fAnyOperationsAborted.as_bool() {
+        return Err("Windows could not delete the file, or deletion was cancelled".into());
+    }
+    if path.try_exists().map_err(|_| "Cannot verify deletion")? {
+        return Err("File still exists after deletion".into());
+    }
+    Ok(())
+}
+#[cfg(not(windows))]
+fn recycle_file(_path: &Path) -> Result<(), String> {
+    Err("File recycling is currently supported on Windows only".into())
+}
+
+#[derive(Serialize)]
+pub struct FileActionReport {
+    succeeded: Vec<String>,
+    failed: Vec<String>,
+}
+
+#[tauri::command]
+#[tracing::instrument(skip_all, fields(action, count = ids.len()), err)]
+pub async fn stage_file_action(
+    app: tauri::AppHandle,
+    ids: Vec<String>,
+    action: String,
+    database: tauri::State<'_, Database>,
+    state: tauri::State<'_, StageState>,
+    config: tauri::State<'_, ConfigStore>,
+) -> Result<FileActionReport, String> {
+    use tauri_plugin_opener::OpenerExt;
+    if !matches!(action.as_str(), "open" | "reveal" | "delete") || ids.is_empty() || ids.len() > 500
+    {
+        return Err("Invalid file action or selection (maximum 500 files)".into());
+    }
+    state
+        .scanning
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .map_err(|_| "Wait for the current Stage operation to finish")?;
+    let _guard = FileActionGuard(&state.scanning);
+    let configured_root = config.snapshot()?.settings.staging_path;
+    let mut report = FileActionReport {
+        succeeded: Vec::new(),
+        failed: Vec::new(),
+    };
+    tracing::info!("Stage file action started");
+    let mut seen = std::collections::HashSet::new();
+    for raw_id in ids {
+        let id = raw_id.parse::<i64>().map_err(|_| "Invalid media ID")?;
+        if !seen.insert(id) {
+            continue;
+        }
+        let result = async {
+            let row = sqlx::query("SELECT s.root_path,s.kind,m.relative_path,m.file_revision,m.needs_distribution FROM media m JOIN sources s ON s.id=m.source_id WHERE m.id=?")
+                .bind(id).fetch_optional(database.pool()).await.map_err(|_| "Cannot read file record")?.ok_or("File record is unavailable")?;
+            let root = PathBuf::from(row.get::<String,_>("root_path"));
+            if row.get::<i64,_>("needs_distribution") == 0 && (row.get::<String,_>("kind") != "stage" || configured_root.as_ref() != Some(&root)) {
+                return Err("File is outside the current Stage selection".to_string());
+            }
+            let relative: String = row.get("relative_path");
+            let revision: Option<String> = row.get("file_revision");
+            let worker_action = action.clone();
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                let path = checked_action_path(&root, &relative)?;
+                if worker_action == "delete" {
+                    if let Some(expected) = revision {
+                        let current = inspect(path.clone(), &root)?;
+                        if current.is_none_or(|current| current.revision != expected) { return Err("File changed; rescan Stage before deleting".into()); }
+                    }
+                    recycle_file(&path)
+                } else {
+                    let result = if worker_action == "open" { app.opener().open_path(path.to_str().ok_or("File path is not valid Unicode")?, None::<&str>) } else { app.opener().reveal_item_in_dir(path) };
+                    result.map_err(|_| "Windows could not open the file or folder".into())
+                }
+            }).await.map_err(|_| "File action worker failed")??;
+            if action == "delete" {
+                sqlx::query("DELETE FROM media WHERE id=?").bind(id).execute(database.pool()).await
+                    .map_err(|_| "File deleted, but database cleanup failed; rescan Stage")?;
+            }
+            Ok::<_, String>(())
+        }.await;
+        match result {
+            Ok(()) => report.succeeded.push(raw_id),
+            Err(error) => {
+                tracing::warn!(media_id = id, reason = %error, "Stage file action failed");
+                report.failed.push(format!("File {raw_id}: {error}"));
+            }
+        }
+    }
+    tracing::info!(
+        succeeded = report.succeeded.len(),
+        failed = report.failed.len(),
+        "Stage file action completed"
+    );
+    Ok(report)
+}
+pub const CACHE_MAX_BYTES: u64 = 512 * 1024 * 1024;
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CacheStatus {
+    bytes: u64,
+    max_bytes: u64,
+}
+
+#[tauri::command]
+pub async fn get_cache_usage(state: tauri::State<'_, StageState>) -> Result<CacheStatus, String> {
+    let cache = state.cache.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        cache
+            .usage()
+            .map(|usage| CacheStatus {
+                bytes: usage.bytes,
+                max_bytes: CACHE_MAX_BYTES,
+            })
+            .map_err(|error| {
+                tracing::warn!(%error, "Cache usage measurement failed");
+                "Could not measure thumbnail cache".to_string()
+            })
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
 #[derive(Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ScanStatus {
@@ -648,6 +834,7 @@ fn stage_file(row: sqlx::sqlite::SqliteRow) -> StageFile {
 
 #[tauri::command]
 pub async fn get_stage_preview(
+    app: tauri::AppHandle,
     id: String,
     database: tauri::State<'_, Database>,
     state: tauri::State<'_, StageState>,
@@ -678,9 +865,29 @@ pub async fn get_stage_preview(
         // Periodic oldest-write eviction bounds disk growth without inventory per card.
         if preview.origin == PreviewOrigin::Generated
             && generated.fetch_add(1, Ordering::Relaxed).is_multiple_of(64)
-            && cache.prune(512 * 1024 * 1024).is_err()
         {
-            tracing::warn!("Preview cache budget maintenance unavailable");
+            match cache.prune(CACHE_MAX_BYTES) {
+                Ok(report) => {
+                    let bytes = report.remaining.bytes.saturating_add(report.removed.bytes);
+                    if bytes >= CACHE_MAX_BYTES {
+                        tracing::info!(
+                            bytes,
+                            max_bytes = CACHE_MAX_BYTES,
+                            "Preview cache budget reached"
+                        );
+                        if let Err(error) = app.emit(
+                            "cache-limit-reached",
+                            CacheStatus {
+                                bytes,
+                                max_bytes: CACHE_MAX_BYTES,
+                            },
+                        ) {
+                            tracing::warn!(%error, "Cache limit notification unavailable");
+                        }
+                    }
+                }
+                Err(_) => tracing::warn!("Preview cache budget maintenance unavailable"),
+            }
         }
         let mut bytes = Vec::new();
         image::codecs::webp::WebPEncoder::new_lossless(&mut bytes)
@@ -702,6 +909,42 @@ pub async fn get_stage_preview(
 mod tests {
     use super::*;
     use crate::media_metadata::FrameRate;
+
+    #[test]
+    fn file_actions_reject_escaping_missing_and_non_file_paths() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("Stage");
+        std::fs::create_dir(&root).unwrap();
+        std::fs::write(root.join("日本.png"), b"test").unwrap();
+        assert_eq!(
+            checked_action_path(&root, "日本.png").unwrap(),
+            root.join("日本.png")
+        );
+        std::fs::write(temp.path().join("outside.png"), b"preserve").unwrap();
+        for relative in ["../outside.png", "", "missing.png", "."] {
+            assert!(checked_action_path(&root, relative).is_err());
+        }
+        std::fs::create_dir(root.join("folder")).unwrap();
+        assert!(checked_action_path(&root, "folder").is_err());
+        assert!(
+            checked_action_path(&root, temp.path().join("outside.png").to_str().unwrap()).is_err()
+        );
+        assert!(checked_action_path(Path::new("relative"), "image.png").is_err());
+        assert_eq!(
+            std::fs::read(temp.path().join("outside.png")).unwrap(),
+            b"preserve"
+        );
+    }
+
+    #[test]
+    fn file_action_guard_releases_scan_gate_on_failure() {
+        let gate = AtomicBool::new(true);
+        {
+            let _guard = FileActionGuard(&gate);
+            assert!(gate.load(Ordering::Acquire));
+        }
+        assert!(!gate.load(Ordering::Acquire));
+    }
 
     async fn fixture() -> (tempfile::TempDir, Database, PathBuf) {
         let temp = tempfile::tempdir().unwrap();

@@ -1391,6 +1391,18 @@ svg {
   background: #a46be2;
   border-radius: 999px;
 }
+.settings-cache-progress.cache-warning::-webkit-progress-value {
+  background: #e6b45b;
+}
+.settings-cache-progress.cache-warning::-moz-progress-bar {
+  background: #e6b45b;
+}
+.settings-cache-progress.cache-full::-webkit-progress-value {
+  background: #ef7186;
+}
+.settings-cache-progress.cache-full::-moz-progress-bar {
+  background: #ef7186;
+}
 .settings-status {
   padding: 3px 8px;
   background: #252034;

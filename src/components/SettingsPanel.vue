@@ -8,6 +8,8 @@ import ToggleSwitch from "./ToggleSwitch.vue";
 import SettingsRow from "./SettingsRow.vue";
 import AppIcon from "./AppIcon.vue";
 import { useStageScan } from "../composables/useStageScan";
+import { useCacheUsage } from "../composables/useCacheUsage";
+const cacheUsage = useCacheUsage();
 const stageScan = useStageScan();
 async function scanStage() {
   if (!native) {
@@ -436,17 +438,28 @@ function resetDrafts() {
                   <div class="settings-summary">
                     <span
                       ><strong>Thumbnail cache</strong
-                      ><small>Current disk usage · Demo values</small></span
-                    ><strong>128 / 512 MB</strong>
+                      ><small>{{
+                        cacheUsage.error.value ||
+                        "Current disk usage · 512 MB limit"
+                      }}</small></span
+                    ><strong>{{ cacheUsage.label.value }}</strong>
                   </div>
                   <progress
                     class="settings-cache-progress"
-                    value="128"
-                    max="512"
+                    :class="`cache-${cacheUsage.pressure.value}`"
+                    :value="
+                      cacheUsage.status.value
+                        ? Math.min(
+                            cacheUsage.status.value.bytes,
+                            cacheUsage.status.value.maxBytes,
+                          )
+                        : undefined
+                    "
+                    :max="cacheUsage.status.value?.maxBytes ?? 536870912"
                     aria-label="Thumbnail cache usage"
-                    aria-valuetext="128 of 512 MB, demo values"
+                    :aria-valuetext="cacheUsage.label.value"
                   >
-                    25%
+                    {{ cacheUsage.label.value }}
                   </progress>
                 </div>
                 <SettingsRow
