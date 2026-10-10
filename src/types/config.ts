@@ -5,6 +5,7 @@ export interface AppConfig {
   artistDirectory: boolean;
   characterSeparator: string;
   videoSubfolder: string;
+  gifSubfolder: string;
   syncStructure: boolean;
   autoScan: boolean;
   autoUpdateCheck: boolean;
@@ -28,6 +29,7 @@ export function defaultConfig(): AppConfig {
     artistDirectory: true,
     characterSeparator: " х ",
     videoSubfolder: "Videos",
+    gifSubfolder: "Animations",
     syncStructure: false,
     autoScan: false,
     autoUpdateCheck: false,

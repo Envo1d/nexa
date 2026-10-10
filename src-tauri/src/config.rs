@@ -13,6 +13,7 @@ pub struct AppConfig {
     pub artist_directory: bool,
     pub character_separator: String,
     pub video_subfolder: String,
+    pub gif_subfolder: String,
     pub sync_structure: bool,
     pub auto_scan: bool,
     pub auto_update_check: bool,
@@ -27,6 +28,7 @@ impl Default for AppConfig {
             artist_directory: true,
             character_separator: " х ".into(),
             video_subfolder: "Videos".into(),
+            gif_subfolder: "Animations".into(),
             sync_structure: false,
             auto_scan: false,
             auto_update_check: false,
@@ -194,6 +196,7 @@ mod tests {
             library_path: Some(dir.path().join("Медиа")),
             artist_directory: false,
             auto_scan: true,
+            gif_subfolder: "GIFs".into(),
             ..AppConfig::default()
         };
         store.save(draft.clone()).unwrap();
@@ -246,6 +249,9 @@ mod tests {
         );
         assert!(serde_json::from_str::<AppConfig>(r#"{"databasePath":"legacy.db"}"#).is_err());
         assert_eq!(AppConfig::default().character_separator, " х ");
+        let old: AppConfig = serde_json::from_str(r#"{"videoSubfolder":"Clips"}"#).unwrap();
+        assert_eq!(old.gif_subfolder, "Animations");
+        assert_eq!(old.video_subfolder, "Clips");
     }
 
     #[test]

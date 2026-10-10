@@ -351,6 +351,17 @@ function resetDrafts() {
                     type="text"
                     spellcheck="false"
                 /></SettingsRow>
+                <SettingsRow
+                  for="gif-subfolder"
+                  as="label"
+                  title="GIF subfolder name"
+                  description="Subfolder for GIF files when disk sync is enabled. Leave empty to omit this level. Saved changes reorganize existing distributed GIFs."
+                  ><input
+                    id="gif-subfolder"
+                    v-model="draft.gifSubfolder"
+                    type="text"
+                    spellcheck="false"
+                /></SettingsRow>
                 <ToggleSwitch
                   v-model="draft.syncStructure"
                   trailing

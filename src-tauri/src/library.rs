@@ -14,6 +14,8 @@ pub struct Filters {
     sort: String,
     tagged: bool,
     offset: i64,
+    #[serde(skip)]
+    stage_prefix: Option<String>,
 }
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Character {
@@ -52,9 +54,32 @@ pub struct Page {
     suggestions: Vec<Suggestion>,
     characters: Vec<Character>,
 }
-fn base(root: &Option<String>, favorites: bool, prefix: &str) -> QueryBuilder<Sqlite> {
+fn exclude_stage(
+    q: &mut QueryBuilder<Sqlite>,
+    root: &Option<String>,
+    stage_prefix: &Option<String>,
+) {
+    if let Some(prefix) = stage_prefix {
+        q.push(" AND (m.library_assignment=")
+            .push_bind(root)
+            .push(" OR substr(replace(s.root_path || '/' || m.relative_path, char(92), '/'),1,")
+            .push_bind(prefix.chars().count() as i64)
+            .push(") COLLATE NOCASE != ")
+            .push_bind(prefix)
+            .push(")");
+    }
+}
+fn base(
+    root: &Option<String>,
+    favorites: bool,
+    prefix: &str,
+    stage_prefix: &Option<String>,
+    joins: &str,
+) -> QueryBuilder<Sqlite> {
     let mut q = QueryBuilder::new(prefix);
-    q.push(" FROM media m JOIN sources s ON s.id=m.source_id LEFT JOIN video_metadata v ON v.media_id=m.id LEFT JOIN artists a ON a.id=m.artist_id WHERE (m.library_assignment=");
+    q.push(" FROM media m JOIN sources s ON s.id=m.source_id LEFT JOIN video_metadata v ON v.media_id=m.id LEFT JOIN artists a ON a.id=m.artist_id");
+    q.push(joins);
+    q.push(" WHERE (m.library_assignment=");
     q.push_bind(root)
         .push(" OR (s.kind='library' AND s.path_key=")
         .push_bind(root)
@@ -63,10 +88,11 @@ fn base(root: &Option<String>, favorites: bool, prefix: &str) -> QueryBuilder<Sq
     if favorites {
         q.push(" AND m.favorite=1");
     }
+    exclude_stage(&mut q, root, stage_prefix);
     q
 }
 fn filtered(root: &Option<String>, f: &Filters, prefix: &str) -> QueryBuilder<Sqlite> {
-    let mut q = base(root, f.scope == "favorites", prefix);
+    let mut q = base(root, f.scope == "favorites", prefix, &f.stage_prefix, "");
     if f.kind != "all" {
         q.push(" AND m.kind=").push_bind(&f.kind);
     }
@@ -97,18 +123,13 @@ pub(crate) async fn browse(
     {
         return Err("Invalid Library filters".into());
     }
-    let mut counts = QueryBuilder::<Sqlite>::new(
+    let mut counts = base(
+        &root,
+        f.scope == "favorites",
         "SELECT count(*),coalesce(sum(m.kind='video'),0),coalesce(sum(m.kind='image'),0)",
+        &f.stage_prefix,
+        "",
     );
-    counts
-        .push(" FROM media m JOIN sources s ON s.id=m.source_id WHERE (m.library_assignment=")
-        .push_bind(&root)
-        .push(" OR (s.kind='library' AND s.path_key=")
-        .push_bind(&root)
-        .push(")) AND m.availability='present' AND m.needs_distribution=0");
-    if f.scope == "favorites" {
-        counts.push(" AND m.favorite=1");
-    }
     let row = counts
         .build()
         .fetch_one(pool)
@@ -181,8 +202,19 @@ pub(crate) async fn browse(
             }
         }
     }
-    let rows = sqlx::query("SELECT d.name,count(*) count FROM tags d JOIN media_tags l ON l.tag_id=d.id JOIN media m ON m.id=l.media_id JOIN sources s ON s.id=m.source_id WHERE (m.library_assignment=? OR (s.kind='library' AND s.path_key=?)) AND m.availability='present' AND m.needs_distribution=0 AND (?=0 OR m.favorite=1) GROUP BY d.id ORDER BY count DESC,d.name_key")
-        .bind(&root).bind(&root).bind(f.scope == "favorites").fetch_all(pool).await.map_err(|e| e.to_string())?;
+    let mut tag_query = base(
+        &root,
+        f.scope == "favorites",
+        "SELECT d.name,count(*) count",
+        &f.stage_prefix,
+        " JOIN media_tags l ON l.media_id=m.id JOIN tags d ON d.id=l.tag_id",
+    );
+    tag_query.push(" GROUP BY d.id ORDER BY count DESC,d.name_key");
+    let rows = tag_query
+        .build()
+        .fetch_all(pool)
+        .await
+        .map_err(|e| e.to_string())?;
     let tags = rows
         .into_iter()
         .map(|r| Count {
@@ -238,10 +270,20 @@ async fn count_filtered(
 #[tauri::command]
 #[tracing::instrument(level = "debug", skip_all, err)]
 pub async fn get_library_files(
-    filters: Filters,
+    mut filters: Filters,
     database: tauri::State<'_, Database>,
     config: tauri::State<'_, ConfigStore>,
 ) -> Result<Page, String> {
+    filters.stage_prefix = config.snapshot()?.settings.staging_path.map(|p| {
+        format!(
+            "{}/",
+            p.components()
+                .collect::<PathBuf>()
+                .to_string_lossy()
+                .replace('\\', "/")
+                .trim_end_matches('/')
+        )
+    });
     browse(database.pool(), configured_root(&config)?, filters).await
 }
 fn configured_root(config: &ConfigStore) -> Result<Option<String>, String> {
@@ -562,6 +604,53 @@ mod tests {
             video_title: String::new(),
         }
     }
+    #[tokio::test]
+    async fn nested_stage_is_hidden_from_main_files_counts_favorites_and_tags_before_rescan() {
+        let (_temp, db, root) = fixture().await;
+        sqlx::query("UPDATE media SET relative_path='Stage %_/deep/Incoming.png',path_key='Stage %_/deep/Incoming.png',favorite=1 WHERE id=1")
+            .execute(db.pool()).await.unwrap();
+        sqlx::query("UPDATE media SET relative_path='Stage %_ sibling/Kept.png',path_key='Stage %_ sibling/Kept.png' WHERE id=2")
+            .execute(db.pool()).await.unwrap();
+        sqlx::query("INSERT INTO tags(id,name,name_key) VALUES(1,'Incoming','incoming')")
+            .execute(db.pool())
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO media_tags VALUES(1,1)")
+            .execute(db.pool())
+            .await
+            .unwrap();
+        let mut query = filters();
+        query.stage_prefix = Some(format!("{}/Stage %_/", root.replace('\\', "/")));
+        let page = browse(db.pool(), Some(root.clone()), query).await.unwrap();
+        assert_eq!(page.total, 500);
+        assert_eq!(page.type_counts, [500, 0, 500]);
+        assert!(page.tags.is_empty());
+        assert!(!page.files.iter().any(|file| file.technical.id == "1"));
+        assert!(page.files.iter().any(|file| file.technical.id == "2"));
+        let mut query = filters();
+        query.scope = "favorites".into();
+        query.stage_prefix = Some(format!("{}/Stage %_/", root.replace('\\', "/")));
+        assert_eq!(
+            browse(db.pool(), Some(root.clone()), query)
+                .await
+                .unwrap()
+                .total,
+            1
+        );
+        // Distribution with sync disabled gives an explicit logical Main assignment.
+        sqlx::query("UPDATE media SET library_assignment=? WHERE id=1")
+            .bind(&root)
+            .execute(db.pool())
+            .await
+            .unwrap();
+        let mut query = filters();
+        query.stage_prefix = Some(format!("{}/Stage %_/", root.replace('\\', "/")));
+        let page = browse(db.pool(), Some(root), query).await.unwrap();
+        assert_eq!(page.total, 501);
+        assert_eq!(page.tags[0].count, 1);
+        db.close().await;
+    }
+
     #[tokio::test]
     async fn pages_filter_the_entire_library_and_exclude_missing_queued_and_other_roots() {
         let (_temp, db, root) = fixture().await;

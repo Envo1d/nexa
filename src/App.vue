@@ -634,24 +634,6 @@ onBeforeUnmount(() => {
         </button>
       </div>
     </header>
-    <div
-      v-if="diskSync.running || diskSync.error"
-      class="disk-sync-status"
-      role="status"
-    >
-      <span>{{
-        diskSync.error
-          ? `Disk synchronization stopped: ${diskSync.error}`
-          : `Synchronizing disk: ${diskSync.completed} / ${diskSync.total}`
-      }}</span>
-      <button
-        v-if="diskSync.error"
-        class="secondary-button"
-        @click="retryDiskSync"
-      >
-        Retry
-      </button>
-    </div>
     <main class="workspace">
       <nav
         class="navigation"
@@ -948,17 +930,53 @@ onBeforeUnmount(() => {
         />
       </template>
     </main>
-    <Transition name="toast"
-      ><div v-if="toast" class="toast-message" role="status">
-        <AppIcon name="info" :size="18" /><span>{{ toast }}</span
-        ><button
-          class="icon-button"
-          aria-label="Dismiss message"
-          @click="toast = ''"
+    <div class="notification-stack">
+      <Transition name="toast">
+        <div
+          v-if="diskSync.running || diskSync.error"
+          class="toast-message disk-sync-notification"
+          role="status"
         >
-          <AppIcon name="close" :size="16" />
-        </button></div
-    ></Transition>
+          <div class="disk-sync-heading">
+            <AppIcon name="info" :size="18" />
+            <span>{{
+              diskSync.error
+                ? `Disk synchronization stopped: ${diskSync.error}`
+                : diskSync.total
+                  ? `Synchronizing disk: ${diskSync.completed} / ${diskSync.total}`
+                  : "Preparing disk synchronization…"
+            }}</span>
+            <button
+              v-if="diskSync.error"
+              class="secondary-button"
+              @click="retryDiskSync"
+            >
+              Retry
+            </button>
+          </div>
+          <progress
+            aria-label="Disk synchronization progress"
+            :max="Math.max(1, diskSync.total)"
+            :value="
+              diskSync.total || diskSync.error
+                ? Math.min(diskSync.completed, Math.max(1, diskSync.total))
+                : undefined
+            "
+          ></progress>
+        </div>
+      </Transition>
+      <Transition name="toast"
+        ><div v-if="toast" class="toast-message" role="status">
+          <AppIcon name="info" :size="18" /><span>{{ toast }}</span
+          ><button
+            class="icon-button"
+            aria-label="Dismiss message"
+            @click="toast = ''"
+          >
+            <AppIcon name="close" :size="16" />
+          </button></div
+      ></Transition>
+    </div>
     <CardContextMenu
       v-if="context"
       :item="context.item"
