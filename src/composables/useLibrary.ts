@@ -1,27 +1,132 @@
-import { computed, ref } from "vue";
+import { computed, ref, watch, onScopeDispose } from "vue";
 import { useMediaSelection } from "./useMediaSelection";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { createMockMedia } from "../data/mockMedia";
 import type { MediaItem, MediaKind } from "../types/media";
 
 export function useLibrary() {
-  const media = ref(createMockMedia());
+  const native = isTauri();
+  const media = ref<MediaItem[]>(native ? [] : createMockMedia());
+  const total = ref(0);
+  const loading = ref(false);
+  const error = ref("");
+  const nativeCounts = ref({ all: 0, video: 0, image: 0 });
+  const nativeTags = ref<{ name: string; count: number }[]>([]);
+  const characterCatalog = ref<{ name: string; copyright: string }[]>([]);
+  const nativeSuggestions = ref<{ name: string; category: string }[]>([]);
+  const hasMore = computed(() => native && media.value.length < total.value);
+  let version = 0;
+  async function refresh(append = false) {
+    if (!native || (append && loading.value)) return;
+    const request = append ? version : ++version;
+    loading.value = true;
+    error.value = "";
+    try {
+      type NativeFile = Omit<
+        MediaItem,
+        | "id"
+        | "preview"
+        | "characters"
+        | "modifiedAt"
+        | "createdAt"
+        | "size"
+        | "width"
+        | "height"
+      > & {
+        id: string;
+        revision: string | null;
+        modifiedAt: number | null;
+        createdAt: number | null;
+        size: number | null;
+        width: number | null;
+        height: number | null;
+      };
+      const page = await invoke<{
+        files: NativeFile[];
+        total: number;
+        typeCounts: [number, number, number];
+        tags: { name: string; count: number }[];
+        suggestions: { name: string; category: string }[];
+        characters: { name: string; copyright: string }[];
+      }>("get_library_files", {
+        filters: {
+          scope: scope.value,
+          search: appliedSearch.value,
+          kind: kind.value,
+          sort: sortMode.value,
+          tagged: taggedOnly.value || hideUntagged.value,
+          offset: append ? media.value.length : 0,
+        },
+      });
+      if (request !== version) return;
+      const items: MediaItem[] = page.files.map((file) => ({
+        ...file,
+        id: `database-${file.id}`,
+        nativeId: file.id,
+        nativeRevision: file.revision ?? "imported",
+        preview: "",
+        size: file.size ?? -1,
+        width: file.width ?? 0,
+        height: file.height ?? 0,
+        modifiedAt: file.modifiedAt ?? 0,
+        createdAt: file.createdAt ?? 0,
+        duration: file.duration == null ? undefined : file.duration / 1000,
+        fps: file.fps ?? undefined,
+        codec: file.codec ?? undefined,
+        bitrate: file.bitrate ?? undefined,
+        videoTitle: file.videoTitle ?? undefined,
+        characters: [
+          ...new Set(
+            file.characterCopyrights?.map((entry) => entry.name) ?? [],
+          ),
+        ],
+      }));
+      media.value = append ? [...media.value, ...items] : items;
+      total.value = page.total;
+      nativeCounts.value = {
+        all: page.typeCounts[0],
+        video: page.typeCounts[1],
+        image: page.typeCounts[2],
+      };
+      nativeTags.value = page.tags;
+      nativeSuggestions.value = page.suggestions;
+      characterCatalog.value = page.characters;
+    } catch (cause) {
+      if (request === version)
+        error.value = `Could not load Library: ${String(cause)}`;
+    } finally {
+      if (request === version) loading.value = false;
+    }
+  }
+  async function loadMore() {
+    if (hasMore.value) await refresh(true);
+  }
+  onScopeDispose(() => {
+    ++version;
+  });
   const scope = ref<"gallery" | "favorites">("gallery");
   const search = ref("");
   const appliedSearch = ref("");
   const kind = ref<"all" | MediaKind>("all");
   const sortMode = ref<"newest" | "older" | "name-asc" | "name-desc">("newest");
-  const favoritesOnly = ref(false);
   const taggedOnly = ref(false);
   const hideUntagged = ref(false);
   const scopedMedia = computed(() =>
     media.value.filter((item) => scope.value === "gallery" || item.favorite),
   );
-  const typeCounts = computed(() => ({
-    all: scopedMedia.value.length,
-    video: scopedMedia.value.filter((item) => item.kind === "video").length,
-    image: scopedMedia.value.filter((item) => item.kind === "image").length,
-  }));
+  const typeCounts = computed(() =>
+    native
+      ? nativeCounts.value
+      : {
+          all: scopedMedia.value.length,
+          video: scopedMedia.value.filter((item) => item.kind === "video")
+            .length,
+          image: scopedMedia.value.filter((item) => item.kind === "image")
+            .length,
+        },
+  );
   const tags = computed(() => {
+    if (native) return nativeTags.value;
     const counts = new Map<string, number>();
     for (const item of scopedMedia.value)
       for (const tag of item.tags) counts.set(tag, (counts.get(tag) ?? 0) + 1);
@@ -30,6 +135,7 @@ export function useLibrary() {
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
   });
   const results = computed(() => {
+    if (native) return media.value;
     const queries = appliedSearch.value
       .split(";")
       .map((value) => value.trim().toLocaleLowerCase())
@@ -38,7 +144,6 @@ export function useLibrary() {
       .filter(
         (item) =>
           (kind.value === "all" || item.kind === kind.value) &&
-          (!favoritesOnly.value || item.favorite) &&
           (!(taggedOnly.value || hideUntagged.value) || item.tags.length > 0) &&
           queries.every((query) =>
             [
@@ -79,7 +184,6 @@ export function useLibrary() {
     () =>
       Number(Boolean(appliedSearch.value.trim())) +
       Number(kind.value !== "all") +
-      Number(favoritesOnly.value) +
       Number(taggedOnly.value || hideUntagged.value),
   );
 
@@ -88,6 +192,14 @@ export function useLibrary() {
     const query = parts.pop()?.trim().toLocaleLowerCase() ?? "";
     if (!query) return [];
     const existing = parts.map((value) => value.trim().toLocaleLowerCase());
+    if (native)
+      return nativeSuggestions.value
+        .filter(
+          (value) =>
+            value.name.toLocaleLowerCase().includes(query) &&
+            !existing.includes(value.name.toLocaleLowerCase()),
+        )
+        .slice(0, 30);
     const values = new Map<string, { name: string; category: string }>();
     for (const item of scopedMedia.value) {
       for (const [category, names] of [
@@ -139,25 +251,69 @@ export function useLibrary() {
     search.value = "";
     appliedSearch.value = "";
   }
-  function toggleFavorite(item: MediaItem) {
-    item.favorite = !item.favorite;
+  const favoriteBusy = new Set<string>();
+  async function toggleFavorite(item: MediaItem) {
+    if (favoriteBusy.has(item.id)) return;
+    if (!native) {
+      item.favorite = !item.favorite;
+      return;
+    }
+    favoriteBusy.add(item.id);
+    try {
+      await invoke("set_library_favorite", {
+        id: item.nativeId,
+        favorite: !item.favorite,
+      });
+      await refresh();
+    } catch (cause) {
+      error.value = `Could not save favorite: ${String(cause)}`;
+    } finally {
+      favoriteBusy.delete(item.id);
+    }
   }
   function reset() {
     clearSearch();
     kind.value = "all";
     sortMode.value = "newest";
-    favoritesOnly.value = false;
     taggedOnly.value = false;
     hideUntagged.value = false;
   }
+  watch(
+    [scope, appliedSearch, kind, sortMode, taggedOnly, hideUntagged],
+    () => {
+      if (native) void refresh();
+    },
+  );
+  const catalog = computed(() =>
+    native
+      ? {
+          copyrights: nativeSuggestions.value
+            .filter((entry) => entry.category === "Copyright")
+            .map((entry) => entry.name),
+          artists: nativeSuggestions.value
+            .filter((entry) => entry.category === "Artist")
+            .map((entry) => entry.name),
+          tags: nativeSuggestions.value
+            .filter((entry) => entry.category === "Tag")
+            .map((entry) => entry.name),
+          characters: characterCatalog.value,
+        }
+      : undefined,
+  );
   return {
+    catalog,
+    total,
+    loading,
+    error,
+    hasMore,
+    refresh,
+    loadMore,
     media,
     scope,
     search,
     kind,
     sortMode,
     suggestions,
-    favoritesOnly,
     taggedOnly,
     hideUntagged,
     ...selection,

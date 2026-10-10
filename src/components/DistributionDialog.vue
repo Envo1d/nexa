@@ -19,6 +19,13 @@ const props = defineProps<{
   library: MediaItem[];
   showPreviews: boolean;
   editing?: boolean;
+  catalog?: {
+    copyrights: string[];
+    artists: string[];
+    tags: string[];
+    characters: { name: string; copyright: string }[];
+  };
+  persist?: (ids: string[], draft: MediaMetadataDraft) => Promise<void>;
 }>();
 const emit = defineEmits<{
   close: [];
@@ -88,6 +95,7 @@ watch(error, (message) => {
     });
 });
 function navigate(value: number) {
+  if (saving.value) return;
   error.value = "";
   step.value = value;
 }
@@ -105,13 +113,19 @@ function values(names: string[], sort = true): MetadataValue[] {
   return sort ? entries.sort((a, b) => a.name.localeCompare(b.name)) : entries;
 }
 const copyrightOptions = computed(() =>
-  values(props.library.flatMap((item) => item.copyrights)),
+  values(
+    props.catalog?.copyrights ??
+      props.library.flatMap((item) => item.copyrights),
+  ),
 );
 const artistOptions = computed(() =>
-  values(props.library.flatMap((item) => item.artists ?? [item.artist])),
+  values(
+    props.catalog?.artists ??
+      props.library.flatMap((item) => item.artists ?? [item.artist]),
+  ),
 );
 const tagOptions = computed(() =>
-  values(props.library.flatMap((item) => item.tags)),
+  values(props.catalog?.tags ?? props.library.flatMap((item) => item.tags)),
 );
 function loadMetadata(item: MediaItem) {
   copyrights.value = values(item.copyrights, false);
@@ -175,7 +189,16 @@ function loadMetadata(item: MediaItem) {
 }
 const characterOptions = computed(() => {
   const entries = new Map<string, MetadataValue>();
-  for (const item of props.library) {
+  const sources = props.catalog
+    ? [
+        {
+          characterCopyrights: props.catalog.characters,
+          copyrights: [],
+          characters: [],
+        },
+      ]
+    : props.library;
+  for (const item of sources) {
     const pairs =
       item.characterCopyrights ??
       item.copyrights.flatMap((copyright) =>
@@ -216,34 +239,43 @@ const needsTitle = computed(
     current.value.kind === "video" ||
     props.items.slice(position.value).some((item) => item.kind === "video"),
 );
-function process() {
+const saving = ref(false);
+async function process() {
+  if (saving.value) return;
   error.value = "";
   if (
-    !artists.value.length ||
-    !characters.value.length ||
+    (props.editing ? artists.value.length !== 1 : !artists.value.length) ||
+    (!props.editing && !characters.value.length) ||
     ((allFiles.value ? needsTitle.value : current.value.kind === "video") &&
       !title.value.trim())
   ) {
     error.value =
-      "Choose an artist and character, and enter a title for videos.";
+      "Choose exactly one artist and enter a title for videos. Distribution also requires a character.";
     return;
   }
   completedCount.value = targets.value.length;
   if (props.editing) {
-    emit(
-      "save",
-      targets.value.map((item) => item.id),
-      {
-        copyrights: copyrights.value.map((value) => value.name),
-        artists: artists.value.map((value) => value.name),
-        characters: characters.value.map((value) => ({
-          name: value.name,
-          copyright: value.copyright ?? "",
-        })),
-        tags: tags.value.map((value) => value.name),
-        videoTitle: title.value.trim(),
-      },
-    );
+    const ids = targets.value.map((item) => item.id);
+    const draft = {
+      copyrights: copyrights.value.map((value) => value.name),
+      artists: artists.value.map((value) => value.name),
+      characters: characters.value.map((value) => ({
+        name: value.name,
+        copyright: value.copyright ?? "",
+      })),
+      tags: tags.value.map((value) => value.name),
+      videoTitle: title.value.trim(),
+    };
+    saving.value = true;
+    try {
+      if (props.persist) await props.persist(ids, draft);
+      else emit("save", ids, draft);
+    } catch (cause) {
+      error.value = `Could not save metadata: ${String(cause)}`;
+      return;
+    } finally {
+      saving.value = false;
+    }
   }
   done.value = true;
   emit("processed", completedCount.value);
@@ -265,6 +297,10 @@ function nextFile() {
   focusStep();
 }
 function keyboard(event: KeyboardEvent) {
+  if (saving.value && event.key === "Escape") {
+    event.stopPropagation();
+    return;
+  }
   if (event.key === "Escape") {
     event.stopPropagation();
     emit("close");
@@ -299,7 +335,7 @@ onBeforeUnmount(() => trigger?.focus());
 
 <template>
   <Teleport to="body">
-    <div class="modal-backdrop" @click.self="emit('close')">
+    <div class="modal-backdrop" @click.self="!saving && emit('close')">
       <section
         ref="dialog"
         class="distribution-dialog"
@@ -333,6 +369,7 @@ onBeforeUnmount(() => trigger?.focus());
             :aria-label="
               editing ? 'Close metadata editor' : 'Close distribution'
             "
+            :disabled="saving"
             @click="emit('close')"
           >
             <AppIcon name="close" :size="18" />
@@ -350,7 +387,7 @@ onBeforeUnmount(() => trigger?.focus());
               complete: done || index < step,
             }"
             :aria-current="!done && step === index ? 'step' : undefined"
-            :disabled="done || index > step"
+            :disabled="saving || done || index > step"
             @click="navigate(index)"
           >
             <span class="wizard-step-number"
@@ -618,7 +655,9 @@ onBeforeUnmount(() => trigger?.focus());
           <p class="modal-note wizard-demo-note">
             {{
               editing
-                ? "Demo session · Metadata changes are not persisted to disk."
+                ? current.nativeId
+                  ? "Metadata is saved in Nexa. File paths are unchanged."
+                  : "Demo session · Metadata changes are not persisted to disk."
                 : "Demo workflow · No files are moved or saved yet."
             }}
           </p>
@@ -639,6 +678,7 @@ onBeforeUnmount(() => trigger?.focus());
             ><button
               v-if="remaining > completedCount"
               class="secondary-button"
+              :disabled="saving"
               @click="emit('close')"
             >
               Close</button
@@ -666,7 +706,11 @@ onBeforeUnmount(() => trigger?.focus());
                 :size="15"
               />Back</button
             ><span v-else class="wizard-footer-spacer"></span
-            ><button class="secondary-button" @click="emit('close')">
+            ><button
+              class="secondary-button"
+              :disabled="saving"
+              @click="emit('close')"
+            >
               Cancel</button
             ><button
               v-if="step < steps.length - 1"
@@ -674,7 +718,12 @@ onBeforeUnmount(() => trigger?.focus());
               @click="navigate(step + 1)"
             >
               Next<AppIcon name="arrow" :size="16" /></button
-            ><button v-else class="primary-button" @click="process()">
+            ><button
+              v-else
+              class="primary-button"
+              :disabled="saving"
+              @click="process()"
+            >
               {{
                 editing
                   ? allFiles

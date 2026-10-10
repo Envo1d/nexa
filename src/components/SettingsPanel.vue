@@ -11,14 +11,14 @@ import { useStageScan } from "../composables/useStageScan";
 import { useCacheUsage } from "../composables/useCacheUsage";
 const cacheUsage = useCacheUsage();
 const stageScan = useStageScan();
-async function scanStage() {
+async function scanStage(library = false) {
   if (!native) {
-    emit("preview", "Scan Stage folder");
+    emit("preview", library ? "Scan library" : "Scan Stage folder");
     return;
   }
   error.value = "";
   try {
-    await stageScan.start();
+    await stageScan.start(library);
   } catch (cause) {
     error.value = String(cause);
   }
@@ -264,7 +264,7 @@ function resetDrafts() {
                 ? "UI preview · Changes are not applied or saved."
                 : saved
                   ? "Settings saved."
-                  : "Changes apply after Save changes. Stage scanning uses the saved directory. Library scanning, disk synchronization and updates are not available yet.")
+                  : "Changes apply after Save changes. Scanning uses saved directories. Disk synchronization and updates are not available yet.")
           }}
         </p>
         <fieldset
@@ -366,13 +366,14 @@ function resetDrafts() {
                 <div class="settings-card-row settings-actions">
                   <button
                     class="secondary-button"
-                    @click="$emit('preview', 'Scan library')"
+                    :disabled="stageScan.status.value.running"
+                    @click="scanStage(true)"
                   >
                     <AppIcon name="size" :size="16" />Scan library</button
                   ><button
                     class="secondary-button"
                     :disabled="stageScan.status.value.running"
-                    @click="scanStage"
+                    @click="scanStage(false)"
                   >
                     <AppIcon name="search" :size="16" />Scan Stage folder
                   </button>
@@ -384,8 +385,7 @@ function resetDrafts() {
                   ><span
                     ><strong>Auto scan on startup</strong
                     ><small
-                      >Scan Stage each time Nexa opens. Library scanning is
-                      pending.</small
+                      >Scan Library and Stage each time Nexa opens.</small
                     ></span
                   ></ToggleSwitch
                 >
@@ -425,7 +425,8 @@ function resetDrafts() {
                     Characters keep their copyright; tags are shared without
                     duplicates. Imported roots are retained without changing
                     your settings. Stage shows files from its saved directory
-                    and redistribution queue. Library still shows demo files.
+                    and redistribution queue. Main shows files from the saved
+                    Library directory.
                   </p>
                   <p v-if="importMessage" role="status" aria-live="polite">
                     {{ importMessage }}

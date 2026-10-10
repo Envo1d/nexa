@@ -22,7 +22,8 @@ const attribution = computed(() => [
   {
     label: "Artist",
     category: "artist",
-    values: props.item.artists ?? [props.item.artist],
+    values:
+      props.item.artists ?? (props.item.artist ? [props.item.artist] : []),
   },
   {
     label: "Characters",

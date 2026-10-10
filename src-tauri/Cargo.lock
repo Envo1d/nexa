@@ -4288,6 +4288,7 @@ dependencies = [
  "unicode-normalization",
  "webp",
  "windows",
+ "windows-collections",
 ]
 
 [[package]]
