@@ -23,6 +23,7 @@ export function useStage() {
     }),
   );
   const search = ref("");
+  const appliedSearch = ref("");
   const total = ref(0);
   const loading = ref(false);
   const error = ref("");
@@ -57,7 +58,7 @@ export function useStage() {
       };
       const page = await invoke<{ files: NativeFile[]; total: number }>(
         "get_stage_files",
-        { after: append ? cursor : null, search: search.value },
+        { after: append ? cursor : null, search: appliedSearch.value },
       );
       if (version !== refreshVersion) return;
       const queued: MediaItem[] = page.files.map((file) => ({
@@ -104,14 +105,20 @@ export function useStage() {
   }
   let searchTimer: ReturnType<typeof setTimeout> | undefined;
   watch(search, () => {
-    if (!isTauri()) return;
-    ++refreshVersion;
     clearTimeout(searchTimer);
-    media.value = [];
-    total.value = 0;
+    if (!search.value.trim()) {
+      appliedSearch.value = "";
+      return;
+    }
     searchTimer = setTimeout(() => {
+      appliedSearch.value = search.value.trim();
+    }, 350);
+  });
+  watch(appliedSearch, () => {
+    if (isTauri()) {
+      cursor = null;
       void loadPage();
-    }, 150);
+    }
   });
   onScopeDispose(() => {
     ++refreshVersion;
@@ -119,7 +126,7 @@ export function useStage() {
   });
   const results = computed(() => {
     if (isTauri()) return media.value;
-    const query = search.value.trim().toLocaleLowerCase().replace(/\\/g, "/");
+    const query = appliedSearch.value.toLocaleLowerCase().replace(/\\/g, "/");
     return media.value.filter((item) =>
       [item.filename, item.path].some((value) =>
         value.toLocaleLowerCase().replace(/\\/g, "/").includes(query),

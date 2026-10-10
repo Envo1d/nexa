@@ -37,7 +37,8 @@ sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio
 thiserror = "2.0.21"
 tokio = { version = "1.53.2", features = ["fs"] }
 image = { version = "0.25.10", default-features = false, features = ["webp"] }
-sha2 = "0.10.9"
+webp = { version = "0.3.1", default-features = false }
+twox-hash = { version = "2.1", default-features = false, features = ["std", "xxhash3_128"] }
 
 [dev-dependencies]
 tokio = { version = "1.53.2", features = ["macros", "rt-multi-thread"] }
