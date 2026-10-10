@@ -889,16 +889,9 @@ pub async fn get_stage_preview(
                 Err(_) => tracing::warn!("Preview cache budget maintenance unavailable"),
             }
         }
-        let mut bytes = Vec::new();
-        image::codecs::webp::WebPEncoder::new_lossless(&mut bytes)
-            .encode(
-                preview.image.as_raw(),
-                preview.image.width(),
-                preview.image.height(),
-                image::ExtendedColorType::Rgb8,
-            )
+        let bytes = crate::preview_cache::encode_preview(&preview.image)
             .map_err(|_| "Cannot encode preview")?;
-        Ok::<_, String>(bytes)
+        Ok::<_, String>(bytes.to_vec())
     })
     .await
     .map_err(|e| e.to_string())??;

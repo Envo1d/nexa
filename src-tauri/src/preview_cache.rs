@@ -3,10 +3,7 @@
 //! Construct with the isolated AppPaths.cache_path; construction performs no IO.
 
 use crate::media_thumbnail::{MAX_THUMBNAIL_EDGE, ThumbnailError, get_thumbnail};
-use image::{
-    ExtendedColorType, ImageFormat, ImageReader, Limits, RgbImage, codecs::webp::WebPEncoder,
-};
-use sha2::{Digest, Sha256};
+use image::{ImageFormat, ImageReader, Limits, RgbImage};
 use std::{
     fs::{self, File},
     io::{BufReader, Write},
@@ -14,6 +11,7 @@ use std::{
     sync::{Mutex, MutexGuard},
     time::{SystemTime, UNIX_EPOCH},
 };
+use twox_hash::XxHash3_128;
 
 const MAX_ENCODED_BYTES: u64 = 32 * 1024 * 1024;
 
@@ -23,6 +21,8 @@ pub enum CacheError {
     Io(#[from] std::io::Error),
     #[error("WebP operation failed")]
     Image(#[from] image::ImageError),
+    #[error("WebP encoding failed: {0}")]
+    Encoding(String),
     #[error("Thumbnail extraction failed")]
     Thumbnail(#[from] ThumbnailError),
     #[error("Thumbnail size must be between 1 and {MAX_THUMBNAIL_EDGE}")]
@@ -74,22 +74,22 @@ impl CacheKey {
     }
 
     fn new(path: &Path, revision: Revision, size: u32) -> Result<Self, CacheError> {
-        let mut hash = Sha256::new();
-        hash.update(b"nexa-preview-v1-rgb-lossless-webp");
+        let mut hash = XxHash3_128::with_seed(0);
+        hash.write(b"nexa-preview-v3-xxh3-128-rgb-libwebp-lossless-quality75");
         let bytes = path.as_os_str().as_encoded_bytes();
-        hash.update((bytes.len() as u64).to_le_bytes());
-        hash.update(bytes);
-        hash.update(size.to_le_bytes());
-        hash.update(revision.length.to_le_bytes());
+        hash.write(&(bytes.len() as u64).to_le_bytes());
+        hash.write(bytes);
+        hash.write(&size.to_le_bytes());
+        hash.write(&revision.length.to_le_bytes());
         let (negative, duration) = match revision.modified.duration_since(UNIX_EPOCH) {
             Ok(duration) => (0u8, duration),
             Err(error) => (1u8, error.duration()),
         };
-        hash.update([negative]);
-        hash.update(duration.as_secs().to_le_bytes());
-        hash.update(duration.subsec_nanos().to_le_bytes());
+        hash.write(&[negative]);
+        hash.write(&duration.as_secs().to_le_bytes());
+        hash.write(&duration.subsec_nanos().to_le_bytes());
         Ok(Self {
-            filename: format!("v1-{:x}.webp", hash.finalize()),
+            filename: format!("v3-{:032x}.webp", hash.finish_128()),
             revision,
             size,
         })
@@ -102,6 +102,16 @@ fn validate_size(size: u32) -> Result<(), CacheError> {
     } else {
         Err(CacheError::InvalidSize)
     }
+}
+
+pub(crate) fn encode_preview(image: &RgbImage) -> Result<webp::WebPMemory, CacheError> {
+    let _span = tracing::debug_span!("preview_encode", lossless = true, quality = 75).entered();
+    tracing::debug!("Preview encoding started");
+    let bytes = webp::Encoder::from_rgb(image.as_raw(), image.width(), image.height())
+        .encode_simple(true, 75.0)
+        .map_err(|error| CacheError::Encoding(format!("{error:?}")))?;
+    tracing::debug!(encoded_bytes = bytes.len(), "Preview encoding completed");
+    Ok(bytes)
 }
 
 fn validate_image(image: &RgbImage, size: u32) -> Result<(), CacheError> {
@@ -267,12 +277,7 @@ impl PreviewCache {
     fn write(&self, key: &CacheKey, image: &RgbImage) -> Result<(), CacheError> {
         fs::create_dir_all(&self.root)?;
         let mut temporary = tempfile::NamedTempFile::new_in(&self.root)?;
-        WebPEncoder::new_lossless(temporary.as_file_mut()).encode(
-            image.as_raw(),
-            image.width(),
-            image.height(),
-            ExtendedColorType::Rgb8,
-        )?;
+        temporary.write_all(&encode_preview(image)?)?;
         temporary.flush()?;
         temporary.as_file().sync_all()?;
         temporary
@@ -298,12 +303,7 @@ impl PreviewCache {
             return Ok(RemapOutcome::SourceMissing);
         };
         let mut temporary = tempfile::NamedTempFile::new_in(&self.root)?;
-        WebPEncoder::new_lossless(temporary.as_file_mut()).encode(
-            image.as_raw(),
-            image.width(),
-            image.height(),
-            ExtendedColorType::Rgb8,
-        )?;
+        temporary.write_all(&encode_preview(&image)?)?;
         temporary.as_file().sync_all()?;
         match temporary.persist_noclobber(self.root.join(&new.filename)) {
             Ok(_) => {}
@@ -386,13 +386,16 @@ impl PreviewCache {
             let Some(name) = name.to_str() else {
                 continue;
             };
-            let Some(hash) = name
+            let Some((hash, expected_length)) = name
                 .strip_prefix("v1-")
-                .and_then(|name| name.strip_suffix(".webp"))
+                .or_else(|| name.strip_prefix("v2-"))
+                .map(|hash| (hash, 64))
+                .or_else(|| name.strip_prefix("v3-").map(|hash| (hash, 32)))
+                .and_then(|(hash, length)| hash.strip_suffix(".webp").map(|hash| (hash, length)))
             else {
                 continue;
             };
-            if hash.len() != 64
+            if hash.len() != expected_length
                 || !hash
                     .bytes()
                     .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
@@ -431,6 +434,59 @@ mod tests {
             size.min(3),
             image::Rgb([12, 34, 56]),
         ))
+    }
+
+    #[test]
+    fn lossless_encoding_preserves_varied_rgb_pixels() {
+        let image = RgbImage::from_fn(31, 29, |x, y| {
+            image::Rgb([
+                (x * 7) as u8,
+                (y * 8) as u8,
+                ((x * 13 + y * 17) % 256) as u8,
+            ])
+        });
+        let bytes = encode_preview(&image).unwrap();
+        assert_eq!(&bytes[12..16], b"VP8L");
+        let decoded = image::load_from_memory_with_format(&bytes, ImageFormat::WebP)
+            .unwrap()
+            .into_rgb8();
+        assert_eq!(decoded, image);
+    }
+
+    #[test]
+    fn keys_are_deterministic_full_width_xxh3_and_maintenance_owns_all_versions() {
+        let (_temporary, source, cache) = fixture();
+        let key = CacheKey::from_source(&source, 32).unwrap();
+        assert_eq!(
+            key.filename,
+            CacheKey::from_source(&source, 32).unwrap().filename
+        );
+        assert!(key.filename.starts_with("v3-"));
+        assert_eq!(key.filename.len(), 3 + 32 + 5);
+        cache.load_with(&source, 32, pixels).unwrap();
+        for version in ["v1", "v2"] {
+            fs::write(
+                cache
+                    .root
+                    .join(format!("{version}-{}.webp", "a".repeat(64))),
+                b"old",
+            )
+            .unwrap();
+        }
+        let unrelated = [
+            format!("v3-{}.webp", "b".repeat(64)),
+            format!("v2-{}.webp", "b".repeat(32)),
+            format!("v3-{}.webp", "G".repeat(32)),
+            format!("v4-{}.webp", "b".repeat(32)),
+        ];
+        for name in &unrelated {
+            fs::write(cache.root.join(name), b"keep").unwrap();
+        }
+        assert_eq!(cache.usage().unwrap().entries, 3);
+        assert_eq!(cache.clear().unwrap().removed.entries, 3);
+        for name in unrelated {
+            assert!(cache.root.join(name).exists());
+        }
     }
 
     #[test]
