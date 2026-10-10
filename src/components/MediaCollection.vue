@@ -306,7 +306,13 @@ onBeforeUnmount(() => {
       <span v-else class="demo-badge"
         ><span></span>
         {{
-          native ? "Stage library" : stage ? "Demo staging" : "Demo library"
+          native
+            ? stage
+              ? "Stage library"
+              : "Library"
+            : stage
+              ? "Demo staging"
+              : "Demo library"
         }}</span
       >
     </header>

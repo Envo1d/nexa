@@ -52,6 +52,7 @@ impl Database {
             .journal_mode(SqliteJournalMode::Wal)
             .synchronous(SqliteSynchronous::Full)
             .foreign_keys(true)
+            .collation("NEXA_FILENAME", crate::library::compare_names)
             .busy_timeout(Duration::from_secs(5))
             // SQL and bound values can contain personal media metadata.
             .disable_statement_logging();

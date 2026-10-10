@@ -1,10 +1,12 @@
 mod config;
 pub mod database;
 mod legacy_import;
+mod library;
 mod logging;
 pub mod media_metadata;
 pub mod media_thumbnail;
 pub mod preview_cache;
+mod share;
 mod stage;
 mod taxonomy;
 #[cfg(windows)]
@@ -59,10 +61,18 @@ pub fn run() {
             app.manage(database);
             app.manage(stage::StageState::new(cache_path));
             app.manage(legacy_import::ImportState::default());
-            if startup.auto_scan
-                && let Some(root) = startup.staging_path
-            {
-                stage::launch(app.handle().clone(), root).map_err(std::io::Error::other)?;
+            if startup.auto_scan {
+                let mut roots = Vec::new();
+                if let Some(root) = startup.library_path {
+                    roots.push((root, "library"));
+                }
+                if let Some(root) = startup.staging_path {
+                    roots.push((root, "stage"));
+                }
+                if !roots.is_empty() {
+                    stage::launch_sources(app.handle().clone(), roots)
+                        .map_err(std::io::Error::other)?;
+                }
             }
             tracing::info!("Application setup completed");
             Ok(())
@@ -78,6 +88,11 @@ pub fn run() {
             taxonomy::delete_taxonomy,
             taxonomy::get_redistribution_files,
             stage::start_stage_scan,
+            stage::start_library_scan,
+            library::get_library_files,
+            library::save_library_metadata,
+            library::set_library_favorite,
+            library::save_library_tags,
             stage::get_stage_scan_status,
             stage::get_stage_files,
             stage::stage_file_action,

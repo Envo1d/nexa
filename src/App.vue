@@ -39,10 +39,16 @@ const stageScan = useStageScan();
 watch(
   () => stageScan.status.value.running,
   (running, previous) => {
-    if (previous && !running) void refreshRedistribution();
+    if (previous && !running) {
+      void refreshRedistribution();
+      void library.refresh();
+    }
   },
 );
 const demoTaxonomy = useDemoTaxonomy(library.media, stage.media);
+async function refreshAll() {
+  await Promise.all([refreshRedistribution(), library.refresh()]);
+}
 async function refreshRedistribution() {
   try {
     await stage.refreshRedistribution();
@@ -66,7 +72,6 @@ const {
   kind,
   sortMode,
   suggestions,
-  favoritesOnly,
   taggedOnly,
   hideUntagged,
   selectedId,
@@ -80,6 +85,7 @@ const {
 const view = ref<"main" | "stage" | "settings" | "tags">("main");
 watch(view, (next) => {
   if (next === "stage") void refreshRedistribution();
+  if (next === "main") void library.refresh();
 });
 const mode = ref<"grid" | "list">("grid");
 const showPreviews = ref(true);
@@ -125,6 +131,7 @@ const tagTarget = ref<MediaItem | null>(null);
 const draftTags = ref<string[]>([]);
 const newTag = ref("");
 const tagError = ref("");
+const tagSaving = ref(false);
 
 const context = ref<{
   item: MediaItem;
@@ -165,8 +172,12 @@ async function contextAction(action: string) {
     return;
   }
   if (action === "Delete file") {
-    if (stageContext && isTauri() && item.nativeId) {
-      await stageFileAction(action, targets.length ? targets : [item]);
+    if (isTauri() && item.nativeId) {
+      await stageFileAction(
+        action,
+        targets.length ? targets : [item],
+        !stageContext,
+      );
       return;
     }
     notify(
@@ -184,7 +195,15 @@ async function contextAction(action: string) {
     }
   } else previewAction(action, item);
 }
-function saveMetadata(ids: string[], draft: MediaMetadataDraft) {
+async function saveMetadata(ids: string[], draft: MediaMetadataDraft) {
+  if (isTauri()) {
+    const nativeIds = ids.map(
+      (id) => distributionQueue.value.find((item) => item.id === id)?.nativeId,
+    );
+    await invoke("save_library_metadata", { ids: nativeIds, draft });
+    await library.refresh();
+    return;
+  }
   for (const item of library.media.value) {
     if (!ids.includes(item.id)) continue;
     item.copyrights = [...draft.copyrights];
@@ -227,14 +246,20 @@ function navigate(nextScope: "gallery" | "favorites") {
   view.value = "main";
 }
 const fileActionBusy = ref(false);
-async function stageFileAction(action: string, items: MediaItem[]) {
+async function stageFileAction(
+  action: string,
+  items: MediaItem[],
+  main = view.value === "main",
+) {
   if (fileActionBusy.value) return;
   const operation =
-    action === "Delete file"
-      ? "delete"
-      : action === "Open file" || action === "Open"
-        ? "open"
-        : "reveal";
+    action === "Share"
+      ? "share"
+      : action === "Delete file"
+        ? "delete"
+        : action === "Open file" || action === "Open"
+          ? "open"
+          : "reveal";
   fileActionBusy.value = true;
   context.value = null;
   try {
@@ -246,7 +271,7 @@ async function stageFileAction(action: string, items: MediaItem[]) {
       const accepted = await confirm(
         `Delete ${items.length} file(s) from disk?\n\n${names}${items.length > 5 ? "\n…" : ""}\n\nFiles will be moved to the Recycle Bin when available. Windows will ask before permanently deleting files that cannot be recycled.`,
         {
-          title: "Delete Stage files",
+          title: "Delete files",
           kind: "warning",
           okLabel: "Delete files",
           cancelLabel: "Cancel",
@@ -256,11 +281,16 @@ async function stageFileAction(action: string, items: MediaItem[]) {
     }
     const report = await invoke<{ succeeded: string[]; failed: string[] }>(
       "stage_file_action",
-      { ids: items.map((item) => item.nativeId), action: operation },
+      {
+        ids: items.map((item) => item.nativeId),
+        action: operation,
+        library: main,
+      },
     );
     if (operation === "delete") {
-      stage.clearSelection();
-      await stage.refreshRedistribution();
+      if (main) library.clearSelection();
+      else stage.clearSelection();
+      await Promise.all([stage.refreshRedistribution(), library.refresh()]);
     }
     if (report.failed.length)
       notify(
@@ -282,13 +312,30 @@ async function previewAction(action: string, item: MediaItem) {
   if (
     isTauri() &&
     item.nativeId &&
-    ["Open", "Open file", "Open folder", "Show in Explorer"].includes(action)
+    ["Open", "Open file", "Open folder", "Show in Explorer", "Share"].includes(
+      action,
+    )
   ) {
     await stageFileAction(action, [item]);
     return;
   }
+  if (action === "File options") {
+    context.value = {
+      item,
+      stage: view.value === "stage",
+      x: window.innerWidth - 320,
+      y: window.innerHeight - 250,
+    };
+    return;
+  }
   if (action === "Copy path") {
-    notify(`Demo path: ${item.path}`);
+    try {
+      if (isTauri()) await writeText(item.path);
+      else await navigator.clipboard.writeText(item.path);
+      notify("Path copied.");
+    } catch {
+      notify("Could not copy the path.");
+    }
   } else {
     notify(
       `${action} is a UI preview. Real file actions will be connected after UI approval.`,
@@ -317,12 +364,27 @@ function addDraftTag() {
   newTag.value = "";
   tagError.value = "";
 }
-function saveTags() {
+async function saveTags() {
+  if (tagSaving.value) return;
   addDraftTag();
   if (tagError.value || !tagTarget.value) return;
-  tagTarget.value.tags = [...draftTags.value];
+  if (isTauri()) {
+    tagSaving.value = true;
+    try {
+      await invoke("save_library_tags", {
+        id: tagTarget.value.nativeId,
+        tags: draftTags.value,
+      });
+      await library.refresh();
+    } catch (cause) {
+      tagError.value = `Could not save tags: ${String(cause)}`;
+      return;
+    } finally {
+      tagSaving.value = false;
+    }
+  } else tagTarget.value.tags = [...draftTags.value];
   tagTarget.value = null;
-  notify("Tags updated in the demo library.");
+  notify("Tags updated.");
 }
 async function windowAction(action: "minimize" | "maximize" | "close") {
   if (!isTauri()) {
@@ -366,7 +428,7 @@ function keyboard(event: KeyboardEvent) {
   }
   if (event.key === "Escape") {
     if (distributionQueue.value.length) distributionQueue.value = [];
-    else if (tagTarget.value) tagTarget.value = null;
+    else if (tagTarget.value && !tagSaving.value) tagTarget.value = null;
     else if (view.value === "settings" || view.value === "tags")
       view.value = "main";
     else if (context.value) context.value = null;
@@ -420,6 +482,7 @@ onMounted(async () => {
     .connect()
     .catch(() => notify("Could not connect Stage scan progress."));
   void refreshRedistribution();
+  void library.refresh();
   document.addEventListener("contextmenu", preventBrowserContextMenu, true);
   document.addEventListener("keydown", keyboard);
   if (isTauri()) {
@@ -690,8 +753,7 @@ onBeforeUnmount(() => {
             </section>
             <section class="filter-section additional-section">
               <h3>Additional</h3>
-              <ToggleSwitch v-model="favoritesOnly">Favorites only</ToggleSwitch
-              ><ToggleSwitch v-model="taggedOnly">Tagged only</ToggleSwitch
+              <ToggleSwitch v-model="taggedOnly">Tagged only</ToggleSwitch
               ><ToggleSwitch v-model="hideUntagged">Hide untagged</ToggleSwitch>
               <ToggleSwitch v-model="showPreviews">Show previews</ToggleSwitch>
             </section>
@@ -704,12 +766,19 @@ onBeforeUnmount(() => {
         </aside>
         <MediaCollection
           :items="results"
+          :native="isTauri()"
+          :total="isTauri() ? library.total.value : undefined"
+          :has-more="library.hasMore.value"
+          :loading="library.loading.value"
+          :error="library.error.value"
           :show-previews="showPreviews"
           :mode="mode"
           :selected-id="selectedId"
           :selected-ids="library.selectedIds.value"
           :heading="heading"
           :filtered="activeFilterCount > 0"
+          @load-more="library.loadMore"
+          @retry="library.refresh()"
           @select="library.select"
           @selection-start="library.beginSelection"
           @select-many="library.selectMany($event, false)"
@@ -733,13 +802,16 @@ onBeforeUnmount(() => {
         v-else-if="view === 'tags'"
         :demo-catalog="demoTaxonomy.catalog.value"
         :change-demo="demoTaxonomy.change"
-        @changed="refreshRedistribution"
+        @changed="refreshAll"
         @notice="notify"
       />
       <SettingsPanel
         v-else-if="view === 'settings'"
         @close="view = 'main'"
-        @saved="notify('Settings saved.')"
+        @saved="
+          refreshAll();
+          notify('Settings saved.');
+        "
         @preview="
           notify(`${$event} is a UI preview. No settings or files are changed.`)
         "
@@ -837,18 +909,23 @@ onBeforeUnmount(() => {
       :library="library.media.value"
       :show-previews="showPreviews"
       :editing="editingMetadata"
+      :catalog="editingMetadata ? library.catalog.value : undefined"
+      :persist="saveMetadata"
       @close="distributionQueue = []"
       @open="previewAction('Open file', $event)"
-      @save="saveMetadata"
       @processed="
         notify(
           editingMetadata
-            ? `${$event} file(s) updated for this demo session.`
+            ? `${$event} file(s) updated${isTauri() ? '' : ' for this demo session'}.`
             : `${$event} file(s) processed in the demo queue. No files were saved.`,
         )
       "
     />
-    <div v-if="modalOpen" class="modal-backdrop" @click.self="tagTarget = null">
+    <div
+      v-if="modalOpen"
+      class="modal-backdrop"
+      @click.self="!tagSaving && (tagTarget = null)"
+    >
       <section
         ref="modalElement"
         class="modal"
@@ -863,6 +940,7 @@ onBeforeUnmount(() => {
             <button
               class="icon-button"
               aria-label="Close tag editor"
+              :disabled="tagSaving"
               @click="tagTarget = null"
             >
               <AppIcon name="close" :size="18" />
@@ -911,9 +989,19 @@ onBeforeUnmount(() => {
             </button>
           </div>
           <footer class="modal-footer">
-            <button class="secondary-button" @click="tagTarget = null">
+            <button
+              class="secondary-button"
+              :disabled="tagSaving"
+              @click="tagTarget = null"
+            >
               Cancel</button
-            ><button class="primary-button" @click="saveTags">Save tags</button>
+            ><button
+              class="primary-button"
+              :disabled="tagSaving"
+              @click="saveTags"
+            >
+              Save tags
+            </button>
           </footer></template
         >
       </section>

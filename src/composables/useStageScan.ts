@@ -34,9 +34,9 @@ export function useStageScan() {
     });
     await listening;
   }
-  async function start() {
+  async function start(library = false) {
     await connect();
-    await invoke("start_stage_scan");
+    await invoke(library ? "start_library_scan" : "start_stage_scan");
     status.value = await invoke<ScanStatus>("get_stage_scan_status");
   }
   return { status, connect, start };

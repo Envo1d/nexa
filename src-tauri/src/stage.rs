@@ -108,26 +108,36 @@ pub async fn stage_file_action(
     app: tauri::AppHandle,
     ids: Vec<String>,
     action: String,
+    library: Option<bool>,
     database: tauri::State<'_, Database>,
     state: tauri::State<'_, StageState>,
     config: tauri::State<'_, ConfigStore>,
 ) -> Result<FileActionReport, String> {
     use tauri_plugin_opener::OpenerExt;
-    if !matches!(action.as_str(), "open" | "reveal" | "delete") || ids.is_empty() || ids.len() > 500
+    if !matches!(action.as_str(), "open" | "reveal" | "delete" | "share")
+        || ids.is_empty()
+        || ids.len() > 500
+        || (action == "share" && ids.len() != 1)
     {
         return Err("Invalid file action or selection (maximum 500 files)".into());
     }
     state
         .scanning
         .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-        .map_err(|_| "Wait for the current Stage operation to finish")?;
+        .map_err(|_| "Wait for the current media operation to finish")?;
     let _guard = FileActionGuard(&state.scanning);
-    let configured_root = config.snapshot()?.settings.staging_path;
+    let settings = config.snapshot()?.settings;
+    let library = library.unwrap_or(false);
+    let configured_root = if library {
+        settings.library_path
+    } else {
+        settings.staging_path
+    };
     let mut report = FileActionReport {
         succeeded: Vec::new(),
         failed: Vec::new(),
     };
-    tracing::info!("Stage file action started");
+    tracing::info!(library, "Media file action started");
     let mut seen = std::collections::HashSet::new();
     for raw_id in ids {
         let id = raw_id.parse::<i64>().map_err(|_| "Invalid media ID")?;
@@ -138,8 +148,9 @@ pub async fn stage_file_action(
             let row = sqlx::query("SELECT s.root_path,s.kind,m.relative_path,m.file_revision,m.needs_distribution FROM media m JOIN sources s ON s.id=m.source_id WHERE m.id=?")
                 .bind(id).fetch_optional(database.pool()).await.map_err(|_| "Cannot read file record")?.ok_or("File record is unavailable")?;
             let root = PathBuf::from(row.get::<String,_>("root_path"));
-            if row.get::<i64,_>("needs_distribution") == 0 && (row.get::<String,_>("kind") != "stage" || configured_root.as_ref() != Some(&root)) {
-                return Err("File is outside the current Stage selection".to_string());
+            let eligible = if library { row.get::<String,_>("kind") == "library" && configured_root.as_ref() == Some(&root) && row.get::<i64,_>("needs_distribution") == 0 } else { row.get::<i64,_>("needs_distribution") != 0 || (row.get::<String,_>("kind") == "stage" && configured_root.as_ref() == Some(&root)) };
+            if !eligible {
+                return Err("File is outside the current media selection".to_string());
             }
             let relative: String = row.get("relative_path");
             let revision: Option<String> = row.get("file_revision");
@@ -150,9 +161,11 @@ pub async fn stage_file_action(
                 if worker_action == "delete" {
                     if let Some(expected) = revision {
                         let current = inspect(path.clone(), &root)?;
-                        if current.is_none_or(|current| current.revision != expected) { return Err("File changed; rescan Stage before deleting".into()); }
+                        if current.is_none_or(|current| current.revision != expected) { return Err("File changed; rescan its source before deleting".into()); }
                     }
                     recycle_file(&path)
+                } else if worker_action == "share" {
+                    crate::share::show(app, &path)
                 } else {
                     let result = if worker_action == "open" { app.opener().open_path(path.to_str().ok_or("File path is not valid Unicode")?, None::<&str>) } else { app.opener().reveal_item_in_dir(path) };
                     result.map_err(|_| "Windows could not open the file or folder".into())
@@ -160,14 +173,14 @@ pub async fn stage_file_action(
             }).await.map_err(|_| "File action worker failed")??;
             if action == "delete" {
                 sqlx::query("DELETE FROM media WHERE id=?").bind(id).execute(database.pool()).await
-                    .map_err(|_| "File deleted, but database cleanup failed; rescan Stage")?;
+                    .map_err(|_| "File deleted, but database cleanup failed; rescan its source")?;
             }
             Ok::<_, String>(())
         }.await;
         match result {
             Ok(()) => report.succeeded.push(raw_id),
             Err(error) => {
-                tracing::warn!(media_id = id, reason = %error, "Stage file action failed");
+                tracing::warn!(media_id = id, reason = %error, "Media file action failed");
                 report.failed.push(format!("File {raw_id}: {error}"));
             }
         }
@@ -175,7 +188,7 @@ pub async fn stage_file_action(
     tracing::info!(
         succeeded = report.succeeded.len(),
         failed = report.failed.len(),
-        "Stage file action completed"
+        "Media file action completed"
     );
     Ok(report)
 }
@@ -285,7 +298,7 @@ fn inspect(path: PathBuf, root: &Path) -> Result<Option<Discovered>, String> {
     let modified = info.modified().map_err(|_| "Cannot read file revision")?;
     let relative = path
         .strip_prefix(root)
-        .map_err(|_| "File escaped Stage root")?
+        .map_err(|_| "File escaped source root")?
         .to_str()
         .ok_or("Invalid Unicode path")?
         .to_owned();
@@ -361,8 +374,39 @@ fn walk(
     Ok(())
 }
 
+#[cfg(test)]
 async fn activate_source(pool: &SqlitePool, root: &Path, scan: i64) -> Result<i64, String> {
-    let root = root.to_str().ok_or("Invalid Unicode Stage root")?;
+    activate_source_for(pool, root, scan, "stage").await
+}
+async fn activate_source_for(
+    pool: &SqlitePool,
+    root: &Path,
+    scan: i64,
+    source_kind: &str,
+) -> Result<i64, String> {
+    let root = root.to_str().ok_or("Invalid Unicode media root")?;
+    let other_roots: Vec<String> =
+        sqlx::query_scalar("SELECT root_path FROM sources WHERE is_active=1 AND kind<>?")
+            .bind(source_kind)
+            .fetch_all(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+    let candidate = PathBuf::from(root);
+    tauri::async_runtime::spawn_blocking(move || {
+        let candidate = candidate
+            .canonicalize()
+            .map_err(|_| "Source folder is unavailable")?;
+        for other in other_roots {
+            let other = PathBuf::from(other);
+            let other = other.canonicalize().unwrap_or(other);
+            if candidate.starts_with(&other) || other.starts_with(&candidate) {
+                return Err("Library and Stage roots must not overlap".to_string());
+            }
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|_| "Root validation worker failed")??;
     let mut tx = pool
         .begin_with("BEGIN IMMEDIATE")
         .await
@@ -374,11 +418,12 @@ async fn activate_source(pool: &SqlitePool, root: &Path, scan: i64) -> Result<i6
         .map_err(|e| e.to_string())?;
     if existing
         .as_ref()
-        .is_some_and(|row| row.get::<String, _>("kind") != "stage")
+        .is_some_and(|row| row.get::<String, _>("kind") != source_kind)
     {
-        return Err("Stage root already belongs to Library".into());
+        return Err("Root already belongs to another source kind".into());
     }
-    sqlx::query("UPDATE sources SET is_active = 0 WHERE kind = 'stage'")
+    sqlx::query("UPDATE sources SET is_active = 0 WHERE kind = ?")
+        .bind(source_kind)
         .execute(&mut *tx)
         .await
         .map_err(|e| e.to_string())?;
@@ -391,7 +436,16 @@ async fn activate_source(pool: &SqlitePool, root: &Path, scan: i64) -> Result<i6
             .map_err(|e| e.to_string())?;
         id
     } else {
-        sqlx::query_scalar("INSERT INTO sources(kind,root_path,path_key,created_at) VALUES('stage',?,?,?) RETURNING id").bind(root).bind(root).bind(scan).fetch_one(&mut *tx).await.map_err(|e| e.to_string())?
+        sqlx::query_scalar(
+            "INSERT INTO sources(kind,root_path,path_key,created_at) VALUES(?,?,?,?) RETURNING id",
+        )
+        .bind(source_kind)
+        .bind(root)
+        .bind(root)
+        .bind(scan)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?
     };
     tx.commit().await.map_err(|e| e.to_string())?;
     Ok(id)
@@ -472,7 +526,7 @@ async fn prepare(
             }
             Err(_) => {
                 status.errors += 1;
-                tracing::warn!("Changing Stage file deferred to next scan");
+                tracing::warn!("Changing media file deferred to next scan");
             }
         }
     }
@@ -527,25 +581,34 @@ fn publish(app: &tauri::AppHandle, status: &ScanStatus) {
     }
 }
 
-#[tracing::instrument(skip_all)]
+#[cfg(test)]
 async fn scan(
     pool: &SqlitePool,
     root: PathBuf,
+    report: impl FnMut(&ScanStatus),
+) -> Result<ScanStatus, String> {
+    scan_source(pool, root, "stage", report).await
+}
+#[tracing::instrument(skip_all, fields(source_kind))]
+async fn scan_source(
+    pool: &SqlitePool,
+    root: PathBuf,
+    source_kind: &str,
     mut report: impl FnMut(&ScanStatus),
 ) -> Result<ScanStatus, String> {
-    tracing::info!("Stage scan started");
+    tracing::info!(source_kind, "Media scan started");
     let checked_root = root.clone();
     let root = tauri::async_runtime::spawn_blocking(move || {
         if !checked_root.is_absolute() {
-            return Err("Stage directory must be absolute");
+            return Err("Media directory must be absolute");
         }
         if !std::fs::metadata(&checked_root)
-            .map_err(|_| "Stage directory is unavailable")?
+            .map_err(|_| "Media directory is unavailable")?
             .is_dir()
         {
-            return Err("Stage path is not a directory");
+            return Err("Media path is not a directory");
         }
-        std::fs::read_dir(&checked_root).map_err(|_| "Stage directory cannot be read")?;
+        std::fs::read_dir(&checked_root).map_err(|_| "Media directory cannot be read")?;
         Ok(checked_root.components().collect::<PathBuf>())
     })
     .await
@@ -557,7 +620,7 @@ async fn scan(
         .await
         .map_err(|e| e.to_string())?;
     let marker = now().max(previous.unwrap_or(0).saturating_add(1));
-    let source = activate_source(pool, &root, marker).await?;
+    let source = activate_source_for(pool, &root, marker, source_kind).await?;
     let (tx, mut rx) = tokio::sync::mpsc::channel(4);
     let walker = tauri::async_runtime::spawn_blocking(move || {
         let mut batch = Vec::with_capacity(BATCH);
@@ -573,7 +636,7 @@ async fn scan(
     });
     let mut status = ScanStatus {
         running: true,
-        message: "Scanning Stage…".into(),
+        message: format!("Scanning {source_kind}…"),
         ..Default::default()
     };
     report(&status);
@@ -590,7 +653,7 @@ async fn scan(
                     traversal_errors += status.errors - before;
                 }
                 save_batch(pool, source, marker, prepared).await?;
-                tracing::debug!(batch_files = count, "Stage batch committed");
+                tracing::debug!(batch_files = count, "Media batch committed");
                 status.scanned += count;
                 report(&status);
             }
@@ -605,21 +668,20 @@ async fn scan(
     if !reconcile(pool, source, marker, complete, traversal_errors).await? {
         tracing::warn!(
             traversal_errors,
-            "Incomplete Stage scan; unseen records preserved"
+            "Incomplete media scan; unseen records preserved"
         );
     }
     status.running = false;
     status.message = if traversal_errors == 0 {
-        "Stage scan complete"
+        format!("{source_kind} scan complete")
     } else {
-        "Incomplete scan; unseen files preserved"
-    }
-    .into();
+        "Incomplete scan; unseen files preserved".into()
+    };
     tracing::info!(
         scanned = status.scanned,
         extracted = status.extracted,
         errors = status.errors,
-        "Stage scan completed"
+        "Media scan completed"
     );
     Ok(status)
 }
@@ -647,45 +709,56 @@ async fn reconcile(
 }
 
 pub fn launch(app: tauri::AppHandle, root: PathBuf) -> Result<(), String> {
+    launch_sources(app, vec![(root, "stage")])
+}
+pub fn launch_sources(
+    app: tauri::AppHandle,
+    roots: Vec<(PathBuf, &'static str)>,
+) -> Result<(), String> {
     if app
         .state::<StageState>()
         .scanning
         .swap(true, Ordering::AcqRel)
     {
-        return Err("Stage scan is already running".into());
+        return Err("A media operation is already running".into());
     }
     publish(
         &app,
         &ScanStatus {
             running: true,
-            message: "Starting Stage scan…".into(),
+            message: "Starting media scan…".into(),
             ..Default::default()
         },
     );
     tauri::async_runtime::spawn(async move {
-        let result = scan(app.state::<Database>().pool(), root, |status| {
-            publish(&app, status)
-        })
-        .await;
-        let final_status = match result {
-            Ok(status) => status,
-            Err(error) => {
-                tracing::error!(
-                    "Stage scan failed; committed batches retained and missing reconciliation skipped"
-                );
-                let mut status = app
-                    .state::<StageState>()
-                    .status
-                    .lock()
-                    .map(|value| value.clone())
-                    .unwrap_or_default();
-                status.running = false;
-                status.message = error;
-                status.errors += 1;
-                status
-            }
-        };
-        publish(&app, &final_status);
+        for (root, source_kind) in roots {
+            let result = scan_source(
+                app.state::<Database>().pool(),
+                root,
+                source_kind,
+                |status| publish(&app, status),
+            )
+            .await;
+            let final_status = match result {
+                Ok(status) => status,
+                Err(error) => {
+                    tracing::error!(
+                        "Media scan failed; committed batches retained and missing reconciliation skipped"
+                    );
+                    let mut status = app
+                        .state::<StageState>()
+                        .status
+                        .lock()
+                        .map(|value| value.clone())
+                        .unwrap_or_default();
+                    status.running = false;
+                    status.message = error;
+                    status.errors += 1;
+                    status
+                }
+            };
+            publish(&app, &final_status);
+        }
         app.state::<StageState>()
             .scanning
             .store(false, Ordering::Release);
@@ -717,7 +790,7 @@ pub fn get_stage_scan_status(state: tauri::State<'_, StageState>) -> Result<Scan
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StageFile {
-    id: String,
+    pub(crate) id: String,
     path: String,
     filename: String,
     kind: String,
@@ -749,7 +822,7 @@ async fn browse(
 ) -> Result<StagePage, String> {
     // Imported/redistribution records need searchable path keys, without filesystem reads.
     loop {
-        let rows = sqlx::query("SELECT m.id,s.root_path,m.relative_path FROM media m JOIN sources s ON m.source_id=s.id WHERE m.stage_search_key IS NULL AND (s.kind='stage' OR m.needs_distribution=1) LIMIT 500").fetch_all(pool).await.map_err(|e| e.to_string())?;
+        let rows = sqlx::query("SELECT m.id,s.root_path,m.relative_path FROM media m JOIN sources s ON m.source_id=s.id WHERE m.stage_search_key IS NULL AND (s.kind IN ('stage','library') OR m.needs_distribution=1) LIMIT 500").fetch_all(pool).await.map_err(|e| e.to_string())?;
         if rows.is_empty() {
             break;
         }
@@ -797,7 +870,7 @@ pub async fn get_stage_files(
     browse(database.pool(), root, after, &search).await
 }
 
-fn stage_file(row: sqlx::sqlite::SqliteRow) -> StageFile {
+pub(crate) fn stage_file(row: sqlx::sqlite::SqliteRow) -> StageFile {
     let fps = row
         .get::<Option<i64>, _>("fps_num")
         .zip(row.get::<Option<i64>, _>("fps_den"))
@@ -845,7 +918,7 @@ pub async fn get_stage_preview(
         .clone()
         .try_acquire_owned()
         .map_err(|_| "Preview workers busy")?;
-    let row = sqlx::query("SELECT s.root_path,m.relative_path,m.file_revision FROM media m JOIN sources s ON s.id=m.source_id WHERE m.id=? AND m.availability='present' AND (s.kind='stage' OR m.needs_distribution=1)").bind(id).fetch_optional(database.pool()).await.map_err(|e| e.to_string())?.ok_or("Media unavailable")?;
+    let row = sqlx::query("SELECT s.root_path,m.relative_path,m.file_revision FROM media m JOIN sources s ON s.id=m.source_id WHERE m.id=? AND m.availability='present' AND (s.kind IN ('stage','library') OR m.needs_distribution=1)").bind(id).fetch_optional(database.pool()).await.map_err(|e| e.to_string())?.ok_or("Media unavailable")?;
     let path =
         Path::new(&row.get::<String, _>("root_path")).join(row.get::<String, _>("relative_path"));
     let cache = state.cache.clone();
@@ -856,7 +929,7 @@ pub async fn get_stage_preview(
         if let Some(expected) = expected {
             let current = inspect(path.clone(), path.parent().ok_or("Invalid media path")?)?;
             if current.is_none_or(|current| current.revision != expected) {
-                return Err("File changed; rescan Stage".into());
+                return Err("File changed; rescan its source".into());
             }
         }
         let preview = cache
@@ -979,6 +1052,41 @@ mod tests {
             }),
             failed: false,
         }
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn library_scan_preserves_annotations_and_rejects_overlapping_stage() {
+        let (_temp, db, root) = fixture().await;
+        write_bmp(&root.join("Image.bmp"), 2);
+        let first = scan_source(db.pool(), root.clone(), "library", |_| {})
+            .await
+            .unwrap();
+        assert_eq!(first.scanned, 1);
+        sqlx::query("UPDATE media SET favorite=1")
+            .execute(db.pool())
+            .await
+            .unwrap();
+        let second = scan_source(db.pool(), root.clone(), "library", |_| {})
+            .await
+            .unwrap();
+        assert_eq!(second.extracted, 0);
+        let row =
+            sqlx::query("SELECT s.kind,m.favorite FROM media m JOIN sources s ON s.id=m.source_id")
+                .fetch_one(db.pool())
+                .await
+                .unwrap();
+        assert_eq!(row.get::<String, _>("kind"), "library");
+        assert_eq!(row.get::<i64, _>("favorite"), 1);
+        let nested = root.join("Stage");
+        std::fs::create_dir(&nested).unwrap();
+        assert!(
+            scan_source(db.pool(), nested, "stage", |_| {})
+                .await
+                .is_err()
+        );
+        assert!(scan_source(db.pool(), root, "stage", |_| {}).await.is_err());
+        db.close().await;
     }
 
     #[cfg(windows)]
@@ -1244,4 +1352,18 @@ mod tests {
         assert_eq!(batches, 3);
         db.close().await;
     }
+}
+
+#[tauri::command]
+#[tracing::instrument(skip_all, err)]
+pub fn start_library_scan(
+    app: tauri::AppHandle,
+    config: tauri::State<'_, ConfigStore>,
+) -> Result<(), String> {
+    let root = config
+        .snapshot()?
+        .settings
+        .library_path
+        .ok_or("Save a Library directory in Settings first")?;
+    launch_sources(app, vec![(root, "library")])
 }
