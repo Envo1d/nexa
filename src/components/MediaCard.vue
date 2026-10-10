@@ -25,6 +25,9 @@ const modifiedDate = computed(() =>
     ? "Date unavailable"
     : formatDate(props.item.modifiedAt),
 );
+const metadataChips = computed(() =>
+  props.item.characters.length ? props.item.characters : props.item.tags,
+);
 const modifiedDateTime = computed(() =>
   props.item.nativeId && !props.item.modifiedAt
     ? undefined
@@ -57,11 +60,17 @@ defineEmits<{
           {{ displayName }}
         </div>
         <time :datetime="modifiedDateTime">{{ modifiedDate }}</time>
-        <div v-if="!stage" class="card-tags">
-          <span v-for="tag in item.tags" :key="tag" class="tag-chip">{{
-            tag
-          }}</span
-          ><span v-if="!item.tags.length" class="no-tags">No tags</span>
+        <div
+          v-if="!stage"
+          class="card-tags"
+          :class="{ 'card-characters': item.characters.length > 0 }"
+        >
+          <span
+            v-for="(label, index) in metadataChips"
+            :key="index"
+            class="tag-chip"
+            >{{ label }}</span
+          ><span v-if="!metadataChips.length" class="no-tags">No tags</span>
         </div>
       </div>
     </button>

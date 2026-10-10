@@ -451,6 +451,12 @@ async fn targets(
             }
             if is_video && !settings.video_subfolder.trim().is_empty() {
                 folder.push(component(&settings.video_subfolder)?);
+            } else if extension == "gif" && !settings.gif_subfolder.trim().is_empty() {
+                folder.push(component(&settings.gif_subfolder)?);
+                tracing::debug!(
+                    media_id = id,
+                    "GIF destination uses configured animation subfolder"
+                );
             }
             let key = name_key(&folder.join(format!("{stem}.{extension}")).to_string_lossy());
             groups.entry(key).or_default().push(Target {
@@ -864,6 +870,43 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         assert!(relative(root.path(), "../outside.png", false).is_err());
         assert!(relative(root.path(), "missing/folder/image.png", false).is_ok());
+    }
+
+    #[tokio::test]
+    async fn relocates_gifs_to_configured_subfolder_preserving_bytes_and_image_naming() {
+        let (_temp, db, root, stage) = fixture().await;
+        let source = Path::new(&stage).join("capture-1.gif");
+        fs::rename(Path::new(&stage).join("capture-1.png"), &source).unwrap();
+        let bytes = fs::read(&source).unwrap();
+        sqlx::query("UPDATE media SET extension='GIF',relative_path='capture-1.gif',path_key='capture-1.gif',original_filename='capture-1.gif' WHERE id=1")
+            .execute(db.pool()).await.unwrap();
+        let mut settings = AppConfig::default();
+        run(db.pool(), &root, &settings).await;
+        let default_path =
+            Path::new(&root).join("Alpha/Artist/Animations/Alice х Zed [Artist].gif");
+        assert_eq!(fs::read(&default_path).unwrap(), bytes);
+        assert!(!source.exists());
+        assert!(indexed(&root, 1).exists()); // Other images stay outside Animations.
+        settings.gif_subfolder = "GIFs".into();
+        run(db.pool(), &root, &settings).await;
+        let custom_path = Path::new(&root).join("Alpha/Artist/GIFs/Alice х Zed [Artist].gif");
+        assert_eq!(fs::read(&custom_path).unwrap(), bytes);
+        assert!(!default_path.exists());
+        settings.gif_subfolder = " ".into();
+        settings.copyright_directory = false;
+        settings.artist_directory = false;
+        run(db.pool(), &root, &settings).await;
+        assert_eq!(
+            fs::read(Path::new(&root).join("Alice х Zed [Artist].gif")).unwrap(),
+            bytes
+        );
+        assert!(!custom_path.exists());
+        let kind: String = sqlx::query_scalar("SELECT kind FROM media WHERE id=1")
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+        assert_eq!(kind, "image");
+        db.close().await;
     }
 
     #[tokio::test]

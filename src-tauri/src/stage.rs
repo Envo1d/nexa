@@ -336,11 +336,21 @@ enum WalkMessage {
 fn walk(
     root: &Path,
     directory: &Path,
+    excluded: Option<&Path>,
     depth: usize,
     batch: &mut Vec<Discovered>,
     errors: &mut u64,
     tx: &tokio::sync::mpsc::Sender<WalkMessage>,
 ) -> Result<(), String> {
+    if excluded.is_some_and(|path| {
+        directory
+            .canonicalize()
+            .unwrap_or_else(|_| directory.to_path_buf())
+            .starts_with(path)
+    }) {
+        tracing::debug!("Configured Stage subtree excluded from Library traversal");
+        return Ok(());
+    }
     if depth > 256 {
         *errors += 1;
         return Ok(());
@@ -372,7 +382,7 @@ fn walk(
             continue;
         }
         if file_type.is_dir() {
-            walk(root, &entry.path(), depth + 1, batch, errors, tx)?;
+            walk(root, &entry.path(), excluded, depth + 1, batch, errors, tx)?;
         } else if file_type.is_file() {
             match inspect(entry.path(), root) {
                 Ok(Some(file)) => batch.push(file),
@@ -406,6 +416,7 @@ pub(crate) async fn activate_source_for(
             .await
             .map_err(|e| e.to_string())?;
     let candidate = PathBuf::from(root);
+    let library = source_kind == "library";
     tauri::async_runtime::spawn_blocking(move || {
         let candidate = candidate
             .canonicalize()
@@ -413,8 +424,11 @@ pub(crate) async fn activate_source_for(
         for other in other_roots {
             let other = PathBuf::from(other);
             let other = other.canonicalize().unwrap_or(other);
-            if candidate.starts_with(&other) || other.starts_with(&candidate) {
-                return Err("Library and Stage roots must not overlap".to_string());
+            if candidate == other
+                || (library && candidate.starts_with(&other))
+                || (!library && other.starts_with(&candidate))
+            {
+                return Err("Roots must differ and Library must not be inside Stage".to_string());
             }
         }
         Ok(())
@@ -601,17 +615,23 @@ async fn scan(
     root: PathBuf,
     report: impl FnMut(&ScanStatus),
 ) -> Result<ScanStatus, String> {
-    scan_source(pool, root, "stage", report).await
+    scan_source(pool, root, "stage", None, report).await
 }
 #[tracing::instrument(skip_all, fields(source_kind))]
 async fn scan_source(
     pool: &SqlitePool,
     root: PathBuf,
     source_kind: &str,
+    excluded: Option<PathBuf>,
     mut report: impl FnMut(&ScanStatus),
 ) -> Result<ScanStatus, String> {
-    tracing::info!(source_kind, "Media scan started");
+    tracing::info!(
+        source_kind,
+        excludes_stage = excluded.is_some(),
+        "Media scan started"
+    );
     let checked_root = root.clone();
+    let checked_exclusion = excluded.clone();
     let root = tauri::async_runtime::spawn_blocking(move || {
         if !checked_root.is_absolute() {
             return Err("Media directory must be absolute");
@@ -623,6 +643,15 @@ async fn scan_source(
             return Err("Media path is not a directory");
         }
         std::fs::read_dir(&checked_root).map_err(|_| "Media directory cannot be read")?;
+        if let Some(stage) = checked_exclusion {
+            let stage = stage.canonicalize().unwrap_or(stage);
+            let library = checked_root
+                .canonicalize()
+                .map_err(|_| "Media directory is unavailable")?;
+            if library.starts_with(stage) {
+                return Err("Roots must differ and Library must not be inside Stage");
+            }
+        }
         Ok(checked_root.components().collect::<PathBuf>())
     })
     .await
@@ -638,9 +667,18 @@ async fn scan_source(
     let source = activate_source_for(pool, &root, marker, source_kind).await?;
     let (tx, mut rx) = tokio::sync::mpsc::channel(4);
     let walker = tauri::async_runtime::spawn_blocking(move || {
+        let excluded = excluded.map(|path| path.canonicalize().unwrap_or(path));
         let mut batch = Vec::with_capacity(BATCH);
         let mut errors = 0;
-        walk(&root, &root, 0, &mut batch, &mut errors, &tx)?;
+        walk(
+            &root,
+            &root,
+            excluded.as_deref(),
+            0,
+            &mut batch,
+            &mut errors,
+            &tx,
+        )?;
         if !batch.is_empty() {
             tx.blocking_send(WalkMessage::Batch(batch))
                 .map_err(|_| "Scanner stopped")?;
@@ -746,14 +784,28 @@ pub fn launch_sources(
         },
     );
     tauri::async_runtime::spawn(async move {
+        let staging = app
+            .state::<ConfigStore>()
+            .snapshot()
+            .map(|s| s.settings.staging_path);
         for (root, source_kind) in roots {
-            let result = scan_source(
-                app.state::<Database>().pool(),
-                root,
-                source_kind,
-                |status| publish(&app, status),
-            )
-            .await;
+            let result = match &staging {
+                Ok(staging) => {
+                    scan_source(
+                        app.state::<Database>().pool(),
+                        root,
+                        source_kind,
+                        if source_kind == "library" {
+                            staging.clone()
+                        } else {
+                            None
+                        },
+                        |status| publish(&app, status),
+                    )
+                    .await
+                }
+                Err(error) => Err(error.clone()),
+            };
             let final_status = match result {
                 Ok(status) => status,
                 Err(error) => {
@@ -1072,10 +1124,10 @@ mod tests {
 
     #[cfg(windows)]
     #[tokio::test]
-    async fn library_scan_preserves_annotations_and_rejects_overlapping_stage() {
+    async fn library_scan_preserves_annotations_and_allows_nested_stage() {
         let (_temp, db, root) = fixture().await;
         write_bmp(&root.join("Image.bmp"), 2);
-        let first = scan_source(db.pool(), root.clone(), "library", |_| {})
+        let first = scan_source(db.pool(), root.clone(), "library", None, |_| {})
             .await
             .unwrap();
         assert_eq!(first.scanned, 1);
@@ -1083,7 +1135,7 @@ mod tests {
             .execute(db.pool())
             .await
             .unwrap();
-        let second = scan_source(db.pool(), root.clone(), "library", |_| {})
+        let second = scan_source(db.pool(), root.clone(), "library", None, |_| {})
             .await
             .unwrap();
         assert_eq!(second.extracted, 0);
@@ -1096,12 +1148,40 @@ mod tests {
         assert_eq!(row.get::<i64, _>("favorite"), 1);
         let nested = root.join("Stage");
         std::fs::create_dir(&nested).unwrap();
+        write_bmp(&nested.join("Incoming.bmp"), 2);
+        std::fs::create_dir(nested.join("deep")).unwrap();
+        write_bmp(&nested.join("deep/Incoming.bmp"), 2);
+        std::fs::create_dir(root.join("Stage sibling")).unwrap();
+        write_bmp(&root.join("Stage sibling/Kept.bmp"), 2);
+        let library = scan_source(
+            db.pool(),
+            root.clone(),
+            "library",
+            Some(nested.clone()),
+            |_| {},
+        )
+        .await
+        .unwrap();
+        assert_eq!(library.scanned, 2);
+        let stage = scan_source(db.pool(), nested, "stage", None, |_| {})
+            .await
+            .unwrap();
+        assert_eq!(stage.scanned, 2);
+        let library = scan_source(
+            db.pool(),
+            root.clone(),
+            "library",
+            Some(root.join("Stage")),
+            |_| {},
+        )
+        .await
+        .unwrap();
+        assert_eq!(library.scanned, 2);
         assert!(
-            scan_source(db.pool(), nested, "stage", |_| {})
+            scan_source(db.pool(), root, "stage", None, |_| {})
                 .await
                 .is_err()
         );
-        assert!(scan_source(db.pool(), root, "stage", |_| {}).await.is_err());
         db.close().await;
     }
 
@@ -1347,7 +1427,7 @@ mod tests {
         let worker = tauri::async_runtime::spawn_blocking(move || {
             let mut batch = Vec::new();
             let mut errors = 0;
-            walk(&root, &root, 0, &mut batch, &mut errors, &tx).unwrap();
+            walk(&root, &root, None, 0, &mut batch, &mut errors, &tx).unwrap();
             tx.blocking_send(WalkMessage::Batch(batch)).unwrap();
             tx.blocking_send(WalkMessage::Complete(errors)).unwrap();
         });
