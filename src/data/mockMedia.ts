@@ -71,6 +71,7 @@ export function createMockMedia(): MediaItem[] {
       kind,
       extension,
       title: kind === "video" ? name : undefined,
+      videoTitle: kind === "video" ? videoTitle : undefined,
       preview: previews[scene]!,
       modifiedAt,
       createdAt: modifiedAt - 86_400_000,

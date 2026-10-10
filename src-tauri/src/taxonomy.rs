@@ -104,14 +104,19 @@ async fn rename(pool: &SqlitePool, category: Category, id: i64, name: &str) -> R
 #[tauri::command]
 #[tracing::instrument(skip_all, fields(?category, id), err)]
 pub async fn rename_taxonomy(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, crate::stage::StageState>,
     database: tauri::State<'_, Database>,
     category: Category,
     id: i64,
     name: String,
 ) -> Result<(), String> {
+    let _guard = state.operation().await;
+    crate::disk_sync::recover(database.pool()).await?;
     tracing::info!("Renaming dictionary entry");
     rename(database.pool(), category, id, &name).await?;
-    tracing::info!("Dictionary entry renamed; disk structure preserved");
+    crate::disk_sync::request(&app);
+    tracing::info!("Dictionary entry renamed; disk synchronization requested");
     Ok(())
 }
 async fn remove(pool: &SqlitePool, category: Category, id: i64) -> Result<u64, sqlx::Error> {
@@ -147,10 +152,14 @@ async fn remove(pool: &SqlitePool, category: Category, id: i64) -> Result<u64, s
 #[tauri::command]
 #[tracing::instrument(skip_all, fields(?category, id), err)]
 pub async fn delete_taxonomy(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, crate::stage::StageState>,
     database: tauri::State<'_, Database>,
     category: Category,
     id: i64,
 ) -> Result<u64, String> {
+    let _guard = state.operation().await;
+    crate::disk_sync::recover(database.pool()).await?;
     tracing::info!("Deleting dictionary entry");
     let count = remove(database.pool(), category, id)
         .await
@@ -159,6 +168,7 @@ pub async fn delete_taxonomy(
         affected_files = count,
         "Dictionary entry deleted; redistribution queued without disk changes"
     );
+    crate::disk_sync::request(&app);
     Ok(count)
 }
 #[derive(Serialize, FromRow)]

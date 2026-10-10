@@ -1,4 +1,4 @@
-//! Main repositories. Annotation writes never move or rename media files.
+//! Logical Main membership and transactional annotations; disk work is queued separately.
 use crate::{config::ConfigStore, database::Database, legacy_import::name_key, stage};
 use serde::{Deserialize, Serialize};
 use sqlx::{QueryBuilder, Row, Sqlite, SqlitePool};
@@ -54,8 +54,11 @@ pub struct Page {
 }
 fn base(root: &Option<String>, favorites: bool, prefix: &str) -> QueryBuilder<Sqlite> {
     let mut q = QueryBuilder::new(prefix);
-    q.push(" FROM media m JOIN sources s ON s.id=m.source_id LEFT JOIN video_metadata v ON v.media_id=m.id LEFT JOIN artists a ON a.id=m.artist_id WHERE s.kind='library' AND s.path_key=");
+    q.push(" FROM media m JOIN sources s ON s.id=m.source_id LEFT JOIN video_metadata v ON v.media_id=m.id LEFT JOIN artists a ON a.id=m.artist_id WHERE (m.library_assignment=");
     q.push_bind(root)
+        .push(" OR (s.kind='library' AND s.path_key=")
+        .push_bind(root)
+        .push("))")
         .push(" AND m.availability='present' AND m.needs_distribution=0");
     if favorites {
         q.push(" AND m.favorite=1");
@@ -97,7 +100,12 @@ pub(crate) async fn browse(
     let mut counts = QueryBuilder::<Sqlite>::new(
         "SELECT count(*),coalesce(sum(m.kind='video'),0),coalesce(sum(m.kind='image'),0)",
     );
-    counts.push(" FROM media m JOIN sources s ON s.id=m.source_id WHERE s.kind='library' AND s.path_key=").push_bind(&root).push(" AND m.availability='present' AND m.needs_distribution=0");
+    counts
+        .push(" FROM media m JOIN sources s ON s.id=m.source_id WHERE (m.library_assignment=")
+        .push_bind(&root)
+        .push(" OR (s.kind='library' AND s.path_key=")
+        .push_bind(&root)
+        .push(")) AND m.availability='present' AND m.needs_distribution=0");
     if f.scope == "favorites" {
         counts.push(" AND m.favorite=1");
     }
@@ -173,8 +181,8 @@ pub(crate) async fn browse(
             }
         }
     }
-    let rows = sqlx::query("SELECT d.name,count(*) count FROM tags d JOIN media_tags l ON l.tag_id=d.id JOIN media m ON m.id=l.media_id JOIN sources s ON s.id=m.source_id WHERE s.kind='library' AND s.path_key=? AND m.availability='present' AND m.needs_distribution=0 AND (?=0 OR m.favorite=1) GROUP BY d.id ORDER BY count DESC,d.name_key")
-        .bind(&root).bind(f.scope == "favorites").fetch_all(pool).await.map_err(|e| e.to_string())?;
+    let rows = sqlx::query("SELECT d.name,count(*) count FROM tags d JOIN media_tags l ON l.tag_id=d.id JOIN media m ON m.id=l.media_id JOIN sources s ON s.id=m.source_id WHERE (m.library_assignment=? OR (s.kind='library' AND s.path_key=?)) AND m.availability='present' AND m.needs_distribution=0 AND (?=0 OR m.favorite=1) GROUP BY d.id ORDER BY count DESC,d.name_key")
+        .bind(&root).bind(&root).bind(f.scope == "favorites").fetch_all(pool).await.map_err(|e| e.to_string())?;
     let tags = rows
         .into_iter()
         .map(|r| Count {
@@ -249,8 +257,8 @@ async fn ensure_library(
     id: i64,
     root: &Option<String>,
 ) -> Result<String, String> {
-    sqlx::query_scalar("SELECT m.kind FROM media m JOIN sources s ON s.id=m.source_id WHERE m.id=? AND s.kind='library' AND s.path_key=? AND m.needs_distribution=0")
-        .bind(id).bind(root).fetch_optional(&mut **tx).await.map_err(|e| e.to_string())?.ok_or("File is outside the current Library".into())
+    sqlx::query_scalar("SELECT m.kind FROM media m JOIN sources s ON s.id=m.source_id WHERE m.id=? AND (m.library_assignment=? OR (s.kind='library' AND s.path_key=?)) AND m.needs_distribution=0 AND m.availability='present'")
+        .bind(id).bind(root).bind(root).fetch_optional(&mut **tx).await.map_err(|e| e.to_string())?.ok_or("File is outside the current Library".into())
 }
 fn clean(value: &str) -> Result<String, String> {
     let value: String = value.trim().nfc().collect();
@@ -313,6 +321,15 @@ async fn save(
     ids: Vec<String>,
     draft: Draft,
 ) -> Result<(), String> {
+    save_mode(pool, root, None, ids, draft).await
+}
+async fn save_mode(
+    pool: &SqlitePool,
+    root: Option<String>,
+    stage_root: Option<Option<String>>,
+    ids: Vec<String>,
+    draft: Draft,
+) -> Result<(), String> {
     if ids.is_empty() || ids.len() > 500 || draft.artists.len() != 1 {
         return Err("Choose exactly one artist and 1–500 files".into());
     }
@@ -320,7 +337,12 @@ async fn save(
     let artist = dictionary(&mut tx, "artists", &draft.artists[0]).await?;
     for raw in ids {
         let id = raw.parse::<i64>().map_err(|_| "Invalid media ID")?;
-        let kind = ensure_library(&mut tx, id, &root).await?;
+        let kind: String = if let Some(stage_root) = &stage_root {
+            sqlx::query_scalar("SELECT m.kind FROM media m JOIN sources s ON s.id=m.source_id WHERE m.id=? AND m.availability='present' AND (m.needs_distribution=1 OR (s.kind='stage' AND s.path_key=? AND m.library_assignment IS NULL))")
+                .bind(id).bind(stage_root).fetch_optional(&mut *tx).await.map_err(|e| e.to_string())?.ok_or("File is outside Stage")?
+        } else {
+            ensure_library(&mut tx, id, &root).await?
+        };
         if kind == "video" && draft.video_title.trim().is_empty() {
             return Err("Video title is required".into());
         }
@@ -355,7 +377,7 @@ async fn save(
                 .map_err(|e| e.to_string())?;
         }
         write_tags(&mut tx, id, &draft.tags).await?;
-        sqlx::query("UPDATE media SET artist_id=?,updated_at=CAST(strftime('%s','now') AS INTEGER)*1000 WHERE id=?").bind(artist).bind(id).execute(&mut *tx).await.map_err(|e| e.to_string())?;
+        sqlx::query("UPDATE media SET artist_id=?,library_assignment=?,needs_distribution=0,updated_at=CAST(strftime('%s','now') AS INTEGER)*1000 WHERE id=?").bind(artist).bind(&root).bind(id).execute(&mut *tx).await.map_err(|e| e.to_string())?;
         if kind == "video" {
             sqlx::query("INSERT INTO video_metadata(media_id,title) VALUES(?,?) ON CONFLICT(media_id) DO UPDATE SET title=excluded.title").bind(id).bind(draft.video_title.trim()).execute(&mut *tx).await.map_err(|e| e.to_string())?;
         }
@@ -365,14 +387,45 @@ async fn save(
 #[tauri::command]
 #[tracing::instrument(skip_all, fields(count=ids.len()), err)]
 pub async fn save_library_metadata(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, stage::StageState>,
     ids: Vec<String>,
     draft: Draft,
     database: tauri::State<'_, Database>,
     config: tauri::State<'_, ConfigStore>,
 ) -> Result<(), String> {
+    let _guard = state.operation().await;
+    crate::disk_sync::recover(database.pool()).await?;
     tracing::info!("Library metadata save started");
     save(database.pool(), configured_root(&config)?, ids, draft).await?;
+    crate::disk_sync::request(&app);
     tracing::info!("Library metadata save completed");
+    Ok(())
+}
+#[tauri::command]
+#[tracing::instrument(skip_all, fields(count=ids.len()), err)]
+pub async fn distribute_files(
+    app: tauri::AppHandle,
+    ids: Vec<String>,
+    draft: Draft,
+    database: tauri::State<'_, Database>,
+    config: tauri::State<'_, ConfigStore>,
+    state: tauri::State<'_, stage::StageState>,
+) -> Result<(), String> {
+    let _guard = state.operation().await;
+    crate::disk_sync::recover(database.pool()).await?;
+    let settings = config.snapshot()?.settings;
+    let root = configured_root(&config)?.ok_or("Choose a Library directory before distribution")?;
+    let staging = settings.staging_path.map(|p| {
+        p.components()
+            .collect::<PathBuf>()
+            .to_string_lossy()
+            .into_owned()
+    });
+    tracing::info!("Distribution metadata save started");
+    save_mode(database.pool(), Some(root), Some(staging), ids, draft).await?;
+    crate::disk_sync::request(&app);
+    tracing::info!("Distribution saved; physical synchronization queued when enabled");
     Ok(())
 }
 #[tauri::command]
@@ -634,5 +687,89 @@ mod tests {
             .is_lt()
         );
         assert!(compare_names("Straße 02.png", "STRASSE 2.png").is_eq());
+    }
+
+    #[tokio::test]
+    async fn distribution_saves_logical_membership_without_moving_and_supports_main_edits() {
+        let (temp, db, root) = fixture().await;
+        let staging = temp.path().join("Stage");
+        std::fs::create_dir(&staging).unwrap();
+        let original = staging.join("original.png");
+        std::fs::write(&original, b"untouched staged content").unwrap();
+        let staging = staging.to_string_lossy().into_owned();
+        sqlx::query(
+            "INSERT INTO sources(id,kind,root_path,path_key,created_at) VALUES(99,'stage',?,?,1)",
+        )
+        .bind(&staging)
+        .bind(&staging)
+        .execute(db.pool())
+        .await
+        .unwrap();
+        sqlx::query("INSERT INTO media(id,source_id,relative_path,path_key,original_filename,kind,extension,last_seen_at,created_at,updated_at) VALUES(1000,99,'original.png','original.png','original.png','image','png',1,1,1)").execute(db.pool()).await.unwrap();
+        let mut changed = draft();
+        changed.copyrights = vec!["Zebra".into(), "Alpha".into()];
+        changed.characters = vec![
+            Character {
+                name: "Zed".into(),
+                copyright: "Zebra".into(),
+            },
+            Character {
+                name: "Alice".into(),
+                copyright: "Alpha".into(),
+            },
+        ];
+        changed.tags = vec!["Zed".into(), "Alpha".into()];
+        save_mode(
+            db.pool(),
+            Some(root.clone()),
+            Some(Some(staging.clone())),
+            vec!["1000".into()],
+            changed,
+        )
+        .await
+        .unwrap();
+        let mut query = filters();
+        query.search = "Straße".into();
+        let page = browse(db.pool(), Some(root.clone()), query).await.unwrap();
+        let file = page
+            .files
+            .iter()
+            .find(|f| f.technical.id == "1000")
+            .unwrap();
+        assert_eq!(file.copyrights, ["Alpha", "Zebra"]);
+        assert_eq!(file.tags, ["Alpha", "Zed"]);
+        assert_eq!(file.character_copyrights[0].name, "Alice");
+        assert_eq!(file.character_copyrights[1].name, "Zed");
+        assert_eq!(
+            serde_json::to_value(&file.technical).unwrap()["filename"],
+            "original.png"
+        );
+        sqlx::query("UPDATE media SET stage_search_key='' WHERE id IN (503,1000)")
+            .execute(db.pool())
+            .await
+            .unwrap();
+        let staged = stage::browse(db.pool(), Some(staging), None, "")
+            .await
+            .unwrap();
+        assert_eq!(staged.total, 1); // Only the existing redistribution record remains.
+        let mut edit = draft();
+        edit.characters.clear();
+        save(db.pool(), Some(root), vec!["1000".into()], edit)
+            .await
+            .unwrap();
+        assert_eq!(
+            std::fs::read(original).unwrap(),
+            b"untouched staged content"
+        );
+        let row = sqlx::query(
+            "SELECT source_id,relative_path,original_filename FROM media WHERE id=1000",
+        )
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+        assert_eq!(row.get::<i64, _>("source_id"), 99);
+        assert_eq!(row.get::<String, _>("relative_path"), "original.png");
+        assert_eq!(row.get::<String, _>("original_filename"), "original.png");
+        db.close().await;
     }
 }
