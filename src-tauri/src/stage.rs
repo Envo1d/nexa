@@ -21,14 +21,14 @@ use tauri::{Emitter, Manager};
 const BATCH: usize = 64;
 const EXTRACTOR_VERSION: i64 = 1;
 
-struct FileActionGuard<'a>(&'a AtomicBool);
+pub(crate) struct FileActionGuard<'a>(&'a AtomicBool);
 impl Drop for FileActionGuard<'_> {
     fn drop(&mut self) {
         self.0.store(false, Ordering::Release);
     }
 }
 
-fn checked_action_path(root: &Path, relative: &str) -> Result<PathBuf, String> {
+pub(crate) fn checked_action_path(root: &Path, relative: &str) -> Result<PathBuf, String> {
     use std::path::Component;
     if !root.is_absolute() {
         return Err("Source folder must be absolute".into());
@@ -121,11 +121,8 @@ pub async fn stage_file_action(
     {
         return Err("Invalid file action or selection (maximum 500 files)".into());
     }
-    state
-        .scanning
-        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-        .map_err(|_| "Wait for the current media operation to finish")?;
-    let _guard = FileActionGuard(&state.scanning);
+    let _guard = state.operation().await;
+    crate::disk_sync::recover(database.pool()).await?;
     let settings = config.snapshot()?.settings;
     let library = library.unwrap_or(false);
     let configured_root = if library {
@@ -145,10 +142,10 @@ pub async fn stage_file_action(
             continue;
         }
         let result = async {
-            let row = sqlx::query("SELECT s.root_path,s.kind,m.relative_path,m.file_revision,m.needs_distribution FROM media m JOIN sources s ON s.id=m.source_id WHERE m.id=?")
+            let row = sqlx::query("SELECT s.root_path,s.kind,m.relative_path,m.file_revision,m.needs_distribution,m.library_assignment FROM media m JOIN sources s ON s.id=m.source_id WHERE m.id=?")
                 .bind(id).fetch_optional(database.pool()).await.map_err(|_| "Cannot read file record")?.ok_or("File record is unavailable")?;
             let root = PathBuf::from(row.get::<String,_>("root_path"));
-            let eligible = if library { row.get::<String,_>("kind") == "library" && configured_root.as_ref() == Some(&root) && row.get::<i64,_>("needs_distribution") == 0 } else { row.get::<i64,_>("needs_distribution") != 0 || (row.get::<String,_>("kind") == "stage" && configured_root.as_ref() == Some(&root)) };
+            let eligible = if library { (row.get::<Option<String>,_>("library_assignment").as_deref() == configured_root.as_ref().and_then(|p| p.to_str()) && configured_root.is_some() || row.get::<String,_>("kind") == "library" && configured_root.as_ref() == Some(&root)) && row.get::<i64,_>("needs_distribution") == 0 } else { row.get::<i64,_>("needs_distribution") != 0 || (row.get::<String,_>("kind") == "stage" && configured_root.as_ref() == Some(&root) && row.get::<Option<String>,_>("library_assignment").is_none()) };
             if !eligible {
                 return Err("File is outside the current media selection".to_string());
             }
@@ -184,6 +181,9 @@ pub async fn stage_file_action(
                 report.failed.push(format!("File {raw_id}: {error}"));
             }
         }
+    }
+    if action == "delete" && !report.succeeded.is_empty() {
+        crate::disk_sync::request(&app);
     }
     tracing::info!(
         succeeded = report.succeeded.len(),
@@ -238,6 +238,20 @@ pub struct StageState {
     generated_previews: Arc<AtomicU64>,
 }
 impl StageState {
+    pub(crate) fn try_operation(&self) -> Option<FileActionGuard<'_>> {
+        self.scanning
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .ok()
+            .map(|_| FileActionGuard(&self.scanning))
+    }
+    pub(crate) async fn operation(&self) -> FileActionGuard<'_> {
+        loop {
+            if let Some(guard) = self.try_operation() {
+                return guard;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+    }
     pub fn new(cache_path: PathBuf) -> Self {
         Self {
             scanning: AtomicBool::new(false),
@@ -249,7 +263,7 @@ impl StageState {
     }
 }
 
-fn now() -> i64 {
+pub(crate) fn now() -> i64 {
     timestamp(SystemTime::now()).unwrap_or(0)
 }
 fn timestamp(time: SystemTime) -> Option<i64> {
@@ -378,7 +392,7 @@ fn walk(
 async fn activate_source(pool: &SqlitePool, root: &Path, scan: i64) -> Result<i64, String> {
     activate_source_for(pool, root, scan, "stage").await
 }
-async fn activate_source_for(
+pub(crate) async fn activate_source_for(
     pool: &SqlitePool,
     root: &Path,
     scan: i64,
@@ -620,6 +634,7 @@ async fn scan_source(
         .await
         .map_err(|e| e.to_string())?;
     let marker = now().max(previous.unwrap_or(0).saturating_add(1));
+    crate::disk_sync::recover(pool).await?;
     let source = activate_source_for(pool, &root, marker, source_kind).await?;
     let (tx, mut rx) = tokio::sync::mpsc::channel(4);
     let walker = tauri::async_runtime::spawn_blocking(move || {
@@ -762,6 +777,7 @@ pub fn launch_sources(
         app.state::<StageState>()
             .scanning
             .store(false, Ordering::Release);
+        crate::disk_sync::request(&app);
     });
     Ok(())
 }
@@ -811,10 +827,10 @@ pub struct StageFile {
 #[derive(Serialize)]
 pub struct StagePage {
     files: Vec<StageFile>,
-    total: i64,
+    pub(crate) total: i64,
 }
 
-async fn browse(
+pub(crate) async fn browse(
     pool: &SqlitePool,
     root: Option<String>,
     after: Option<i64>,
@@ -843,8 +859,8 @@ async fn browse(
         tx.commit().await.map_err(|e| e.to_string())?;
     }
     let search = crate::legacy_import::name_key(&search.trim().replace('\\', "/"));
-    let total = sqlx::query_scalar("SELECT count(*) FROM media m JOIN sources s ON s.id=m.source_id WHERE ((s.kind='stage' AND s.path_key=? AND m.availability='present') OR m.needs_distribution=1) AND instr(m.stage_search_key,?)>0").bind(&root).bind(&search).fetch_one(pool).await.map_err(|e| e.to_string())?;
-    let rows = sqlx::query("SELECT m.*,s.root_path,v.duration_ms,v.fps_num,v.fps_den,v.codec,v.bitrate_bps FROM media m JOIN sources s ON s.id=m.source_id LEFT JOIN video_metadata v ON v.media_id=m.id WHERE (? IS NULL OR m.id>?) AND ((s.kind='stage' AND s.path_key=? AND m.availability='present') OR m.needs_distribution=1) AND instr(m.stage_search_key,?)>0 ORDER BY m.id LIMIT 500").bind(after).bind(after).bind(root).bind(search).fetch_all(pool).await.map_err(|e| e.to_string())?;
+    let total = sqlx::query_scalar("SELECT count(*) FROM media m JOIN sources s ON s.id=m.source_id WHERE ((s.kind='stage' AND s.path_key=? AND m.availability='present' AND m.library_assignment IS NULL) OR m.needs_distribution=1) AND instr(m.stage_search_key,?)>0").bind(&root).bind(&search).fetch_one(pool).await.map_err(|e| e.to_string())?;
+    let rows = sqlx::query("SELECT m.*,s.root_path,v.duration_ms,v.fps_num,v.fps_den,v.codec,v.bitrate_bps FROM media m JOIN sources s ON s.id=m.source_id LEFT JOIN video_metadata v ON v.media_id=m.id WHERE (? IS NULL OR m.id>?) AND ((s.kind='stage' AND s.path_key=? AND m.availability='present' AND m.library_assignment IS NULL) OR m.needs_distribution=1) AND instr(m.stage_search_key,?)>0 ORDER BY m.id LIMIT 500").bind(after).bind(after).bind(root).bind(search).fetch_all(pool).await.map_err(|e| e.to_string())?;
     let files = rows.into_iter().map(stage_file).collect();
     Ok(StagePage { files, total })
 }

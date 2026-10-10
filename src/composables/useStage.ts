@@ -15,6 +15,8 @@ export function useStage() {
         filename,
         path: `C:\\Media\\Nexa staging\\${item.kind === "video" ? "Videos" : "Images"}\\${filename}`,
         favorite: false,
+        title: undefined,
+        videoTitle: undefined,
         copyrights: [],
         artist: "",
         characters: [],

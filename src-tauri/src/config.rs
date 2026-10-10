@@ -149,8 +149,14 @@ pub fn get_config(store: tauri::State<'_, ConfigStore>) -> ConfigResult<ConfigSn
 }
 
 #[tauri::command]
-pub fn save_config(settings: AppConfig, store: tauri::State<'_, ConfigStore>) -> ConfigResult<()> {
-    store.save(settings)
+pub fn save_config(
+    app: tauri::AppHandle,
+    settings: AppConfig,
+    store: tauri::State<'_, ConfigStore>,
+) -> ConfigResult<()> {
+    store.save(settings)?;
+    crate::disk_sync::request(&app);
+    Ok(())
 }
 
 #[tauri::command]

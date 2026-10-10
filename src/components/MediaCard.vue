@@ -12,9 +12,13 @@ const props = defineProps<{
   stage?: boolean;
 }>();
 const displayName = computed(() =>
-  props.mode === "list"
-    ? props.item.filename
-    : props.item.filename.replace(/\.[^.]+$/, ""),
+  props.stage
+    ? props.mode === "list"
+      ? props.item.filename
+      : props.item.filename.replace(/\.[^.]+$/, "")
+    : props.item.kind === "video"
+      ? props.item.videoTitle?.trim()
+      : undefined,
 );
 const modifiedDate = computed(() =>
   props.item.nativeId && !props.item.modifiedAt
@@ -49,7 +53,7 @@ defineEmits<{
     >
       <MediaPreview :item="item" :show-previews="showPreviews" variant="card" />
       <div class="card-body">
-        <div class="card-title" :title="displayName">
+        <div v-if="displayName" class="card-title" :title="displayName">
           {{ displayName }}
         </div>
         <time :datetime="modifiedDateTime">{{ modifiedDate }}</time>

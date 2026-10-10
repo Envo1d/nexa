@@ -1,5 +1,6 @@
 mod config;
 pub mod database;
+mod disk_sync;
 mod legacy_import;
 mod library;
 mod logging;
@@ -61,6 +62,7 @@ pub fn run() {
             app.manage(database);
             app.manage(stage::StageState::new(cache_path));
             app.manage(legacy_import::ImportState::default());
+            app.manage(disk_sync::SyncState::default());
             if startup.auto_scan {
                 let mut roots = Vec::new();
                 if let Some(root) = startup.library_path {
@@ -74,6 +76,7 @@ pub fn run() {
                         .map_err(std::io::Error::other)?;
                 }
             }
+            disk_sync::start(app.handle().clone());
             tracing::info!("Application setup completed");
             Ok(())
         })
@@ -81,6 +84,8 @@ pub fn run() {
             config::get_config,
             config::save_config,
             config::open_logs,
+            disk_sync::get_disk_sync_status,
+            disk_sync::retry_disk_sync,
             legacy_import::find_legacy_database,
             legacy_import::import_legacy_database,
             taxonomy::get_taxonomy,
@@ -91,6 +96,7 @@ pub fn run() {
             stage::start_library_scan,
             library::get_library_files,
             library::save_library_metadata,
+            library::distribute_files,
             library::set_library_favorite,
             library::save_library_tags,
             stage::get_stage_scan_status,

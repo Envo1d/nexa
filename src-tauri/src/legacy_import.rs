@@ -93,9 +93,13 @@ pub async fn find_legacy_database() -> Result<bool, String> {
 #[tauri::command]
 #[tracing::instrument(skip_all)]
 pub async fn import_legacy_database(
+    app: tauri::AppHandle,
+    media: tauri::State<'_, crate::stage::StageState>,
     database: tauri::State<'_, Database>,
     state: tauri::State<'_, ImportState>,
 ) -> Result<ImportReport, String> {
+    let _media_guard = media.operation().await;
+    crate::disk_sync::recover(database.pool()).await?;
     let _guard = state
         .0
         .try_lock()
@@ -107,6 +111,7 @@ pub async fn import_legacy_database(
     };
     match result {
         Ok(report) => {
+            crate::disk_sync::request(&app);
             tracing::info!(
                 library_added = report.library_added,
                 stage_added = report.stage_added,

@@ -8,6 +8,7 @@ import {
   watch,
 } from "vue";
 import { invoke, isTauri } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { platform, version } from "@tauri-apps/plugin-os";
@@ -33,6 +34,16 @@ let cacheUsageDisposed = false;
 import type { MediaItem, MediaKind, MediaMetadataDraft } from "./types/media";
 import "./styles.css";
 
+const diskSync = ref<{
+  running: boolean;
+  completed: number;
+  total: number;
+  error: string | null;
+}>({ running: false, completed: 0, total: 0, error: null });
+let stopDiskSync: (() => void) | undefined;
+async function retryDiskSync() {
+  await invoke("retry_disk_sync");
+}
 const library = useLibrary();
 const stage = useStage();
 const stageScan = useStageScan();
@@ -200,18 +211,40 @@ async function saveMetadata(ids: string[], draft: MediaMetadataDraft) {
     const nativeIds = ids.map(
       (id) => distributionQueue.value.find((item) => item.id === id)?.nativeId,
     );
-    await invoke("save_library_metadata", { ids: nativeIds, draft });
-    await library.refresh();
+    await invoke(
+      editingMetadata.value ? "save_library_metadata" : "distribute_files",
+      { ids: nativeIds, draft },
+    );
+    await refreshAll();
     return;
   }
+  if (!editingMetadata.value) {
+    const distributed = stage.media.value.filter((item) =>
+      ids.includes(item.id),
+    );
+    stage.media.value = stage.media.value.filter(
+      (item) => !ids.includes(item.id),
+    );
+    library.media.value.push(...distributed);
+  }
+  const alphabetically = (values: string[]) =>
+    [...values].sort((a, b) => a.localeCompare(b));
   for (const item of library.media.value) {
     if (!ids.includes(item.id)) continue;
-    item.copyrights = [...draft.copyrights];
+    item.copyrights = alphabetically(draft.copyrights);
     item.artists = [...draft.artists];
     item.artist = draft.artists.join(", ");
-    item.characterCopyrights = draft.characters.map((entry) => ({ ...entry }));
-    item.characters = [...new Set(draft.characters.map((entry) => entry.name))];
-    item.tags = [...draft.tags];
+    item.characterCopyrights = draft.characters
+      .map((entry) => ({ ...entry }))
+      .sort(
+        (a, b) =>
+          a.name.localeCompare(b.name) ||
+          a.copyright.localeCompare(b.copyright),
+      );
+    item.characters = alphabetically([
+      ...new Set(draft.characters.map((entry) => entry.name)),
+    ]);
+    item.tags = alphabetically(draft.tags);
     if (item.kind === "video") item.videoTitle = draft.videoTitle;
   }
 }
@@ -486,6 +519,24 @@ onMounted(async () => {
   document.addEventListener("contextmenu", preventBrowserContextMenu, true);
   document.addEventListener("keydown", keyboard);
   if (isTauri()) {
+    let received = false;
+    stopDiskSync = await listen<typeof diskSync.value>(
+      "disk-sync-status",
+      (event) => {
+        received = true;
+        const previous = diskSync.value;
+        diskSync.value = event.payload;
+        if (previous.running && !event.payload.running) void refreshAll();
+      },
+    );
+    if (cacheUsageDisposed) {
+      stopDiskSync();
+      return;
+    }
+    const snapshot = await invoke<typeof diskSync.value>(
+      "get_disk_sync_status",
+    );
+    if (!received) diskSync.value = snapshot;
     const appWindow = getCurrentWindow();
     maximized.value = await appWindow.isMaximized();
     unlistenResize = await appWindow.onResized(async () => {
@@ -496,6 +547,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   cacheUsageDisposed = true;
   stopCacheUsage?.();
+  stopDiskSync?.();
   document.removeEventListener("contextmenu", preventBrowserContextMenu, true);
   document.removeEventListener("keydown", keyboard);
   clearTimeout(toastTimer);
@@ -582,6 +634,24 @@ onBeforeUnmount(() => {
         </button>
       </div>
     </header>
+    <div
+      v-if="diskSync.running || diskSync.error"
+      class="disk-sync-status"
+      role="status"
+    >
+      <span>{{
+        diskSync.error
+          ? `Disk synchronization stopped: ${diskSync.error}`
+          : `Synchronizing disk: ${diskSync.completed} / ${diskSync.total}`
+      }}</span>
+      <button
+        v-if="diskSync.error"
+        class="secondary-button"
+        @click="retryDiskSync"
+      >
+        Retry
+      </button>
+    </div>
     <main class="workspace">
       <nav
         class="navigation"
@@ -909,7 +979,7 @@ onBeforeUnmount(() => {
       :library="library.media.value"
       :show-previews="showPreviews"
       :editing="editingMetadata"
-      :catalog="editingMetadata ? library.catalog.value : undefined"
+      :catalog="library.catalog.value"
       :persist="saveMetadata"
       @close="distributionQueue = []"
       @open="previewAction('Open file', $event)"
@@ -917,7 +987,7 @@ onBeforeUnmount(() => {
         notify(
           editingMetadata
             ? `${$event} file(s) updated${isTauri() ? '' : ' for this demo session'}.`
-            : `${$event} file(s) processed in the demo queue. No files were saved.`,
+            : `${$event} file(s) distributed${isTauri() ? '' : ' for this demo session'}.`,
         )
       "
     />

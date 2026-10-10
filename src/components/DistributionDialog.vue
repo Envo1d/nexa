@@ -66,7 +66,7 @@ const targets = computed(() =>
 );
 const summary = computed<[string, string][]>(() => [
   ["Copyrights", copyrights.value.map((value) => value.name).join(", ")],
-  ["Artists", artists.value.map((value) => value.name).join(", ")],
+  ["Artist", artists.value.map((value) => value.name).join(", ")],
   [
     "Characters",
     characters.value
@@ -244,17 +244,15 @@ async function process() {
   if (saving.value) return;
   error.value = "";
   if (
-    (props.editing ? artists.value.length !== 1 : !artists.value.length) ||
-    (!props.editing && !characters.value.length) ||
+    artists.value.length !== 1 ||
     ((allFiles.value ? needsTitle.value : current.value.kind === "video") &&
       !title.value.trim())
   ) {
-    error.value =
-      "Choose exactly one artist and enter a title for videos. Distribution also requires a character.";
+    error.value = "Choose exactly one artist and enter a title for videos.";
     return;
   }
   completedCount.value = targets.value.length;
-  if (props.editing) {
+  if (props.editing || props.persist) {
     const ids = targets.value.map((item) => item.id);
     const draft = {
       copyrights: copyrights.value.map((value) => value.name),
@@ -418,14 +416,18 @@ onBeforeUnmount(() => trigger?.focus());
                 completedCount === 1 ? "The file" : `${completedCount} files`
               }}
               {{
-                editing
-                  ? "updated for this demo session."
-                  : "completed the distribution demo."
+                current.nativeId
+                  ? editing
+                    ? "updated in Nexa."
+                    : "distributed to the library."
+                  : editing
+                    ? "updated for this demo session."
+                    : "distributed for this demo session."
               }}
             </p>
             <dl class="wizard-summary">
               <MetadataRow label="Action">{{
-                editing ? "Metadata updated" : "Distribution preview completed"
+                editing ? "Metadata updated" : "Distribution completed"
               }}</MetadataRow>
               <MetadataRow label="Files">{{ completedCount }}</MetadataRow>
               <MetadataRow label="Queue"
@@ -569,7 +571,8 @@ onBeforeUnmount(() => trigger?.focus());
               <div class="wizard-fields">
                 <MetadataInput
                   v-model="artists"
-                  label="Artists"
+                  single
+                  label="Artist"
                   :options="artistOptions"
                   allow-custom
                 /><label v-if="needsTitle" class="distribution-title-input"
@@ -654,11 +657,9 @@ onBeforeUnmount(() => trigger?.focus());
           </template>
           <p class="modal-note wizard-demo-note">
             {{
-              editing
-                ? current.nativeId
-                  ? "Metadata is saved in Nexa. File paths are unchanged."
-                  : "Demo session · Metadata changes are not persisted to disk."
-                : "Demo workflow · No files are moved or saved yet."
+              current.nativeId
+                ? "Metadata is saved in Nexa. Files move and rename in the background when Sync with disk is enabled."
+                : "Demo session · Changes are not persisted to disk."
             }}
           </p>
         </div>
@@ -669,7 +670,7 @@ onBeforeUnmount(() => trigger?.focus());
           class="settings-switch-row distribution-retain"
           ><span
             >Keep entered details between files<small
-              >Copyrights, artists, characters, tags and video title</small
+              >Copyrights, artist, characters, tags and video title</small
             ></span
           ></ToggleSwitch
         >

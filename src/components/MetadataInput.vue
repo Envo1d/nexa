@@ -21,6 +21,7 @@ const props = defineProps<{
   allowCustom?: boolean;
   customCopyrights?: string[];
   panel?: boolean;
+  single?: boolean;
 }>();
 const emit = defineEmits<{ "update:modelValue": [values: MetadataValue[]] }>();
 const query = ref("");
@@ -153,7 +154,10 @@ watch(
 );
 function choose(value: MetadataValue) {
   if (!props.modelValue.some((entry) => entry.id === value.id))
-    emit("update:modelValue", [...props.modelValue, value]);
+    emit(
+      "update:modelValue",
+      props.single ? [value] : [...props.modelValue, value],
+    );
   assignment.value = [];
   query.value = "";
   active.value = -1;

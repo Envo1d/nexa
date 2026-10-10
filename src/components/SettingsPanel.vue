@@ -264,7 +264,7 @@ function resetDrafts() {
                 ? "UI preview · Changes are not applied or saved."
                 : saved
                   ? "Settings saved."
-                  : "Changes apply after Save changes. Scanning uses saved directories. Disk synchronization and updates are not available yet.")
+                  : "Changes apply after Save changes. Scanning uses saved directories. Disk synchronization runs in the background when enabled. Updates are not available yet.")
           }}
         </p>
         <fieldset
@@ -310,8 +310,9 @@ function resetDrafts() {
                   ><span
                     ><strong>Copyright directory</strong
                     ><small
-                      >Include a copyright directory in the library
-                      structure.</small
+                      >Use the first alphabetically sorted copyright as a
+                      folder. Saved changes reorganize existing distributed
+                      files when sync is enabled.</small
                     ></span
                   ></ToggleSwitch
                 >
@@ -322,8 +323,9 @@ function resetDrafts() {
                   ><span
                     ><strong>Artist directory</strong
                     ><small
-                      >Include an artist directory in the library
-                      structure.</small
+                      >Use the file’s single artist as a folder. Saved changes
+                      reorganize existing distributed files when sync is
+                      enabled.</small
                     ></span
                   ></ToggleSwitch
                 >
@@ -356,8 +358,10 @@ function resetDrafts() {
                   ><span
                     ><strong>Sync structure with disk</strong
                     ><small
-                      >When off, folders will not be created from the configured
-                      structure.</small
+                      >When on, existing distributed files gradually move into
+                      the configured structure. When off, distribution saves
+                      metadata and leaves files in place; pending moves pause
+                      after the current operation.</small
                     ></span
                   ></ToggleSwitch
                 >
