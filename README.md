@@ -14,12 +14,6 @@ Nexa brings your media library, incoming files and metadata into one workspace. 
 
 This repository contains the rewritten Nexa application. The previous implementation is available at **[Envo1d/media-viewer](https://github.com/Envo1d/media-viewer)**.
 
-## Screenshots
-
-![Nexa Main View with demo media](docs/screenshots/main-demo.jpg)
-
-*An earlier browser demo captured during development. It illustrates the layout with sample media; some controls and card labels differ from the current release.*
-
 ## Features
 
 - **Library browsing:** grid and list layouts, favorites, multi-selection, file details, date sorting and natural filename sorting.
@@ -85,7 +79,7 @@ cargo test --manifest-path src-tauri/Cargo.toml --locked -- --test-threads=1
 npm run build:windows
 ```
 
-Installer builds require an updater signing key matching the configured public key. See the **[release guide](docs/releases.md)** for key configuration, build output and GitHub release steps. Build artifacts are written under `src-tauri/target/release/bundle/nsis/`.
+Installer builds require an updater signing key matching the configured public key. Build artifacts are written under `src-tauri/target/release/bundle/nsis/`.
 
 ## Feedback
 

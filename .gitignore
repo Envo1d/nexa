@@ -23,14 +23,10 @@ dist-ssr
 *.sln
 *.sw?
 
-AGENTS.md
-/docs/*
-!/docs/releases.md
 # Private updater signing material
 *.key
 *.key.pub
 
-# Public README screenshots
-!/docs/screenshots/
-/docs/screenshots/*
-!/docs/screenshots/main-demo.jpg
+# Local project records and agent instructions
+/docs/
+[Aa][Gg][Ee][Nn][Tt][Ss].[Mm][Dd]
