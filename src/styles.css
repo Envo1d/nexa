@@ -441,6 +441,66 @@ svg {
   flex-wrap: wrap;
   gap: 7px 5px;
 }
+.main-filters-panel .filters-scroll {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: visible;
+}
+.main-filters-panel .filters-scroll > :not(.tag-filter-section),
+.main-filters-panel > .panel-heading,
+.main-filters-panel > .filter-reset {
+  flex-shrink: 0;
+}
+.main-filters-panel .tag-filter-section {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 0 1 auto;
+}
+.tag-filter-section > h3,
+.tag-filter-section > .show-tags {
+  flex-shrink: 0;
+}
+.tag-filter-section .filter-tags {
+  min-height: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  flex-shrink: 1;
+  align-content: flex-start;
+  padding: 2px;
+}
+.tag-filter-section .filter-tag {
+  max-width: 100%;
+  flex-shrink: 0;
+}
+.tag-filter-section .filter-tag > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+@media (max-height: 760px) {
+  .main-filters-panel .filter-section {
+    padding: 8px 14px;
+  }
+  .main-filters-panel .filter-section h3 {
+    margin-bottom: 8px;
+  }
+  .main-filters-panel .type-option {
+    padding: 5px 8px;
+  }
+  .main-filters-panel .additional-section label {
+    margin-top: 8px;
+  }
+  .main-filters-panel > .panel-heading {
+    min-height: 40px;
+    padding: 10px 16px;
+  }
+  .main-filters-panel > .filter-reset {
+    padding: 8px 14px;
+  }
+}
 .filter-tag {
   display: flex;
   align-items: center;
@@ -645,6 +705,36 @@ svg {
   height: 5px;
   border-radius: 50%;
   background: #9b73d3;
+}
+.collection-viewport {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.back-to-top {
+  position: absolute;
+  right: 22px;
+  bottom: 14px;
+  z-index: 6;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid #655080;
+  border-radius: 50%;
+  background: #292037;
+  color: #e5d8f8;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 35%);
+  cursor: pointer;
+}
+.back-to-top:hover {
+  background: #3b2b50;
+  border-color: var(--accent);
+}
+.back-to-top:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
 }
 .collection-scroll {
   flex: 1;

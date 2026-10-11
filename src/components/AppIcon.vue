@@ -2,6 +2,7 @@
 import { computed, type Component } from "vue";
 import {
   ArrowRight,
+  ArrowUp,
   ArrowUpDown,
   Calendar,
   Database,
@@ -72,6 +73,7 @@ const icons: Record<string, Component> = {
   share: Share2,
   copy: Copy,
   arrow: ArrowRight,
+  up: ArrowUp,
   check: Check,
   info: Info,
   play: Play,
