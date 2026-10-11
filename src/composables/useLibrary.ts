@@ -3,6 +3,12 @@ import { useMediaSelection } from "./useMediaSelection";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { createMockMedia } from "../data/mockMedia";
 import type { MediaItem, MediaKind } from "../types/media";
+import {
+  chooseMetadataSuggestion,
+  metadataSuggestions,
+  normalizeMetadataSearch,
+  type MetadataSuggestion,
+} from "../utils/metadataSearch";
 
 export function useLibrary() {
   const native = isTauri();
@@ -188,19 +194,13 @@ export function useLibrary() {
   );
 
   const suggestions = computed(() => {
-    const parts = search.value.split(";");
-    const query = parts.pop()?.trim().toLocaleLowerCase() ?? "";
-    if (!query) return [];
-    const existing = parts.map((value) => value.trim().toLocaleLowerCase());
-    type Suggestion = { name: string; category: string; copyright?: string };
-    const values = new Map<string, Suggestion>();
-    const add = (value: Suggestion) => {
+    const values = new Map<string, MetadataSuggestion>();
+    const add = (value: MetadataSuggestion) => {
       const normalized = value.name.toLocaleLowerCase();
-      if (normalized.includes(query) && !existing.includes(normalized))
-        values.set(
-          JSON.stringify([value.category, normalized, value.copyright ?? ""]),
-          value,
-        );
+      values.set(
+        JSON.stringify([value.category, normalized, value.copyright ?? ""]),
+        value,
+      );
     };
     if (native) {
       for (const value of nativeSuggestions.value)
@@ -224,27 +224,15 @@ export function useLibrary() {
           add({ ...value, category: "Character" });
       }
     }
-    return [...values.values()]
-      .sort(
-        (a, b) =>
-          a.name.localeCompare(b.name) ||
-          (a.copyright ?? "").localeCompare(b.copyright ?? ""),
-      )
-      .slice(0, 30);
+    return metadataSuggestions(search.value, [...values.values()]);
   });
 
   function commitSearch() {
-    search.value = search.value
-      .split(";")
-      .map((value) => value.trim())
-      .filter(Boolean)
-      .join("; ");
+    search.value = normalizeMetadataSearch(search.value);
     appliedSearch.value = search.value;
   }
   function chooseSuggestion(name: string) {
-    const parts = search.value.split(";");
-    parts.pop();
-    search.value = [...parts, name].join("; ");
+    search.value = chooseMetadataSuggestion(search.value, name);
     commitSearch();
   }
   function addSearch(name: string) {

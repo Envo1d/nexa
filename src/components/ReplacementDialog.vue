@@ -1,0 +1,545 @@
+<script setup lang="ts">
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+} from "vue";
+import { invoke } from "@tauri-apps/api/core";
+import type { MediaItem } from "../types/media";
+import ReplacementFile from "./ReplacementFile.vue";
+import AppIcon from "./AppIcon.vue";
+import {
+  catalogSuggestions,
+  chooseMetadataSuggestion,
+  metadataSuggestions,
+  normalizeMetadataSearch,
+  type MetadataCatalog,
+} from "../utils/metadataSearch";
+
+const props = defineProps<{
+  item: MediaItem;
+  showPreviews: boolean;
+  catalog?: MetadataCatalog;
+}>();
+const emit = defineEmits<{ close: []; replaced: [] }>();
+type NativeFile = Omit<
+  MediaItem,
+  "size" | "width" | "height" | "modifiedAt" | "createdAt" | "artist"
+> & {
+  token: string;
+  revision: string | null;
+  size: number | null;
+  width: number | null;
+  height: number | null;
+  modifiedAt: number | null;
+  createdAt: number | null;
+  artist: string | null;
+};
+type Choice = { item: MediaItem; token: string };
+function choice(file: NativeFile): Choice {
+  return {
+    token: file.token,
+    item: {
+      ...file,
+      id: `replacement-${file.id}`,
+      nativeId: file.id,
+      nativeRevision: file.revision ?? "imported",
+      preview: "",
+      favorite: false,
+      artist: file.artist ?? "",
+      copyrights: [],
+      characters: [],
+      tags: [],
+      size: file.size ?? -1,
+      width: file.width ?? 0,
+      height: file.height ?? 0,
+      modifiedAt: file.modifiedAt ?? 0,
+      createdAt: file.createdAt ?? 0,
+      duration: file.duration == null ? undefined : file.duration / 1000,
+    },
+  };
+}
+const dialog = ref<HTMLElement | null>(null);
+const searchInput = ref<HTMLInputElement | null>(null);
+const source = ref<Choice | null>(null);
+const selected = ref<Choice | null>(null);
+const files = ref<Choice[]>([]);
+const query = ref("");
+const appliedQuery = ref("");
+const searchFocused = ref(false);
+const suggestionIndex = ref(-1);
+const suggestions = computed(() =>
+  metadataSuggestions(query.value, catalogSuggestions(props.catalog)),
+);
+const cursor = ref<string | null>(null);
+const syncWithDisk = ref(false);
+const hasAnnotations = ref(false);
+const loading = ref(true);
+const saving = ref(false);
+const error = ref("");
+const acknowledged = ref(false);
+const busy = computed(() => loading.value || saving.value);
+let version = 0;
+let disposed = false;
+let trigger: HTMLElement | null = null;
+async function load(append = false) {
+  if (saving.value || !source.value) return;
+  const request = ++version;
+  loading.value = true;
+  error.value = "";
+  if (!append) {
+    files.value = [];
+    cursor.value = null;
+  }
+  try {
+    const page = await invoke<{ files: NativeFile[]; next: string | null }>(
+      "get_replacement_candidates",
+      {
+        kind: source.value.item.kind,
+        search: appliedQuery.value,
+        after: append ? cursor.value : null,
+      },
+    );
+    if (disposed || request !== version) return;
+    files.value = append
+      ? [...files.value, ...page.files.map(choice)]
+      : page.files.map(choice);
+    cursor.value = page.next;
+  } catch (cause) {
+    if (!disposed && request === version) error.value = String(cause);
+  } finally {
+    if (!disposed && request === version) loading.value = false;
+  }
+}
+async function reload() {
+  selected.value = null;
+  acknowledged.value = false;
+  loading.value = true;
+  error.value = "";
+  try {
+    const result = await invoke<{
+      file: NativeFile;
+      syncWithDisk: boolean;
+      hasAnnotations: boolean;
+    }>("get_replacement_source", { id: props.item.nativeId });
+    if (disposed) return;
+    source.value = choice(result.file);
+    syncWithDisk.value = result.syncWithDisk;
+    hasAnnotations.value = result.hasAnnotations;
+    await load();
+  } catch (cause) {
+    if (!disposed) error.value = String(cause);
+  } finally {
+    if (!disposed) loading.value = false;
+  }
+}
+watch(query, () => {
+  suggestionIndex.value = -1;
+});
+function commitSearch() {
+  query.value = normalizeMetadataSearch(query.value);
+  appliedQuery.value = query.value;
+  searchFocused.value = false;
+  selected.value = null;
+  acknowledged.value = false;
+  void load();
+}
+function chooseSuggestion(name: string) {
+  query.value = chooseMetadataSuggestion(query.value, name);
+  commitSearch();
+}
+function searchKeydown(event: KeyboardEvent) {
+  if (event.key === "Escape" && searchFocused.value) {
+    event.stopPropagation();
+    searchFocused.value = false;
+  } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    event.preventDefault();
+    const count = suggestions.value.length;
+    suggestionIndex.value = count
+      ? (suggestionIndex.value + (event.key === "ArrowDown" ? 1 : -1) + count) %
+        count
+      : -1;
+    searchFocused.value = true;
+  } else if (event.key === "Enter") {
+    event.preventDefault();
+    const suggestion = searchFocused.value
+      ? suggestions.value[suggestionIndex.value]
+      : undefined;
+    if (suggestion) chooseSuggestion(suggestion.name);
+    else commitSearch();
+  }
+}
+function select(file: Choice) {
+  selected.value = file;
+  acknowledged.value = false;
+  error.value = "";
+}
+async function save() {
+  if (
+    !source.value ||
+    !selected.value ||
+    busy.value ||
+    !acknowledged.value ||
+    error.value
+  )
+    return;
+  saving.value = true;
+  try {
+    await invoke("replace_library_file", {
+      request: {
+        mainId: selected.value.item.nativeId,
+        stageId: source.value.item.nativeId,
+        mainToken: selected.value.token,
+        stageToken: source.value.token,
+        syncWithDisk: syncWithDisk.value,
+      },
+    });
+    emit("replaced");
+    emit("close");
+  } catch (cause) {
+    error.value = `${String(cause)}. If replacement already started, Retry disk synchronization completes recovery before further file actions.`;
+  } finally {
+    saving.value = false;
+  }
+}
+function keyboard(event: KeyboardEvent) {
+  if (event.key === "Escape") {
+    event.preventDefault();
+    if (!saving.value) emit("close");
+  }
+  if (event.key !== "Tab") return;
+  const controls = [
+    ...(dialog.value?.querySelectorAll<HTMLElement>(
+      "button:not(:disabled), input:not(:disabled), [tabindex='0']",
+    ) ?? []),
+  ];
+  const first = controls[0];
+  const last = controls[controls.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last?.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first?.focus();
+  }
+}
+onMounted(async () => {
+  trigger =
+    document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+  dialog.value?.querySelector<HTMLButtonElement>("button")?.focus();
+  await reload();
+  await nextTick();
+  if (!disposed) searchInput.value?.focus();
+});
+onBeforeUnmount(() => {
+  disposed = true;
+  ++version;
+  trigger?.focus();
+});
+</script>
+
+<template>
+  <Teleport to="body">
+    <div class="modal-backdrop" @click.self="!saving && emit('close')">
+      <section
+        ref="dialog"
+        class="replacement-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="replacement-title"
+        :aria-busy="busy"
+        @keydown.stop="keyboard"
+      >
+        <header class="panel-heading">
+          <h2 id="replacement-title">Replace in Main Library</h2>
+          <button
+            type="button"
+            class="icon-button"
+            aria-label="Close replacement"
+            :disabled="saving"
+            @click="emit('close')"
+          >
+            <AppIcon name="close" />
+          </button>
+        </header>
+        <div class="replacement-body">
+          <div v-if="source" class="version-panel">
+            <h3>New version · Stage</h3>
+            <ReplacementFile
+              :item="source.item"
+              :show-previews="showPreviews"
+            />
+          </div>
+          <template v-if="source && !selected">
+            <label class="search-label" for="replacement-search"
+              >Choose the file to replace in Main</label
+            >
+            <div class="metadata-search">
+              <div class="search-box">
+                <AppIcon name="search" :size="17" />
+                <input
+                  id="replacement-search"
+                  ref="searchInput"
+                  v-model="query"
+                  type="text"
+                  placeholder="Metadata, separated by semicolons"
+                  :disabled="saving"
+                  maxlength="128"
+                  role="combobox"
+                  aria-autocomplete="list"
+                  :aria-expanded="searchFocused && suggestions.length > 0"
+                  aria-controls="replacement-suggestions"
+                  :aria-activedescendant="
+                    searchFocused && suggestionIndex >= 0
+                      ? `replacement-option-${suggestionIndex}`
+                      : undefined
+                  "
+                  @focus="searchFocused = true"
+                  @input="searchFocused = true"
+                  @blur="searchFocused = false"
+                  @keydown="searchKeydown"
+                />
+                <button
+                  v-if="query"
+                  type="button"
+                  class="icon-button"
+                  aria-label="Clear replacement search"
+                  :disabled="saving"
+                  @click="
+                    query = '';
+                    commitSearch();
+                    searchInput?.focus();
+                  "
+                >
+                  <AppIcon name="close" :size="14" />
+                </button>
+              </div>
+              <div
+                v-if="searchFocused && suggestions.length"
+                id="replacement-suggestions"
+                class="metadata-suggestions"
+                role="listbox"
+                aria-label="Matching metadata"
+              >
+                <button
+                  v-for="(suggestion, index) in suggestions"
+                  :id="`replacement-option-${index}`"
+                  :key="
+                    JSON.stringify([
+                      suggestion.category,
+                      suggestion.name,
+                      suggestion.copyright,
+                    ])
+                  "
+                  type="button"
+                  role="option"
+                  :aria-selected="suggestionIndex === index"
+                  :class="{ active: suggestionIndex === index }"
+                  @mousedown.prevent
+                  @click="chooseSuggestion(suggestion.name)"
+                >
+                  <span
+                    >{{ suggestion.name
+                    }}{{
+                      suggestion.copyright ? ` (${suggestion.copyright})` : ""
+                    }}</span
+                  ><small>{{ suggestion.category }}</small>
+                </button>
+              </div>
+            </div>
+            <p class="muted">
+              Enter artist, character, copyright or tag names separated by
+              semicolons. Every value must match, just like Main. Press Enter or
+              choose a suggestion to search the entire Main Library.
+            </p>
+            <div class="candidate-list" aria-label="Main Library files">
+              <button
+                v-for="file in files"
+                :key="file.item.id"
+                type="button"
+                class="candidate-button"
+                :disabled="busy"
+                @click="select(file)"
+              >
+                <ReplacementFile
+                  :item="file.item"
+                  :show-previews="showPreviews"
+                />
+              </button>
+            </div>
+            <p v-if="!loading && !files.length && !error" class="muted">
+              No matching files in Main.
+            </p>
+            <button
+              v-if="cursor"
+              type="button"
+              class="secondary-button"
+              :disabled="busy"
+              @click="load(true)"
+            >
+              Load more files
+            </button>
+          </template>
+          <template v-if="selected && source">
+            <div class="version-panel">
+              <h3>Current version · Main</h3>
+              <ReplacementFile
+                :item="selected.item"
+                :show-previews="showPreviews"
+              />
+            </div>
+            <button
+              type="button"
+              class="secondary-button"
+              :disabled="saving"
+              @click="
+                selected = null;
+                acknowledged = false;
+                nextTick(() => searchInput?.focus());
+              "
+            >
+              Choose another file
+            </button>
+            <p>
+              Main keeps its artist, copyrights, characters, tags, favorite,
+              video title and file order. The new content, format and technical
+              details replace the current version.
+            </p>
+            <p v-if="hasAnnotations" class="replacement-warning">
+              The Stage file's existing annotations will be discarded. Main's
+              annotations take precedence.
+            </p>
+            <p v-if="syncWithDisk" class="muted">
+              The new version will move into the managed Library structure
+              through disk synchronization.
+            </p>
+            <p v-else class="muted">
+              Sync with disk is off. The new version stays at its current
+              location and becomes the Main file.
+            </p>
+            <p class="replacement-warning">
+              After the replacement is saved successfully, the old file is
+              permanently deleted. Temporary recovery backups are removed after
+              cleanup.
+            </p>
+            <label class="replacement-confirm"
+              ><input
+                v-model="acknowledged"
+                type="checkbox"
+                :disabled="saving"
+              />
+              Replace this Main file with the selected Stage version.</label
+            >
+          </template>
+          <p v-if="loading" role="status" class="muted">Loading…</p>
+          <p v-if="error" class="error-message" role="alert">{{ error }}</p>
+          <button
+            v-if="error"
+            type="button"
+            class="secondary-button"
+            :disabled="busy"
+            @click="reload"
+          >
+            Reload files
+          </button>
+        </div>
+        <footer class="replacement-footer">
+          <button
+            type="button"
+            class="secondary-button"
+            :disabled="saving"
+            @click="emit('close')"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="primary-button"
+            :disabled="busy || !selected || !acknowledged || Boolean(error)"
+            @click="save"
+          >
+            {{ saving ? "Replacing…" : "Replace file" }}
+          </button>
+        </footer>
+      </section>
+    </div>
+  </Teleport>
+</template>
+
+<style scoped>
+.replacement-dialog {
+  width: min(780px, calc(100vw - 48px));
+  max-height: calc(100dvh - 48px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 24px 80px #0008;
+}
+.replacement-body {
+  overflow-y: auto;
+  min-height: 0;
+  padding: 0 18px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.replacement-body p {
+  line-height: 1.6;
+}
+.version-panel {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.version-panel h3 {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--accent);
+}
+.search-label {
+  font-weight: 600;
+}
+.candidate-list {
+  display: grid;
+  gap: 6px;
+}
+.candidate-button {
+  width: 100%;
+  padding: 10px;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: inherit;
+  cursor: pointer;
+}
+.candidate-button:hover {
+  background: #a786ff15;
+  border-color: var(--accent);
+}
+.replacement-confirm {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  line-height: 1.6;
+}
+.replacement-confirm input {
+  accent-color: var(--accent);
+}
+.replacement-warning {
+  color: #efbc79;
+}
+.replacement-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 18px;
+  border-top: 1px solid var(--line);
+}
+</style>

@@ -81,6 +81,7 @@ export function useNativePreview(
     () => [
       item.value.nativeId,
       item.value.nativeRevision,
+      item.value.path,
       item.value.availability,
       enabled.value,
     ],
@@ -89,7 +90,11 @@ export function useNativePreview(
       const media = item.value;
       if (!enabled.value || !media.nativeId || media.availability === "missing")
         return;
-      const key = `${media.nativeId}:${media.nativeRevision}`;
+      const key = JSON.stringify([
+        media.nativeId,
+        media.nativeRevision,
+        media.path,
+      ]);
       if (failed.has(key)) return;
       const version = generation;
       const active = () => version === generation;

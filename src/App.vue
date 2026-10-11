@@ -23,6 +23,8 @@ import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import SettingsPanel from "./components/SettingsPanel.vue";
 import DistributionDialog from "./components/DistributionDialog.vue";
 import TagsPanel from "./components/TagsPanel.vue";
+import DuplicateOrderDialog from "./components/DuplicateOrderDialog.vue";
+import ReplacementDialog from "./components/ReplacementDialog.vue";
 import { useDemoTaxonomy } from "./composables/useDemoTaxonomy";
 import { useLibrary } from "./composables/useLibrary";
 import { useStage } from "./composables/useStage";
@@ -69,6 +71,12 @@ async function refreshRedistribution() {
   }
 }
 const distributionQueue = ref<MediaItem[]>([]);
+const replacementTarget = ref<MediaItem | null>(null);
+async function replacementCompleted() {
+  stage.clearSelection();
+  await refreshAll();
+  notify("File replaced. Old version deleted.");
+}
 const editingMetadata = ref(false);
 function distribute(item?: MediaItem) {
   editingMetadata.value = false;
@@ -140,6 +148,7 @@ function searchKeydown(event: KeyboardEvent) {
 }
 const tagInput = ref<HTMLInputElement | null>(null);
 const tagTarget = ref<MediaItem | null>(null);
+const orderTarget = ref<MediaItem | null>(null);
 const draftTags = ref<string[]>([]);
 const newTag = ref("");
 const tagError = ref("");
@@ -178,6 +187,14 @@ async function contextAction(action: string) {
   );
   context.value = null;
   if (!item) return;
+  if (action === "Replace in Main Library" && stageContext && item.nativeId) {
+    replacementTarget.value = item;
+    return;
+  }
+  if (action === "Change file order") {
+    orderTarget.value = item;
+    return;
+  }
   if (action === "Edit metadata") {
     editingMetadata.value = true;
     distributionQueue.value = targets.length ? targets : [item];
@@ -453,6 +470,7 @@ function keyboard(event: KeyboardEvent) {
     (event.ctrlKey || event.metaKey) &&
     event.key.toLowerCase() === "f" &&
     !tagTarget.value &&
+    !orderTarget.value &&
     !distributionQueue.value.length &&
     (view.value === "main" || view.value === "stage") &&
     !context.value
@@ -461,6 +479,7 @@ function keyboard(event: KeyboardEvent) {
     nextTick(() => searchInput.value?.focus());
   }
   if (event.key === "Escape") {
+    if (orderTarget.value) return;
     if (distributionQueue.value.length) distributionQueue.value = [];
     else if (tagTarget.value && !tagSaving.value) tagTarget.value = null;
     else if (view.value === "settings" || view.value === "tags")
@@ -1005,6 +1024,24 @@ onBeforeUnmount(() => {
       :y="context.y"
       @close="context = null"
       @action="contextAction"
+    />
+    <DuplicateOrderDialog
+      v-if="orderTarget"
+      :item="orderTarget"
+      :show-previews="showPreviews"
+      @close="orderTarget = null"
+      @saved="
+        notify('File order saved.');
+        library.refresh();
+      "
+    />
+    <ReplacementDialog
+      v-if="replacementTarget"
+      :item="replacementTarget"
+      :catalog="library.catalog.value"
+      :show-previews="showPreviews"
+      @close="replacementTarget = null"
+      @replaced="replacementCompleted"
     />
     <DistributionDialog
       v-if="distributionQueue.length"

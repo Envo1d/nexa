@@ -99,14 +99,17 @@ fn filtered(root: &Option<String>, f: &Filters, prefix: &str) -> QueryBuilder<Sq
     if f.tagged {
         q.push(" AND EXISTS(SELECT 1 FROM media_tags WHERE media_id=m.id)");
     }
-    for value in f.search.split(';').map(str::trim).filter(|v| !v.is_empty()) {
+    apply_metadata_search(&mut q, &f.search);
+    q
+}
+pub(crate) fn apply_metadata_search(q: &mut QueryBuilder<Sqlite>, search: &str) {
+    for value in search.split(';').map(str::trim).filter(|v| !v.is_empty()) {
         let key = name_key(value);
         q.push(" AND (EXISTS(SELECT 1 FROM artists d WHERE d.id=m.artist_id AND d.name_key=").push_bind(key.clone())
             .push(") OR EXISTS(SELECT 1 FROM media_copyrights l JOIN copyrights d ON d.id=l.copyright_id WHERE l.media_id=m.id AND d.name_key=").push_bind(key.clone())
             .push(") OR EXISTS(SELECT 1 FROM media_characters l JOIN characters d ON d.id=l.character_id WHERE l.media_id=m.id AND d.name_key=").push_bind(key.clone())
             .push(") OR EXISTS(SELECT 1 FROM media_tags l JOIN tags d ON d.id=l.tag_id WHERE l.media_id=m.id AND d.name_key=").push_bind(key).push("))");
     }
-    q
 }
 pub(crate) async fn browse(
     pool: &SqlitePool,
