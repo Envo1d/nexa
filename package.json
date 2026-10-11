@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "build:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-windows.ps1",
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
     "lint": "eslint src vite.config.ts eslint.config.js --max-warnings 0",

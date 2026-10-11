@@ -28,6 +28,7 @@ import { useLibrary } from "./composables/useLibrary";
 import { useStage } from "./composables/useStage";
 import { useStageScan } from "./composables/useStageScan";
 import { useCacheUsage } from "./composables/useCacheUsage";
+import { useUpdater } from "./composables/useUpdater";
 const cacheUsage = useCacheUsage();
 let stopCacheUsage: (() => void) | undefined;
 let cacheUsageDisposed = false;
@@ -504,6 +505,7 @@ function trapFocus(event: KeyboardEvent) {
   }
 }
 onMounted(async () => {
+  void useUpdater().checkOnStartup(notify);
   void cacheUsage
     .connect(notify)
     .then((stop) => {
