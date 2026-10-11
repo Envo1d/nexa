@@ -1,0 +1,2 @@
+# Keep embedded migration checksums independent of Git checkout settings.
+src-tauri/migrations/*.sql text eol=lf
