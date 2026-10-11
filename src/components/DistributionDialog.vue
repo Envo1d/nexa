@@ -43,7 +43,7 @@ const resolution = computed(() =>
 const remaining = computed(() => props.items.length - position.value);
 const retain = ref(false);
 const copyrights = ref<MetadataValue[]>([]);
-const artists = ref<MetadataValue[]>([]);
+const artist = ref("");
 const characters = ref<MetadataValue[]>([]);
 const tags = ref<MetadataValue[]>([]);
 const title = ref("");
@@ -66,7 +66,7 @@ const targets = computed(() =>
 );
 const summary = computed<[string, string][]>(() => [
   ["Copyrights", copyrights.value.map((value) => value.name).join(", ")],
-  ["Artist", artists.value.map((value) => value.name).join(", ")],
+  ["Artist", artist.value.trim()],
   [
     "Characters",
     characters.value
@@ -129,10 +129,7 @@ const tagOptions = computed(() =>
 );
 function loadMetadata(item: MediaItem) {
   copyrights.value = values(item.copyrights, false);
-  artists.value = values(
-    item.artists ?? (item.artist ? [item.artist] : []),
-    false,
-  );
+  artist.value = item.artists?.[0] ?? item.artist;
   tags.value = values(item.tags, false);
   const inferCopyright = (name: string) => [
     ...new Set(
@@ -244,11 +241,11 @@ async function process() {
   if (saving.value) return;
   error.value = "";
   if (
-    artists.value.length !== 1 ||
+    !artist.value.trim() ||
     ((allFiles.value ? needsTitle.value : current.value.kind === "video") &&
       !title.value.trim())
   ) {
-    error.value = "Choose exactly one artist and enter a title for videos.";
+    error.value = "Enter an artist and a title for videos.";
     return;
   }
   completedCount.value = targets.value.length;
@@ -256,7 +253,7 @@ async function process() {
     const ids = targets.value.map((item) => item.id);
     const draft = {
       copyrights: copyrights.value.map((value) => value.name),
-      artists: artists.value.map((value) => value.name),
+      artists: [artist.value.trim()],
       characters: characters.value.map((value) => ({
         name: value.name,
         copyright: value.copyright ?? "",
@@ -283,7 +280,7 @@ function nextFile() {
   if (props.editing) loadMetadata(current.value);
   else if (!retain.value) {
     copyrights.value = [];
-    artists.value = [];
+    artist.value = "";
     characters.value = [];
     tags.value = [];
     title.value = "";
@@ -570,12 +567,12 @@ onBeforeUnmount(() => trigger?.focus());
               </p>
               <div class="wizard-fields">
                 <MetadataInput
-                  v-model="artists"
-                  single
+                  v-model:text-value="artist"
+                  text-input
                   label="Artist"
                   :options="artistOptions"
-                  allow-custom
-                /><label v-if="needsTitle" class="distribution-title-input"
+                />
+                <label v-if="needsTitle" class="distribution-title-input"
                   >{{
                     current.kind === "video"
                       ? "Video title"

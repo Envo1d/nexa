@@ -697,7 +697,10 @@ onBeforeUnmount(() => {
         </button>
       </nav>
       <template v-if="view === 'main'">
-        <aside class="filters-panel" aria-label="Library filters">
+        <aside
+          class="filters-panel main-filters-panel"
+          aria-label="Library filters"
+        >
           <header class="panel-heading">
             <h2>Filters</h2>
             <span v-if="activeFilterCount" class="filter-count">{{
@@ -787,9 +790,9 @@ onBeforeUnmount(() => {
               <h3>Sorting</h3>
               <SortSelect v-model="sortMode" />
             </section>
-            <section class="filter-section">
+            <section class="filter-section tag-filter-section">
               <h3>Tags</h3>
-              <div class="filter-tags">
+              <div class="filter-tags" tabindex="0" aria-label="Filter tags">
                 <button
                   v-for="tag in displayedTags"
                   :key="tag.name"

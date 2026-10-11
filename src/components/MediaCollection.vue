@@ -42,6 +42,9 @@ const viewport = ref<HTMLElement | null>(null);
 const width = ref(660);
 const height = ref(600);
 const scrollTop = ref(0);
+const showBackToTop = computed(
+  () => height.value > 0 && scrollTop.value >= height.value * 2 && !drag.value,
+);
 const loaded = ref(36);
 const remSize = ref(13);
 const cardWidth = computed(() => 17.5 * remSize.value);
@@ -238,6 +241,15 @@ function resetScroll() {
   scrollTop.value = 0;
   viewport.value?.scrollTo({ top: 0 });
 }
+function scrollToTop() {
+  viewport.value?.focus({ preventScroll: true });
+  viewport.value?.scrollTo({
+    top: 0,
+    behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      ? "instant"
+      : "smooth",
+  });
+}
 watch(columns, async (count, previous) => {
   if (props.mode !== "grid" || count === previous) return;
   cancelScrollFrame();
@@ -316,90 +328,106 @@ onBeforeUnmount(() => {
         }}</span
       >
     </header>
-    <div
-      ref="viewport"
-      class="collection-scroll"
-      tabindex="0"
-      aria-label="Loaded media"
-      @scroll.passive="onScroll"
-      @pointerdown="startSelection"
-      @pointermove="moveSelection"
-      @pointerup="endSelection"
-      @pointercancel="endSelection"
-      @lostpointercapture="endSelection"
-    >
+    <div class="collection-viewport">
       <div
-        v-if="items.length"
-        class="virtual-space"
-        :style="{ height: `${rowCount * rowHeight}px` }"
+        ref="viewport"
+        class="collection-scroll"
+        tabindex="0"
+        aria-label="Loaded media"
+        @scroll.passive="onScroll"
+        @pointerdown="startSelection"
+        @pointermove="moveSelection"
+        @pointerup="endSelection"
+        @pointercancel="endSelection"
+        @lostpointercapture="endSelection"
       >
         <div
-          class="virtual-items"
-          :class="mode"
-          :style="{
-            transform: `translateY(${startRow * rowHeight}px)`,
-            gridAutoRows: `${rowHeight - gap}px`,
-            gridTemplateColumns:
-              mode === 'grid' ? `repeat(${columns}, 17.5rem)` : undefined,
-          }"
+          v-if="items.length"
+          class="virtual-space"
+          :style="{ height: `${rowCount * rowHeight}px` }"
         >
-          <MediaCard
-            v-for="item in visibleItems"
-            :key="item.id"
-            :item="item"
-            :stage="stage"
-            :show-previews="showPreviews"
-            :mode="mode"
-            :selected="
-              selectedIds
-                ? selectedIds.includes(item.id)
-                : selectedId === item.id
-            "
-            @select="$emit('select', item, $event)"
-            @favorite="$emit('favorite', item)"
-            @context="$emit('context', item, $event)"
-          />
+          <div
+            class="virtual-items"
+            :class="mode"
+            :style="{
+              transform: `translateY(${startRow * rowHeight}px)`,
+              gridAutoRows: `${rowHeight - gap}px`,
+              gridTemplateColumns:
+                mode === 'grid' ? `repeat(${columns}, 17.5rem)` : undefined,
+            }"
+          >
+            <MediaCard
+              v-for="item in visibleItems"
+              :key="item.id"
+              :item="item"
+              :stage="stage"
+              :show-previews="showPreviews"
+              :mode="mode"
+              :selected="
+                selectedIds
+                  ? selectedIds.includes(item.id)
+                  : selectedId === item.id
+              "
+              @select="$emit('select', item, $event)"
+              @favorite="$emit('favorite', item)"
+              @context="$emit('context', item, $event)"
+            />
+          </div>
+        </div>
+        <div
+          v-if="drag"
+          class="selection-rectangle"
+          :style="selectionBox"
+        ></div>
+        <div v-if="!items.length" class="empty-state">
+          <span class="empty-icon"><AppIcon name="search" :size="32" /></span>
+          <h2>
+            {{
+              loading
+                ? "Loading Stage…"
+                : error
+                  ? "Could not load Stage"
+                  : filtered
+                    ? "No matching files"
+                    : stage
+                      ? "No staged files"
+                      : "No favorites yet"
+            }}
+          </h2>
+          <p>
+            {{
+              error ||
+              (loading
+                ? "Reading saved file information…"
+                : filtered
+                  ? "Try another search or adjust your filters."
+                  : stage
+                    ? "Your staging files will appear here."
+                    : "Tap the heart on a file to keep it here.")
+            }}
+          </p>
+          <button v-if="error" class="secondary-button" @click="emit('retry')">
+            Retry
+          </button>
+          <button
+            v-if="filtered"
+            class="secondary-button"
+            @click="$emit('reset')"
+          >
+            Reset filters
+          </button>
         </div>
       </div>
-      <div v-if="drag" class="selection-rectangle" :style="selectionBox"></div>
-      <div v-if="!items.length" class="empty-state">
-        <span class="empty-icon"><AppIcon name="search" :size="32" /></span>
-        <h2>
-          {{
-            loading
-              ? "Loading Stage…"
-              : error
-                ? "Could not load Stage"
-                : filtered
-                  ? "No matching files"
-                  : stage
-                    ? "No staged files"
-                    : "No favorites yet"
-          }}
-        </h2>
-        <p>
-          {{
-            error ||
-            (loading
-              ? "Reading saved file information…"
-              : filtered
-                ? "Try another search or adjust your filters."
-                : stage
-                  ? "Your staging files will appear here."
-                  : "Tap the heart on a file to keep it here.")
-          }}
-        </p>
-        <button v-if="error" class="secondary-button" @click="emit('retry')">
-          Retry
-        </button>
-        <button
-          v-if="filtered"
-          class="secondary-button"
-          @click="$emit('reset')"
-        >
-          Reset filters
-        </button>
-      </div>
+      <button
+        v-if="showBackToTop"
+        type="button"
+        class="back-to-top"
+        title="Back to top"
+        aria-label="Back to top"
+        @click="scrollToTop"
+      >
+        <AppIcon name="up" :size="20" />
+      </button>
     </div>
     <footer class="collection-footer">
       <span

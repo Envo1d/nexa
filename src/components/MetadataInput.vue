@@ -13,18 +13,33 @@ export interface MetadataValue {
   name: string;
   copyright?: string;
 }
-const props = defineProps<{
-  modelValue: MetadataValue[];
-  options: MetadataValue[];
-  label: string;
-  disabled?: boolean;
-  allowCustom?: boolean;
-  customCopyrights?: string[];
-  panel?: boolean;
-  single?: boolean;
+const props = withDefaults(
+  defineProps<{
+    modelValue?: MetadataValue[];
+    textValue?: string;
+    textInput?: boolean;
+    options: MetadataValue[];
+    label: string;
+    disabled?: boolean;
+    allowCustom?: boolean;
+    customCopyrights?: string[];
+    panel?: boolean;
+    single?: boolean;
+  }>(),
+  { modelValue: () => [], textValue: "", customCopyrights: undefined },
+);
+const emit = defineEmits<{
+  "update:modelValue": [values: MetadataValue[]];
+  "update:textValue": [value: string];
 }>();
-const emit = defineEmits<{ "update:modelValue": [values: MetadataValue[]] }>();
-const query = ref("");
+const search = ref("");
+const query = computed({
+  get: () => (props.textInput ? (props.textValue ?? "") : search.value),
+  set: (value: string) => {
+    if (props.textInput) emit("update:textValue", value);
+    else search.value = value;
+  },
+});
 const focused = ref(false);
 const active = ref(-1);
 const input = ref<HTMLInputElement | null>(null);
@@ -35,7 +50,8 @@ const matches = computed(() => {
   return props.options
     .filter(
       (value) =>
-        !props.modelValue.some((selected) => selected.id === value.id) &&
+        (props.textInput ||
+          !props.modelValue.some((selected) => selected.id === value.id)) &&
         value.name.toLocaleLowerCase().includes(name),
     )
     .slice(0, 30);
@@ -48,7 +64,9 @@ const showSuggestions = computed(
     !assignment.value.length,
 );
 const canCreate = computed(
-  () => props.allowCustom || Boolean(props.customCopyrights?.length),
+  () =>
+    !props.textInput &&
+    (props.allowCustom || Boolean(props.customCopyrights?.length)),
 );
 const entry = ref<HTMLElement | null>(null);
 const popup = ref<HTMLElement | null>(null);
@@ -153,6 +171,12 @@ watch(
   },
 );
 function choose(value: MetadataValue) {
+  if (props.textInput) {
+    query.value = value.name;
+    focused.value = false;
+    active.value = -1;
+    return;
+  }
   if (!props.modelValue.some((entry) => entry.id === value.id))
     emit(
       "update:modelValue",
@@ -171,6 +195,10 @@ async function assign(choices: MetadataValue[]) {
   popup.value?.querySelector<HTMLButtonElement>("button")?.focus();
 }
 function commit() {
+  if (props.textInput) {
+    focused.value = false;
+    return;
+  }
   const name = query.value.trim();
   if (!name || props.disabled) return;
   const exact = props.options.filter(
@@ -241,10 +269,12 @@ function keydown(event: KeyboardEvent) {
   <div class="metadata-input" :class="{ 'metadata-panel': panel }">
     <div class="metadata-label">
       <label :for="`distribute-${label}`">{{ label }}</label>
-      <small v-if="modelValue.length">{{ modelValue.length }} selected</small>
+      <small v-if="!textInput && modelValue.length"
+        >{{ modelValue.length }} selected</small
+      >
     </div>
     <div
-      v-if="panel || modelValue.length"
+      v-if="!textInput && (panel || modelValue.length)"
       class="metadata-selected"
       :aria-label="`Selected ${label.toLowerCase()}`"
     >
@@ -288,7 +318,11 @@ function keydown(event: KeyboardEvent) {
             : undefined
         "
         :placeholder="
-          disabled ? 'Choose a copyright first' : `Add ${label.toLowerCase()}…`
+          disabled
+            ? 'Choose a copyright first'
+            : textInput
+              ? `Enter ${label.toLowerCase()}…`
+              : `Add ${label.toLowerCase()}…`
         "
         autocomplete="off"
         @focus="focused = true"
@@ -297,7 +331,7 @@ function keydown(event: KeyboardEvent) {
       />
       <kbd v-if="query.trim() && canCreate">Enter</kbd>
       <button
-        v-if="panel"
+        v-if="panel && !textInput"
         class="metadata-add"
         type="button"
         :aria-label="`Add ${label.toLowerCase()}`"
