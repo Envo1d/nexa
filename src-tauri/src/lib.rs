@@ -10,6 +10,8 @@ pub mod preview_cache;
 mod share;
 mod stage;
 mod taxonomy;
+#[cfg(desktop)]
+mod updater;
 #[cfg(windows)]
 mod windows_com;
 
@@ -87,6 +89,12 @@ pub fn run() {
             app.manage(stage::StageState::new(cache_path));
             app.manage(legacy_import::ImportState::default());
             app.manage(disk_sync::SyncState::default());
+            #[cfg(desktop)]
+            {
+                app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
+                app.manage(updater::UpdateState::default());
+                tracing::info!("Signed updater initialized");
+            }
             if startup.auto_scan {
                 let mut roots = Vec::new();
                 if let Some(root) = startup.library_path {
@@ -105,6 +113,8 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            updater::check_for_updates,
+            updater::install_update,
             config::get_config,
             config::save_config,
             config::open_logs,

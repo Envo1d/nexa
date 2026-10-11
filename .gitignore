@@ -24,4 +24,8 @@ dist-ssr
 *.sw?
 
 AGENTS.md
-/docs
+/docs/*
+!/docs/releases.md
+# Private updater signing material
+*.key
+*.key.pub

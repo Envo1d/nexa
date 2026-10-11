@@ -9,6 +9,8 @@ import SettingsRow from "./SettingsRow.vue";
 import AppIcon from "./AppIcon.vue";
 import { useStageScan } from "../composables/useStageScan";
 import { useCacheUsage } from "../composables/useCacheUsage";
+import { useUpdater } from "../composables/useUpdater";
+const updater = useUpdater();
 const cacheUsage = useCacheUsage();
 const stageScan = useStageScan();
 async function scanStage(library = false) {
@@ -264,7 +266,7 @@ function resetDrafts() {
                 ? "UI preview · Changes are not applied or saved."
                 : saved
                   ? "Settings saved."
-                  : "Changes apply after Save changes. Scanning uses saved directories. Disk synchronization runs in the background when enabled. Updates are not available yet.")
+                  : "Changes apply after Save changes. Scanning uses saved directories. Disk synchronization runs in the background when enabled.")
           }}
         </p>
         <fieldset
@@ -501,9 +503,9 @@ function resetDrafts() {
                 <SettingsRow
                   title="Current version"
                   :description="`Nexa ${version}`"
-                  ><span class="settings-status" role="status"
-                    >Not checked</span
-                  >
+                  ><span class="settings-status" role="status">{{
+                    updater.status.value
+                  }}</span>
                 </SettingsRow>
                 <ToggleSwitch
                   v-model="draft.autoUpdateCheck"
@@ -521,11 +523,34 @@ function resetDrafts() {
                   description="Manually check for a newer version."
                   ><button
                     class="secondary-button"
-                    @click="$emit('preview', 'Check for updates')"
+                    :disabled="updater.busy.value"
+                    @click="updater.check"
                   >
                     <AppIcon name="reset" :size="16" />Check now
                   </button>
                 </SettingsRow>
+                <SettingsRow
+                  v-if="updater.available.value"
+                  title="Install update"
+                  :description="
+                    updater.available.value.notes ||
+                    'Nexa will close and restart during installation. Save unfinished edits first.'
+                  "
+                >
+                  <button
+                    class="secondary-button"
+                    :disabled="updater.busy.value"
+                    @click="updater.install"
+                  >
+                    Install {{ updater.available.value.version }}
+                  </button>
+                </SettingsRow>
+                <progress
+                  v-if="updater.busy.value && updater.downloaded.value > 0"
+                  :value="updater.percent.value ?? undefined"
+                  max="100"
+                  aria-label="Update download progress"
+                />
               </template>
               <SettingsRow
                 v-else
