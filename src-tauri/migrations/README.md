@@ -14,6 +14,8 @@ The Rust database service embeds the `.sql` migrations with `sqlx::migrate!("./m
 
 ## Runtime Behavior
 
+PLAN-086 canonicalizes embedded SQL to LF before applying new migrations; `.gitattributes` also pins SQL checkout endings to LF. Existing versions 1-4 accept exact SHA-384 matches for the same SQL with LF or CRLF, plus the shipped version-2 LF body/final CRLF variant. Compatibility adjusts only the in-memory migrator checksum, never stored history or user metadata. Changed SQL, missing migrations, dirty history and failed pending migrations remain SQLx errors. Setup logs and flushes failures before Tauri can abort the release process. Do not delete a database to recover from a checksum mismatch.
+
 Startup opens only the derived NexaNew database path, creates its parent directory when needed, validates migration history and applies pending migrations before publishing managed database state. It refuses a nonempty schema without SQLx history, rather than assuming it is an empty Nexa database. Failed initialization closes the pool and returns an explicit startup error; it does not delete, reset or fall back to an in-memory database. Migrations are forward-only; automatic downgrade/reset is not supported.
 
 SQLite runs with WAL, synchronous FULL, foreign keys on every connection, a five-second busy timeout and a pool of at most four connections. SQL statement logging is disabled to avoid logging media metadata. Native repositories can use Database::pool() for bound queries and Database::begin() for transactions; they own domain validation and operation errors. Normal Tauri exit explicitly awaits Database::close(). Do not copy only the main database file for a live backup in WAL mode; a future backup feature must use a SQLite-aware protocol.

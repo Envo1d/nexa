@@ -22,6 +22,8 @@ pub fn run() {
     use tauri_plugin_window_state::{AppHandleExt, StateFlags, WindowExt};
     let paths = config::AppPaths::resolve().expect("Could not resolve NexaNew storage");
     let log_guard = logging::init(&paths.logs_path).expect("Could not initialize NexaNew tracing");
+    let log_guard = std::sync::Arc::new(std::sync::Mutex::new(Some(log_guard)));
+    let setup_log_guard = log_guard.clone();
     tracing::info!(version = env!("CARGO_PKG_VERSION"), "Starting NexaNew");
     let builder = tauri::Builder::default();
 
@@ -65,6 +67,7 @@ pub fn run() {
         .plugin(tauri_plugin_os::init())
         .setup(move |app| {
             let _span = tracing::info_span!("application_setup").entered();
+            let result = (|| -> Result<(), Box<dyn std::error::Error>> {
             #[cfg(desktop)]
             {
                 let _span = tracing::info_span!("restore_window_state", window = "main").entered();
@@ -111,6 +114,14 @@ pub fn run() {
             disk_sync::start(app.handle().clone());
             tracing::info!("Application setup completed");
             Ok(())
+            })();
+            if let Err(error) = &result {
+                tracing::error!(%error, "Application setup failed");
+                // Tauri can panic on setup failure during its event loop. Release
+                // uses panic=abort, so flush here while the worker is still alive.
+                drop(setup_log_guard.lock().unwrap().take());
+            }
+            result
         })
         .invoke_handler(tauri::generate_handler![
             updater::check_for_updates,
@@ -158,7 +169,10 @@ pub fn run() {
     });
     match &result {
         Ok(()) => tracing::info!("Application stopped"),
-        Err(error) => tracing::error!(%error, "Application failed"),
+        Err(error) if log_guard.lock().unwrap().is_some() => {
+            tracing::error!(%error, "Application failed")
+        }
+        Err(_) => {}
     }
     // Flush the worker explicitly before a possible panic in aborting release builds.
     drop(log_guard);
