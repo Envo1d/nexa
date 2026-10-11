@@ -561,6 +561,32 @@ async fn prepare(
     Ok(prepared)
 }
 
+fn video_title_from_filename(filename: &str) -> Option<&str> {
+    let stem = Path::new(filename).file_stem()?.to_str()?.trim();
+    let artist_start = stem.rfind(" [")?;
+    let (name, attribution) = stem.split_at(artist_start);
+    let (artist, suffix) = attribution.strip_prefix(" [")?.split_once(']')?;
+    if artist.trim().is_empty() || artist.contains(['[', ']']) {
+        return None;
+    }
+    let suffix = suffix.trim();
+    if !suffix.is_empty() {
+        let index = suffix.strip_prefix("- ")?;
+        if index.is_empty()
+            || !index.bytes().all(|b| b.is_ascii_digit())
+            || index.parse::<u64>().ok()? == 0
+        {
+            return None;
+        }
+    }
+    let (characters, title) = name.split_once(" - ")?;
+    let title = title.trim();
+    if characters.trim().is_empty() || title.is_empty() {
+        return None;
+    }
+    Some(title)
+}
+
 async fn save_batch(
     pool: &SqlitePool,
     source: i64,
@@ -568,6 +594,12 @@ async fn save_batch(
     batch: Vec<Prepared>,
 ) -> Result<(), String> {
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+    let library: bool = sqlx::query_scalar("SELECT kind='library' FROM sources WHERE id=?")
+        .bind(source)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+    let mut recovered_titles = 0;
     for Prepared {
         file,
         metadata,
@@ -587,6 +619,14 @@ async fn save_batch(
             sqlx::query("INSERT INTO video_metadata(media_id,duration_ms,fps_num,fps_den,codec,bitrate_bps) VALUES(?,?,?,?,?,?) ON CONFLICT(media_id) DO UPDATE SET duration_ms=excluded.duration_ms,fps_num=excluded.fps_num,fps_den=excluded.fps_den,codec=excluded.codec,bitrate_bps=excluded.bitrate_bps")
                 .bind(id).bind(value.duration_ms.and_then(|v| i64::try_from(v).ok())).bind(value.frame_rate.map(|v| v.numerator)).bind(value.frame_rate.map(|v| v.denominator)).bind(value.codec).bind(value.bitrate_bps).execute(&mut *tx).await.map_err(|e| e.to_string())?;
         }
+        // Backfill on every Library scan, including unchanged/failed technical extraction.
+        if library
+            && file.kind == MediaKind::Video
+            && let Some(title) = video_title_from_filename(filename)
+        {
+            recovered_titles += sqlx::query("INSERT INTO video_metadata(media_id,title) VALUES(?,?) ON CONFLICT(media_id) DO UPDATE SET title=excluded.title WHERE video_metadata.title IS NULL OR trim(video_metadata.title,char(9)||char(10)||char(13)||' ')=''")
+                    .bind(id).bind(title).execute(&mut *tx).await.map_err(|e| e.to_string())?.rows_affected();
+        }
         sqlx::query("UPDATE media SET stage_search_key=? WHERE id=? AND stage_search_key IS NULL")
             .bind(crate::legacy_import::name_key(
                 &file.path.to_string_lossy().replace('\\', "/"),
@@ -597,6 +637,13 @@ async fn save_batch(
             .map_err(|e| e.to_string())?;
     }
     tx.commit().await.map_err(|e| e.to_string())?;
+    if recovered_titles > 0 {
+        tracing::info!(
+            source_id = source,
+            recovered_titles,
+            "Missing Library video titles recovered from structured filenames"
+        );
+    }
     Ok(())
 }
 
@@ -1242,6 +1289,161 @@ mod tests {
                 .await
                 .unwrap(),
             id
+        );
+        db.close().await;
+    }
+
+    #[tokio::test]
+    async fn library_scan_recovers_titles_for_unchanged_imported_videos_without_overwriting_edits()
+    {
+        let (temp, db, root) = fixture().await;
+        let source = activate_source_for(db.pool(), &root, 1, "library")
+            .await
+            .unwrap();
+        let name = "Alice x Zed - Назва - Part 2 [Artist] - 3.mp4";
+        save_batch(db.pool(), source, 1, vec![prepared(&root, name, 20)])
+            .await
+            .unwrap();
+        let id: i64 = sqlx::query_scalar("SELECT id FROM media")
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+        assert_eq!(
+            sqlx::query_scalar::<_, String>("SELECT title FROM video_metadata")
+                .fetch_one(db.pool())
+                .await
+                .unwrap(),
+            "Назва - Part 2"
+        );
+        // An old import/rescan can already have fresh technical metadata but no title.
+        sqlx::query("UPDATE video_metadata SET title=NULL")
+            .execute(db.pool())
+            .await
+            .unwrap();
+        let files = vec![inspect(root.join(name), &root).unwrap().unwrap()];
+        let mut status = ScanStatus::default();
+        let batch = prepare(db.pool(), source, files, &mut status)
+            .await
+            .unwrap();
+        assert_eq!(status.extracted, 0);
+        save_batch(db.pool(), source, 2, batch).await.unwrap();
+        let row = sqlx::query("SELECT m.id,m.width,v.title,v.duration_ms,v.codec FROM media m JOIN video_metadata v ON v.media_id=m.id").fetch_one(db.pool()).await.unwrap();
+        assert_eq!(row.get::<i64, _>("id"), id);
+        assert_eq!(row.get::<i64, _>("width"), 20);
+        assert_eq!(row.get::<String, _>("title"), "Назва - Part 2");
+        assert_eq!(row.get::<i64, _>("duration_ms"), 1234);
+        assert_eq!(row.get::<String, _>("codec"), "H.264");
+        sqlx::query("UPDATE video_metadata SET title='My edited title'")
+            .execute(db.pool())
+            .await
+            .unwrap();
+        save_batch(db.pool(), source, 3, vec![prepared(&root, name, 30)])
+            .await
+            .unwrap();
+        assert_eq!(
+            sqlx::query_scalar::<_, String>("SELECT title FROM video_metadata")
+                .fetch_one(db.pool())
+                .await
+                .unwrap(),
+            "My edited title"
+        );
+        sqlx::query("DELETE FROM video_metadata")
+            .execute(db.pool())
+            .await
+            .unwrap();
+        let mut unchanged = prepared(&root, name, 30);
+        unchanged.metadata = None;
+        save_batch(db.pool(), source, 4, vec![unchanged])
+            .await
+            .unwrap();
+        sqlx::query("UPDATE video_metadata SET title='\t\r\n'")
+            .execute(db.pool())
+            .await
+            .unwrap();
+        let mut failed = prepared(&root, name, 30);
+        failed.metadata = None;
+        failed.failed = true;
+        save_batch(db.pool(), source, 5, vec![failed])
+            .await
+            .unwrap();
+        db.close().await;
+        let db = Database::open(&temp.path().join("vault.db")).await.unwrap();
+        assert_eq!(
+            sqlx::query_scalar::<_, String>("SELECT title FROM video_metadata")
+                .fetch_one(db.pool())
+                .await
+                .unwrap(),
+            "Назва - Part 2"
+        );
+        db.close().await;
+    }
+
+    #[test]
+    fn parses_only_structured_video_titles_and_keeps_title_punctuation() {
+        for name in [
+            "Alice x Zed - Video name [Artist].mp4",
+            "Alice х Zed - Video name [Artist].mkv",
+            "Alice - Video name [Artist] - 12.webm",
+        ] {
+            assert_eq!(video_title_from_filename(name), Some("Video name"));
+        }
+        assert_eq!(
+            video_title_from_filename("Alice - A [cut] - Part 2 [Artist].mp4"),
+            Some("A [cut] - Part 2")
+        );
+        for name in [
+            "clip.mp4",
+            "Alice [Artist].mp4",
+            "Alice -   [Artist].mp4",
+            " - Title [Artist].mp4",
+            "Alice - Title [].mp4",
+            "Alice - Title [Artist] extra.mp4",
+            "Alice - Title [Artist] - 0.mp4",
+        ] {
+            assert_eq!(video_title_from_filename(name), None, "{name}");
+        }
+    }
+
+    #[tokio::test]
+    async fn title_recovery_ignores_stage_and_unstructured_library_filenames() {
+        let (_temp, db, root) = fixture().await;
+        let source = activate_source(db.pool(), &root, 1).await.unwrap();
+        save_batch(
+            db.pool(),
+            source,
+            1,
+            vec![prepared(&root, "Alice - Title [Artist].mp4", 10)],
+        )
+        .await
+        .unwrap();
+        assert!(
+            sqlx::query_scalar::<_, Option<String>>("SELECT title FROM video_metadata")
+                .fetch_one(db.pool())
+                .await
+                .unwrap()
+                .is_none()
+        );
+        let library_root = root.parent().unwrap().join("Library");
+        std::fs::create_dir(&library_root).unwrap();
+        let library = activate_source_for(db.pool(), &library_root, 2, "library")
+            .await
+            .unwrap();
+        save_batch(
+            db.pool(),
+            library,
+            2,
+            vec![prepared(&library_root, "plain video.mp4", 10)],
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "SELECT count(*) FROM video_metadata WHERE title IS NOT NULL"
+            )
+            .fetch_one(db.pool())
+            .await
+            .unwrap(),
+            0
         );
         db.close().await;
     }
