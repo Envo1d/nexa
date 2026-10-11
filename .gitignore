@@ -29,3 +29,8 @@ AGENTS.md
 # Private updater signing material
 *.key
 *.key.pub
+
+# Public README screenshots
+!/docs/screenshots/
+/docs/screenshots/*
+!/docs/screenshots/main-demo.jpg
