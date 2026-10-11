@@ -7,6 +7,7 @@ mod logging;
 pub mod media_metadata;
 pub mod media_thumbnail;
 pub mod preview_cache;
+mod replacement;
 mod share;
 mod stage;
 mod taxonomy;
@@ -131,6 +132,8 @@ pub fn run() {
             config::open_logs,
             disk_sync::get_disk_sync_status,
             disk_sync::retry_disk_sync,
+            disk_sync::get_duplicate_order,
+            disk_sync::save_duplicate_order,
             legacy_import::find_legacy_database,
             legacy_import::import_legacy_database,
             taxonomy::get_taxonomy,
@@ -140,6 +143,9 @@ pub fn run() {
             stage::start_stage_scan,
             stage::start_library_scan,
             library::get_library_files,
+            replacement::get_replacement_source,
+            replacement::get_replacement_candidates,
+            replacement::replace_library_file,
             library::save_library_metadata,
             library::distribute_files,
             library::set_library_favorite,

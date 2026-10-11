@@ -1,5 +1,19 @@
 # SQLite Migrations
 
+## Replacement Cleanup — Version 7
+
+0007_replacement_cleanup.sql adds a default-zero delete_old policy to replacement intent/history. Previously recorded operations retain their policy; new replacements explicitly request old-original deletion after commit and temporary-backup removal after cleanup. Existing schema/history is preserved. Custom pending/broken migration fixtures now use version 8; application table count stays twelve.
+
+## Recoverable Media Replacement — Version 6
+
+The migration also adds a nullable normalized video-title search key and a trigger that clears it after title changes. Keys are populated lazily in bounded transactions; existing titles remain unchanged.
+
+0006_media_replacements.sql adds durable replacement intent/provenance, commit/completion phases and lookup indexes for pending recovery and retained originals. Main identity and annotations survive Stage retirement and physical rebinding. Disk-off completed rows suppress unchanged originals during scans; disk-on rows retain backup locations. Fresh and version-one upgrade tests include the schema; replacement tests cover reopen recovery and transactional rollback. Custom migration-integrity fixtures now use version 7; they do not edit or load a real application database.
+
+## Duplicate File Order — Version 5
+
+0005_duplicate_order.sql adds nullable media.naming_order_key and nonnegative-or-NULL naming_order. Existing rows preserve stable ID ordering. Matching Library-root/generated-name keys activate saved positions; unmatched/unpositioned records use ID order after positioned members. Domain commands validate group membership and persist all positions transactionally; filesystem changes remain journaled disk reconciliation. Versions 1–4 remain unchanged. Upgrade, rollback and migration-history fixtures now include version 5 and use version 6 for custom pending migrations.
+
 The Rust database service embeds the `.sql` migrations with `sqlx::migrate!("./migrations")`. No SQLx CLI, DATABASE_URL, schema database or migration directory is required on the user's machine. The existing build script watches this directory so new migration files trigger recompilation.
 
 ## Adding a Migration

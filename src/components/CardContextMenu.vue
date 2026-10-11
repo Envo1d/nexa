@@ -37,6 +37,18 @@ const actions = computed<{ label: string; action?: string; icon: string }[]>(
     ...(!props.stage && props.item.kind === "video"
       ? [{ label: "Copy filename", icon: "copy" }]
       : []),
+    ...(props.stage && props.item.nativeId && (props.selectedCount ?? 1) === 1
+      ? [
+          {
+            label: "Replace in Main Library…",
+            action: "Replace in Main Library",
+            icon: "sort",
+          },
+        ]
+      : []),
+    ...(!props.stage && props.item.nativeId
+      ? [{ label: "Change file order", icon: "sort" }]
+      : []),
     {
       label:
         (props.selectedCount ?? 1) > 1

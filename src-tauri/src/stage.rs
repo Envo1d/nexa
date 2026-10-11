@@ -509,7 +509,33 @@ async fn prepare(
         .into_iter()
         .map(|row| (row.get("path_key"), row))
         .collect();
+    let mut retired_query = QueryBuilder::<Sqlite>::new(
+        "SELECT old_relative,old_revision FROM media_replacements WHERE committed=1 AND delete_old=0 AND backup_root IS NULL AND old_source=",
+    );
+    retired_query
+        .push_bind(source)
+        .push(" AND old_relative IN (");
+    let mut paths = retired_query.separated(",");
+    for file in &files {
+        paths.push_bind(&file.relative);
+    }
+    paths.push_unseparated(")");
+    let retired: std::collections::HashSet<(String, String)> = retired_query
+        .build()
+        .fetch_all(pool)
+        .await
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|r| (r.get("old_relative"), r.get("old_revision")))
+        .collect();
     for file in files {
+        if retired.contains(&(file.relative.clone(), file.revision.clone())) {
+            tracing::debug!(
+                source_id = source,
+                "Retained replaced version skipped during scan"
+            );
+            continue;
+        }
         let unchanged = stored.get(&file.relative).is_some_and(|row| {
             row.get::<Option<String>, _>("file_revision").as_deref() == Some(&file.revision)
                 && row.get::<i64, _>("metadata_version") == EXTRACTOR_VERSION
@@ -1133,6 +1159,40 @@ mod tests {
         std::fs::create_dir(&root).unwrap();
         let db = Database::open(&temp.path().join("vault.db")).await.unwrap();
         (temp, db, root)
+    }
+    #[tokio::test]
+    async fn retained_replacement_is_not_reindexed_until_its_revision_changes() {
+        let (_temp, db, root) = fixture().await;
+        let source = activate_source(db.pool(), &root, 1).await.unwrap();
+        let path = root.join("old.bmp");
+        write_bmp(&path, 2);
+        let file = inspect(path.clone(), &root).unwrap().unwrap();
+        sqlx::query("INSERT INTO media_replacements(main_id,stage_id,old_source,old_root,old_relative,old_revision,new_source,new_root,new_relative,new_revision,incoming_filename,library_root,committed,finished) VALUES(1,2,?,?,'old.bmp',?,?,?,'new.bmp','new','new.bmp',?,1,1)")
+            .bind(source).bind(root.to_str().unwrap()).bind(&file.revision).bind(source).bind(root.to_str().unwrap()).bind(root.to_str().unwrap()).execute(db.pool()).await.unwrap();
+        let mut status = ScanStatus::default();
+        let result = prepare(db.pool(), source, vec![file], &mut status)
+            .await
+            .unwrap();
+        assert!(result.is_empty());
+        save_batch(db.pool(), source, 2, result).await.unwrap();
+        let count: i64 = sqlx::query_scalar("SELECT count(*) FROM media")
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+        assert_eq!(count, 0);
+        write_bmp(&path, 5);
+        let file = inspect(path, &root).unwrap().unwrap();
+        let result = prepare(db.pool(), source, vec![file], &mut status)
+            .await
+            .unwrap();
+        assert_eq!(result.len(), 1);
+        save_batch(db.pool(), source, 3, result).await.unwrap();
+        let count: i64 = sqlx::query_scalar("SELECT count(*) FROM media")
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+        assert_eq!(count, 1);
+        db.close().await;
     }
     fn write_bmp(path: &Path, width: u32) {
         let row = (width * 3).div_ceil(4) * 4;

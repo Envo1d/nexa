@@ -172,7 +172,7 @@ fn relative(root: &Path, value: &str, create: bool) -> Result<PathBuf, String> {
     }
     Ok(current)
 }
-fn revision(path: &Path) -> Result<String, String> {
+pub(crate) fn revision(path: &Path) -> Result<String, String> {
     let metadata = fs::metadata(path).map_err(|e| e.to_string())?;
     Ok(format!(
         "{}:{:?}",
@@ -180,7 +180,7 @@ fn revision(path: &Path) -> Result<String, String> {
         metadata.modified().map_err(|e| e.to_string())?
     ))
 }
-fn equal_files(a: &Path, b: &Path) -> Result<bool, String> {
+pub(crate) fn equal_files(a: &Path, b: &Path) -> Result<bool, String> {
     if fs::metadata(a).map_err(|e| e.to_string())?.len()
         != fs::metadata(b).map_err(|e| e.to_string())?.len()
     {
@@ -393,16 +393,19 @@ struct Target {
     extension: String,
     current_root: String,
     current_relative: String,
+    position: Option<i64>,
+    kind: String,
+    revision: Option<String>,
 }
-async fn targets(
+async fn grouped_targets(
     pool: &SqlitePool,
     root: &str,
     settings: &AppConfig,
-) -> Result<Vec<(i64, String, String, String)>, String> {
+) -> Result<BTreeMap<String, Vec<Target>>, String> {
     let mut groups: BTreeMap<String, Vec<Target>> = BTreeMap::new();
     let mut cursor = 0;
     loop {
-        let rows = sqlx::query("SELECT m.id,m.kind,m.extension,m.original_filename,m.relative_path,s.root_path,a.name artist,v.title FROM media m JOIN sources s ON s.id=m.source_id JOIN artists a ON a.id=m.artist_id LEFT JOIN video_metadata v ON v.media_id=m.id WHERE m.id>? AND m.availability='present' AND m.needs_distribution=0 AND (m.library_assignment=? OR (s.kind='library' AND s.path_key=?)) ORDER BY m.id LIMIT 128").bind(cursor).bind(root).bind(root).fetch_all(pool).await.map_err(|e| e.to_string())?;
+        let rows = sqlx::query("SELECT m.id,m.kind,m.extension,m.original_filename,m.relative_path,m.file_revision,m.naming_order_key,m.naming_order,s.root_path,a.name artist,v.title FROM media m JOIN sources s ON s.id=m.source_id JOIN artists a ON a.id=m.artist_id LEFT JOIN video_metadata v ON v.media_id=m.id WHERE m.id>? AND m.availability='present' AND m.needs_distribution=0 AND (m.library_assignment=? OR (s.kind='library' AND s.path_key=?)) ORDER BY m.id LIMIT 128").bind(cursor).bind(root).bind(root).fetch_all(pool).await.map_err(|e| e.to_string())?;
         if rows.is_empty() {
             break;
         }
@@ -459,6 +462,14 @@ async fn targets(
                 );
             }
             let key = name_key(&folder.join(format!("{stem}.{extension}")).to_string_lossy());
+            let key = serde_json::to_string(&(root, key)).map_err(|e| e.to_string())?;
+            let position = if row.get::<Option<String>, _>("naming_order_key").as_deref()
+                == Some(key.as_str())
+            {
+                row.get::<Option<i64>, _>("naming_order")
+            } else {
+                None
+            };
             groups.entry(key).or_default().push(Target {
                 id,
                 folder,
@@ -466,9 +477,24 @@ async fn targets(
                 extension,
                 current_root: row.get("root_path"),
                 current_relative: row.get("relative_path"),
+                position,
+                kind: row.get("kind"),
+                revision: row.get("file_revision"),
             });
         }
     }
+    for group in groups.values_mut() {
+        group.sort_by_key(|target| (target.position.is_none(), target.position, target.id));
+    }
+    Ok(groups)
+}
+
+async fn targets(
+    pool: &SqlitePool,
+    root: &str,
+    settings: &AppConfig,
+) -> Result<Vec<(i64, String, String, String)>, String> {
+    let groups = grouped_targets(pool, root, settings).await?;
     let mut result = Vec::new();
     for group in groups.into_values() {
         let count = group.len();
@@ -532,6 +558,132 @@ async fn reconcile(app: &tauri::AppHandle, status: &mut Status) -> Result<(), St
     if app.state::<ConfigStore>().snapshot()?.settings != settings {
         request(app);
     }
+    Ok(())
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OrderFile {
+    id: String,
+    filename: String,
+    kind: String,
+    revision: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OrderGroup {
+    key: String,
+    files: Vec<OrderFile>,
+}
+
+async fn find_order_group(
+    pool: &SqlitePool,
+    root: &str,
+    settings: &AppConfig,
+    id: i64,
+) -> Result<(String, Vec<Target>), String> {
+    grouped_targets(pool, root, settings)
+        .await?
+        .into_iter()
+        .find(|(_, group)| group.iter().any(|file| file.id == id))
+        .ok_or_else(|| "File no longer belongs to a managed Library group".into())
+}
+
+#[tauri::command]
+#[tracing::instrument(skip_all, err)]
+pub async fn get_duplicate_order(
+    id: String,
+    database: tauri::State<'_, Database>,
+    state: tauri::State<'_, StageState>,
+    config: tauri::State<'_, ConfigStore>,
+) -> Result<OrderGroup, String> {
+    let id = id.parse::<i64>().map_err(|_| "Invalid media ID")?;
+    let _guard = state.operation().await;
+    recover(database.pool()).await?;
+    let settings = config.snapshot()?.settings;
+    let root = settings
+        .library_path
+        .as_ref()
+        .and_then(|p| p.to_str())
+        .ok_or("Library is not configured")?;
+    let (key, group) = find_order_group(database.pool(), root, &settings, id).await?;
+    tracing::debug!(files = group.len(), "Duplicate order group loaded");
+    let files = group
+        .into_iter()
+        .map(|target| {
+            Ok(OrderFile {
+                id: target.id.to_string(),
+                filename: Path::new(&target.current_relative)
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .ok_or("Invalid media filename")?
+                    .to_owned(),
+                kind: target.kind,
+                revision: target.revision,
+            })
+        })
+        .collect::<Result<_, String>>()?;
+    Ok(OrderGroup { key, files })
+}
+
+async fn persist_order(
+    pool: &SqlitePool,
+    root: &str,
+    settings: &AppConfig,
+    key: &str,
+    expected_ids: &[String],
+    ids: &[String],
+) -> Result<(), String> {
+    let anchor = expected_ids
+        .first()
+        .ok_or("Empty order group")?
+        .parse::<i64>()
+        .map_err(|_| "Invalid media ID")?;
+    let (current_key, group) = find_order_group(pool, root, settings, anchor).await?;
+    let current: Vec<String> = group.iter().map(|file| file.id.to_string()).collect();
+    let members: std::collections::HashSet<&String> = ids.iter().collect();
+    if current_key != key || current != expected_ids {
+        return Err("The group changed. Reload it before saving the order.".into());
+    }
+    if ids.len() != current.len()
+        || members.len() != ids.len()
+        || !current.iter().all(|id| members.contains(id))
+    {
+        return Err("Order must contain every group member exactly once".into());
+    }
+    let mut transaction = pool.begin().await.map_err(|e| e.to_string())?;
+    for (position, id) in ids.iter().enumerate() {
+        sqlx::query("UPDATE media SET naming_order_key=?,naming_order=?,updated_at=CAST(unixepoch('subsec')*1000 AS INTEGER) WHERE id=?")
+            .bind(key).bind(position as i64).bind(id).execute(&mut *transaction).await.map_err(|e| e.to_string())?;
+    }
+    transaction.commit().await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+#[tracing::instrument(skip_all, fields(files = ids.len()), err)]
+pub async fn save_duplicate_order(
+    app: tauri::AppHandle,
+    key: String,
+    expected_ids: Vec<String>,
+    ids: Vec<String>,
+    database: tauri::State<'_, Database>,
+    state: tauri::State<'_, StageState>,
+    config: tauri::State<'_, ConfigStore>,
+) -> Result<(), String> {
+    tracing::info!("Duplicate order save started");
+    let _guard = state.operation().await;
+    recover(database.pool()).await?;
+    let settings = config.snapshot()?.settings;
+    let root = settings
+        .library_path
+        .as_ref()
+        .and_then(|p| p.to_str())
+        .ok_or("Library is not configured")?;
+    persist_order(database.pool(), root, &settings, &key, &expected_ids, &ids).await?;
+    request(&app);
+    tracing::info!("Duplicate order saved; disk reconciliation requested");
     Ok(())
 }
 
@@ -640,6 +792,7 @@ async fn execute_plan(
 }
 
 pub(crate) async fn recover(pool: &SqlitePool) -> Result<(), String> {
+    crate::replacement::recover(pool).await?;
     let pending: Vec<Operation> = sqlx::query_as("SELECT * FROM file_operations ORDER BY media_id")
         .fetch_all(pool)
         .await
@@ -709,6 +862,129 @@ mod tests {
         Path::new(root)
             .join("Alpha/Artist")
             .join(format!("Alice х Zed [Artist] - {index}.png"))
+    }
+
+    #[tokio::test]
+    async fn video_order_survives_swaps_reopen_and_batch_deletion_without_content_changes() {
+        let (temp, db, root, stage) = fixture().await;
+        fs::write(
+            Path::new(&stage).join("capture-5.png"),
+            b"independent content 5",
+        )
+        .unwrap();
+        sqlx::raw_sql("INSERT INTO media(id,source_id,artist_id,relative_path,path_key,original_filename,kind,extension,last_seen_at,created_at,updated_at,library_assignment) SELECT 5,source_id,artist_id,'capture-5.png','capture-5.png','capture-5.png',kind,extension,last_seen_at,created_at,updated_at,library_assignment FROM media WHERE id=1; INSERT INTO media_copyrights VALUES(5,1),(5,2); INSERT INTO media_characters VALUES(5,1,1),(5,2,2); UPDATE media SET kind='video',extension='mp4'; INSERT INTO video_metadata(media_id,title) SELECT id,'Clip' FROM media;").execute(db.pool()).await.unwrap();
+        let settings = AppConfig::default();
+        run(db.pool(), &root, &settings).await;
+        let (key, _) = find_order_group(db.pool(), &root, &settings, 3)
+            .await
+            .unwrap();
+        let expected: Vec<String> = (1..=5).map(|id| id.to_string()).collect();
+        let ordered: Vec<String> = [1, 3, 2, 4, 5]
+            .into_iter()
+            .map(|id| id.to_string())
+            .collect();
+        persist_order(db.pool(), &root, &settings, &key, &expected, &ordered)
+            .await
+            .unwrap();
+        let filename = |index| {
+            Path::new(&root)
+                .join("Alpha/Artist/Videos")
+                .join(format!("Alice х Zed - Clip [Artist] - {index}.mp4"))
+        };
+        // Saving does not rename on disk; the coordinator applies it later.
+        assert_eq!(fs::read(filename(2)).unwrap(), b"independent content 2");
+        db.close().await;
+        let db = Database::open(&temp.path().join("vault.db")).await.unwrap();
+        run(db.pool(), &root, &settings).await;
+        run(db.pool(), &root, &settings).await;
+        for (index, id) in [1, 3, 2, 4, 5].into_iter().enumerate() {
+            assert_eq!(
+                fs::read(filename(index + 1)).unwrap(),
+                format!("independent content {id}").as_bytes()
+            );
+        }
+        assert!(
+            persist_order(db.pool(), &root, &settings, &key, &expected, &expected)
+                .await
+                .is_err()
+        );
+        fs::remove_file(filename(2)).unwrap();
+        fs::remove_file(filename(3)).unwrap();
+        sqlx::query("DELETE FROM media WHERE id IN (2,3)")
+            .execute(db.pool())
+            .await
+            .unwrap();
+        run(db.pool(), &root, &settings).await;
+        for (index, id) in [1, 4, 5].into_iter().enumerate() {
+            assert_eq!(
+                fs::read(filename(index + 1)).unwrap(),
+                format!("independent content {id}").as_bytes()
+            );
+        }
+        assert!(!filename(4).exists());
+        assert!(!filename(5).exists());
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM file_operations")
+                .fetch_one(db.pool())
+                .await
+                .unwrap(),
+            0
+        );
+    }
+
+    #[tokio::test]
+    async fn order_rejects_invalid_or_changed_groups_and_appends_new_members() {
+        let (_temp, db, root, _stage) = fixture().await;
+        let settings = AppConfig::default();
+        let (key, _) = find_order_group(db.pool(), &root, &settings, 1)
+            .await
+            .unwrap();
+        let expected: Vec<String> = (1..=4).map(|id| id.to_string()).collect();
+        for invalid in [
+            vec!["1", "2", "3"],
+            vec!["1", "2", "3", "3"],
+            vec!["1", "2", "3", "99"],
+        ] {
+            let ids = invalid.into_iter().map(String::from).collect::<Vec<_>>();
+            assert!(
+                persist_order(db.pool(), &root, &settings, &key, &expected, &ids)
+                    .await
+                    .is_err()
+            );
+        }
+        let ordered: Vec<String> = [4, 3, 2, 1].into_iter().map(|id| id.to_string()).collect();
+        persist_order(db.pool(), &root, &settings, &key, &expected, &ordered)
+            .await
+            .unwrap();
+        sqlx::raw_sql("INSERT INTO media(id,source_id,artist_id,relative_path,path_key,original_filename,kind,extension,last_seen_at,created_at,updated_at,library_assignment) SELECT 5,source_id,artist_id,'new.png','new.png','new.png',kind,extension,last_seen_at,created_at,updated_at,library_assignment FROM media WHERE id=1; INSERT INTO media_copyrights VALUES(5,1),(5,2); INSERT INTO media_characters VALUES(5,1,1),(5,2,2);").execute(db.pool()).await.unwrap();
+        let (_, group) = find_order_group(db.pool(), &root, &settings, 1)
+            .await
+            .unwrap();
+        assert_eq!(
+            group.iter().map(|file| file.id).collect::<Vec<_>>(),
+            [4, 3, 2, 1, 5]
+        );
+        assert!(
+            persist_order(db.pool(), &root, &settings, &key, &ordered, &ordered)
+                .await
+                .is_err()
+        );
+        let changed = AppConfig {
+            character_separator: " + ".into(),
+            ..settings
+        };
+        let (_, group) = find_order_group(db.pool(), &root, &changed, 1)
+            .await
+            .unwrap();
+        assert_eq!(
+            group.iter().map(|file| file.id).collect::<Vec<_>>(),
+            [1, 2, 3, 4, 5]
+        );
+        assert!(
+            persist_order(db.pool(), &root, &changed, &key, &expected, &expected)
+                .await
+                .is_err()
+        );
     }
     #[tokio::test]
     async fn sorts_primary_copyright_preserves_contents_and_compacts_single_and_batch_deletions() {

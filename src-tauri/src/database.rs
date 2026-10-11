@@ -247,6 +247,21 @@ mod tests {
             include_str!("../migrations/0004_disk_sync.sql"),
         )
         .unwrap();
+        std::fs::write(
+            directory.join("0005_duplicate_order.sql"),
+            include_str!("../migrations/0005_duplicate_order.sql"),
+        )
+        .unwrap();
+        std::fs::write(
+            directory.join("0006_media_replacements.sql"),
+            include_str!("../migrations/0006_media_replacements.sql"),
+        )
+        .unwrap();
+        std::fs::write(
+            directory.join("0007_replacement_cleanup.sql"),
+            include_str!("../migrations/0007_replacement_cleanup.sql"),
+        )
+        .unwrap();
         directory
     }
 
@@ -258,6 +273,7 @@ mod tests {
             let path = root.path().join("vault.db");
             let migrations: Vec<_> = MIGRATOR
                 .iter()
+                .filter(|migration| migration.version <= 4)
                 .map(|migration| {
                     let lf = migration.sql.as_str().replace("\r\n", "\n");
                     let sql = match style {
@@ -293,7 +309,7 @@ mod tests {
 
             let directory = migration_directory(root.path());
             std::fs::write(
-                directory.join("0005_marker.sql"),
+                directory.join("0008_marker.sql"),
                 "CREATE TABLE upgrade_marker(id INTEGER PRIMARY KEY);\r\n",
             )
             .unwrap();
@@ -321,7 +337,7 @@ mod tests {
             assert_eq!(title, "Video");
             assert_eq!(
                 count(database.pool(), "SELECT count(*) FROM _sqlx_migrations").await,
-                5
+                8
             );
             database.close().await;
             let database = Database::open_with_migrator(&path, &migrator)
@@ -375,6 +391,59 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn upgrades_version_five_preserving_annotations_order_and_history() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("vault.db");
+        let migrator = Migrator {
+            migrations: MIGRATOR
+                .iter()
+                .filter(|m| m.version <= 5)
+                .cloned()
+                .collect::<Vec<_>>()
+                .into(),
+            ..Migrator::DEFAULT
+        };
+        let db = Database::open_with_migrator(&path, &migrator)
+            .await
+            .unwrap();
+        seed(db.pool()).await;
+        sqlx::query(
+            "UPDATE media SET naming_order_key='group',naming_order=4,favorite=1 WHERE id=1",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        let history: Vec<(i64, Vec<u8>)> =
+            sqlx::query_as("SELECT version,checksum FROM _sqlx_migrations ORDER BY version")
+                .fetch_all(db.pool())
+                .await
+                .unwrap();
+        db.close().await;
+        let db = Database::open(&path).await.unwrap();
+        let preserved: Vec<(i64, Vec<u8>)> = sqlx::query_as(
+            "SELECT version,checksum FROM _sqlx_migrations WHERE version<=5 ORDER BY version",
+        )
+        .fetch_all(db.pool())
+        .await
+        .unwrap();
+        assert_eq!(history, preserved);
+        assert_eq!(count(db.pool(),"SELECT count(*) FROM media WHERE id=1 AND naming_order_key='group' AND naming_order=4 AND favorite=1 AND artist_id=1").await,1);
+        assert_eq!(
+            count(db.pool(), "SELECT count(*) FROM media_characters").await,
+            1
+        );
+        assert_eq!(
+            count(db.pool(), "SELECT count(*) FROM media_replacements").await,
+            0
+        );
+        assert_eq!(
+            count(db.pool(), "SELECT count(*) FROM _sqlx_migrations").await,
+            7
+        );
+        db.close().await;
+    }
+
+    #[tokio::test]
     async fn initializes_domain_and_operation_tables_and_preserves_data_on_reopen() {
         let root = tempfile::tempdir().unwrap();
         let path = root.path().join("данные 日本/database/vault.db");
@@ -382,7 +451,7 @@ mod tests {
         assert!(path.is_file());
         assert_eq!(
             count(database.pool(), "SELECT count(*) FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name <> '_sqlx_migrations'").await,
-            11
+            12
         );
         assert_eq!(
             count(
@@ -411,7 +480,7 @@ mod tests {
         let database = Database::open(&path).await.unwrap();
         assert_eq!(
             count(database.pool(), "SELECT count(*) FROM _sqlx_migrations").await,
-            4
+            7
         );
         assert_eq!(
             count(
@@ -691,7 +760,7 @@ mod tests {
         database.close().await;
         let directory = migration_directory(root.path());
         std::fs::write(
-            directory.join("0005_upgrade.sql"),
+            directory.join("0008_upgrade.sql"),
             "CREATE TABLE upgrade_marker(id INTEGER PRIMARY KEY) STRICT;",
         )
         .unwrap();
@@ -705,7 +774,7 @@ mod tests {
                 "SELECT count(*) FROM _sqlx_migrations WHERE success = 1"
             )
             .await,
-            5
+            8
         );
         assert_eq!(
             count(database.pool(), "SELECT count(*) FROM media").await,
@@ -726,7 +795,7 @@ mod tests {
         database.close().await;
         let directory = migration_directory(root.path());
         std::fs::write(
-            directory.join("0005_broken.sql"),
+            directory.join("0008_broken.sql"),
             "CREATE TABLE rollback_marker(id INTEGER PRIMARY KEY); DELETE FROM media; INVALID SQL;",
         )
         .unwrap();
@@ -742,7 +811,7 @@ mod tests {
         );
         assert_eq!(
             count(database.pool(), "SELECT count(*) FROM _sqlx_migrations").await,
-            4
+            7
         );
         assert_eq!(
             count(
