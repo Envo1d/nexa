@@ -61,6 +61,7 @@ jobs:
           releaseBody: Download the Windows setup executable to install Nexa.
           releaseDraft: true
           prerelease: false
-          args: --locked --bundles nsis
+          # Tauri options precede --; Cargo options follow it.
+          args: --bundles nsis -- --locked
           uploadUpdaterJson: true
           updaterJsonPreferNsis: true
