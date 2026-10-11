@@ -192,33 +192,47 @@ export function useLibrary() {
     const query = parts.pop()?.trim().toLocaleLowerCase() ?? "";
     if (!query) return [];
     const existing = parts.map((value) => value.trim().toLocaleLowerCase());
-    if (native)
-      return nativeSuggestions.value
-        .filter(
-          (value) =>
-            value.name.toLocaleLowerCase().includes(query) &&
-            !existing.includes(value.name.toLocaleLowerCase()),
-        )
-        .slice(0, 30);
-    const values = new Map<string, { name: string; category: string }>();
-    for (const item of scopedMedia.value) {
-      for (const [category, names] of [
-        ["Copyright", item.copyrights],
-        ["Artist", item.artists ?? [item.artist]],
-        ["Character", item.characters],
-        ["Tag", item.tags],
-      ] as const) {
-        for (const name of names) {
-          const normalized = name.toLocaleLowerCase();
-          if (normalized.includes(query) && !existing.includes(normalized))
-            values.set(`${category}:${normalized}`, { name, category });
+    type Suggestion = { name: string; category: string; copyright?: string };
+    const values = new Map<string, Suggestion>();
+    const add = (value: Suggestion) => {
+      const normalized = value.name.toLocaleLowerCase();
+      if (normalized.includes(query) && !existing.includes(normalized))
+        values.set(
+          JSON.stringify([value.category, normalized, value.copyright ?? ""]),
+          value,
+        );
+    };
+    if (native) {
+      for (const value of nativeSuggestions.value)
+        if (value.category !== "Character") add(value);
+      for (const value of characterCatalog.value)
+        add({ ...value, category: "Character" });
+    } else {
+      for (const item of scopedMedia.value) {
+        for (const [category, names] of [
+          ["Copyright", item.copyrights],
+          ["Artist", item.artists ?? [item.artist]],
+          ["Tag", item.tags],
+        ] as const) {
+          for (const name of names) add({ name, category });
         }
+        for (const value of item.characterCopyrights ??
+          item.characters.map((name) => ({
+            name,
+            copyright: item.copyrights[0] ?? "",
+          })))
+          add({ ...value, category: "Character" });
       }
     }
     return [...values.values()]
-      .sort((a, b) => a.name.localeCompare(b.name))
+      .sort(
+        (a, b) =>
+          a.name.localeCompare(b.name) ||
+          (a.copyright ?? "").localeCompare(b.copyright ?? ""),
+      )
       .slice(0, 30);
   });
+
   function commitSearch() {
     search.value = search.value
       .split(";")

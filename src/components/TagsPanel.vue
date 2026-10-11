@@ -14,18 +14,31 @@ const props = defineProps<{
     category: TaxonomyCategory,
     old: string,
     replacement?: string,
+    copyright?: string,
   ) => number;
 }>();
 const emit = defineEmits<{ changed: []; notice: [message: string] }>();
 const native = isTauri();
-const catalog = ref<TaxonomyCatalog>({ copyrights: [], artists: [], tags: [] });
+const catalog = ref<TaxonomyCatalog>({
+  copyrights: [],
+  artists: [],
+  tags: [],
+  characters: [],
+});
 const category = ref<TaxonomyCategory>("copyright");
 const categories = [
   { id: "copyright", label: "Copyrights", key: "copyrights" },
   { id: "artist", label: "Artists", key: "artists" },
+  { id: "character", label: "Characters", key: "characters" },
   { id: "tag", label: "Tags", key: "tags" },
 ] as const;
+const repeatedOnly = ref(false);
 const search = ref("");
+const searchInput = ref<HTMLInputElement | null>(null);
+function clearSearch() {
+  search.value = "";
+  searchInput.value?.focus();
+}
 const loading = ref(false);
 const busy = ref(false);
 const error = ref("");
@@ -34,11 +47,31 @@ const pending = ref<{ entry: TaxonomyEntry; action: "edit" | "delete" } | null>(
 );
 const name = ref("");
 const data = computed(() => (native ? catalog.value : props.demoCatalog));
+const characterNameKey = (name: string) =>
+  name.normalize("NFC").toLocaleLowerCase();
+const repeatedNames = computed(() => {
+  const copyrightsByName = new Map<string, Set<string>>();
+  for (const entry of data.value.characters) {
+    const key = characterNameKey(entry.name);
+    const copyrights = copyrightsByName.get(key) ?? new Set<string>();
+    copyrights.add(entry.copyright ?? "");
+    copyrightsByName.set(key, copyrights);
+  }
+  return new Set(
+    [...copyrightsByName]
+      .filter(([, copyrights]) => copyrights.size > 1)
+      .map(([name]) => name),
+  );
+});
 const entries = computed(() =>
-  data.value[categoryKey[category.value]].filter((entry) =>
-    entry.name
-      .toLocaleLowerCase()
-      .includes(search.value.trim().toLocaleLowerCase()),
+  data.value[categoryKey[category.value]].filter(
+    (entry) =>
+      (category.value !== "character" ||
+        !repeatedOnly.value ||
+        repeatedNames.value.has(characterNameKey(entry.name))) &&
+      `${entry.name} ${entry.copyright ?? ""}`
+        .toLocaleLowerCase()
+        .includes(search.value.trim().toLocaleLowerCase()),
   ),
 );
 async function load() {
@@ -58,7 +91,7 @@ function begin(entry: TaxonomyEntry, action: "edit" | "delete") {
   name.value = entry.name;
   error.value = "";
 }
-watch([category, search], () => {
+watch([category, search, repeatedOnly], () => {
   pending.value = null;
   error.value = "";
 });
@@ -86,6 +119,7 @@ async function apply() {
         category.value,
         operation.entry.name,
         operation.action === "edit" ? name.value : undefined,
+        operation.entry.copyright,
       );
     pending.value = null;
     emit("changed");
@@ -115,7 +149,7 @@ onMounted(load);
       <div>
         <h1>Tags</h1>
         <p class="muted">
-          Manage copyrights, artists and tags across your library.
+          Manage copyrights, artists, characters and tags across your library.
         </p>
       </div>
       <button
@@ -142,17 +176,35 @@ onMounted(load);
       </nav>
       <div class="search-box">
         <AppIcon name="search" :size="17" /><input
+          ref="searchInput"
           v-model="search"
           :disabled="busy"
           aria-label="Search dictionary"
           placeholder="Search names…"
         />
+        <button
+          v-if="search"
+          type="button"
+          class="icon-button"
+          :disabled="busy"
+          aria-label="Clear search"
+          title="Clear search"
+          @click="clearSearch"
+        >
+          <AppIcon name="close" :size="16" />
+        </button>
       </div>
     </div>
+    <label v-if="category === 'character'" class="taxonomy-repeat-filter">
+      <input v-model="repeatedOnly" type="checkbox" :disabled="busy" />
+      Same name in different copyrights only
+      <span class="muted">({{ repeatedNames.size }} repeated names)</span>
+    </label>
     <p class="taxonomy-note muted">
       Deleting a copyright or artist sends linked files to Stage for
       redistribution. Files stay at their current paths, including when disk
-      synchronization is enabled. Deleting a tag only removes its links.
+      synchronization is enabled. Deleting a tag or character only removes that
+      entry and its links.
     </p>
     <p v-if="!native" class="muted">
       Demo library · changes last for this session.
@@ -167,7 +219,11 @@ onMounted(load);
         Loading dictionaries…
       </p>
       <p v-else-if="!entries.length" class="taxonomy-empty muted">
-        {{ search ? "No matching names." : "No entries in this category yet." }}
+        {{
+          search || (category === "character" && repeatedOnly)
+            ? "No matching names."
+            : "No entries in this category yet."
+        }}
       </p>
       <template v-else>
         <article
@@ -178,7 +234,9 @@ onMounted(load);
           <div class="taxonomy-entry-main">
             <AppIcon name="tag" :size="18" />
             <div class="taxonomy-entry-label">
-              <strong>{{ entry.name }}</strong
+              <strong
+                >{{ entry.name
+                }}{{ entry.copyright ? ` (${entry.copyright})` : "" }}</strong
               ><span class="muted"
                 >{{ entry.count }} linked file{{
                   entry.count === 1 ? "" : "s"
@@ -219,8 +277,8 @@ onMounted(load);
             <p v-else>
               Delete “{{ entry.name }}”?
               {{
-                category === "tag"
-                  ? "This tag will be removed from all linked files."
+                category === "tag" || category === "character"
+                  ? `This ${category} will be removed from all linked files.`
                   : `All ${entry.count} linked file(s) will need redistribution. ${category === "copyright" ? "Characters belonging to this copyright will also be removed." : ""}`
               }}
               Files on disk stay unchanged.
@@ -306,6 +364,15 @@ onMounted(load);
   background: #ffffff0b;
   border-radius: 5px;
   padding: 2px 6px;
+}
+.taxonomy-repeat-filter {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.taxonomy-repeat-filter input {
+  accent-color: var(--accent);
 }
 .taxonomy-note {
   line-height: 1.6;

@@ -18,15 +18,18 @@ const displayName = computed(() =>
       : props.item.filename.replace(/\.[^.]+$/, "")
     : props.item.kind === "video"
       ? props.item.videoTitle?.trim()
-      : undefined,
+      : props.item.characters.join(", "),
 );
 const modifiedDate = computed(() =>
   props.item.nativeId && !props.item.modifiedAt
     ? "Date unavailable"
     : formatDate(props.item.modifiedAt),
 );
+const showCharacterChips = computed(
+  () => props.item.kind === "video" && props.item.characters.length > 0,
+);
 const metadataChips = computed(() =>
-  props.item.characters.length ? props.item.characters : props.item.tags,
+  showCharacterChips.value ? props.item.characters : props.item.tags,
 );
 const modifiedDateTime = computed(() =>
   props.item.nativeId && !props.item.modifiedAt
@@ -63,7 +66,7 @@ defineEmits<{
         <div
           v-if="!stage"
           class="card-tags"
-          :class="{ 'card-characters': item.characters.length > 0 }"
+          :class="{ 'card-characters': showCharacterChips }"
         >
           <span
             v-for="(label, index) in metadataChips"

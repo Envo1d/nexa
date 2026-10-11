@@ -4,16 +4,27 @@ import {
   categoryKey,
   type TaxonomyCategory,
   type TaxonomyCatalog,
+  type TaxonomyEntry,
 } from "../types/taxonomy";
 
 export function useDemoTaxonomy(
   library: Ref<MediaItem[]>,
   stage: Ref<MediaItem[]>,
 ) {
+  const characters = new Map<string, { name: string; copyright: string }>();
+  const characterId = (name: string, copyright: string) =>
+    JSON.stringify([copyright, name]);
+  const qualified = (item: MediaItem) =>
+    item.characterCopyrights ??
+    item.characters.map((name) => ({
+      name,
+      copyright: item.copyrights[0] ?? "",
+    }));
   const dictionaries = {
     copyrights: new Set<string>(),
     artists: new Set<string>(),
     tags: new Set<string>(),
+    characters: new Set<string>(),
   };
   const names = (item: MediaItem, category: TaxonomyCategory) =>
     category === "artist"
@@ -23,6 +34,8 @@ export function useDemoTaxonomy(
     [library, stage],
     () => {
       for (const item of [...library.value, ...stage.value]) {
+        for (const entry of qualified(item))
+          characters.set(characterId(entry.name, entry.copyright), entry);
         for (const category of ["copyright", "artist", "tag"] as const)
           for (const name of names(item, category))
             dictionaries[categoryKey[category]].add(name);
@@ -31,7 +44,12 @@ export function useDemoTaxonomy(
     { deep: true, immediate: true },
   );
   const catalog = computed<TaxonomyCatalog>(() => {
-    const result: TaxonomyCatalog = { copyrights: [], artists: [], tags: [] };
+    const result: TaxonomyCatalog = {
+      copyrights: [],
+      artists: [],
+      tags: [],
+      characters: [],
+    };
     for (const category of ["copyright", "artist", "tag"] as const) {
       const key = categoryKey[category];
       const items = [...library.value, ...stage.value];
@@ -45,12 +63,29 @@ export function useDemoTaxonomy(
         }))
         .sort((a, b) => a.name.localeCompare(b.name));
     }
+    result.characters = [...characters]
+      .map(([id, entry]): TaxonomyEntry => ({
+        id,
+        ...entry,
+        count: [...library.value, ...stage.value].filter((item) =>
+          qualified(item).some(
+            (value) =>
+              value.name === entry.name && value.copyright === entry.copyright,
+          ),
+        ).length,
+      }))
+      .sort(
+        (a, b) =>
+          a.name.localeCompare(b.name) ||
+          (a.copyright ?? "").localeCompare(b.copyright ?? ""),
+      );
     return result;
   });
   function change(
     category: TaxonomyCategory,
     old: string,
     replacement?: string,
+    copyright?: string,
   ) {
     const key = categoryKey[category];
     const next = replacement?.trim();
@@ -63,6 +98,38 @@ export function useDemoTaxonomy(
         ))
     )
       throw new Error("Enter a nonempty name without control characters.");
+    if (category === "character") {
+      if (copyright === undefined)
+        throw new Error("Select a copyright-qualified character.");
+      if (
+        [...characters.values()].some(
+          (entry) =>
+            next &&
+            entry.copyright === copyright &&
+            entry.name !== old &&
+            entry.name.normalize("NFC").toLocaleLowerCase() ===
+              next.normalize("NFC").toLocaleLowerCase(),
+        )
+      )
+        throw new Error("This character already exists in the copyright.");
+      for (const item of [...library.value, ...stage.value]) {
+        item.characterCopyrights = qualified(item).flatMap((entry) =>
+          entry.name === old && entry.copyright === copyright
+            ? next
+              ? [{ ...entry, name: next }]
+              : []
+            : [entry],
+        );
+        item.characters = [
+          ...new Set(item.characterCopyrights.map((entry) => entry.name)),
+        ];
+      }
+      characters.delete(characterId(old, copyright));
+      if (next)
+        characters.set(characterId(next, copyright), { name: next, copyright });
+      library.value = [...library.value];
+      return 0;
+    }
     if (
       next &&
       [...dictionaries[key]].some(
@@ -107,6 +174,17 @@ export function useDemoTaxonomy(
           // Old fixtures do not carry qualified character identity.
           item.characters = [];
         }
+      }
+    }
+    if (category === "copyright") {
+      for (const [id, entry] of [...characters]) {
+        if (entry.copyright !== old) continue;
+        characters.delete(id);
+        if (next)
+          characters.set(characterId(entry.name, next), {
+            ...entry,
+            copyright: next,
+          });
       }
     }
     dictionaries[key].delete(old);
