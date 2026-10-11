@@ -10,6 +10,7 @@ pub enum Category {
     Copyright,
     Artist,
     Tag,
+    Character,
 }
 impl Category {
     fn table(self) -> &'static str {
@@ -17,6 +18,7 @@ impl Category {
             Self::Copyright => "copyrights",
             Self::Artist => "artists",
             Self::Tag => "tags",
+            Self::Character => "characters",
         }
     }
     fn relation(self) -> &'static str {
@@ -25,6 +27,9 @@ impl Category {
                 "m.id IN (SELECT media_id FROM media_copyrights WHERE copyright_id = d.id)"
             }
             Self::Artist => "m.artist_id = d.id",
+            Self::Character => {
+                "m.id IN (SELECT media_id FROM media_characters WHERE character_id = d.id)"
+            }
             Self::Tag => "m.id IN (SELECT media_id FROM media_tags WHERE tag_id = d.id)",
         }
     }
@@ -34,25 +39,32 @@ pub struct Entry {
     id: String,
     name: String,
     count: i64,
+    copyright: Option<String>,
 }
 #[derive(Serialize, Default)]
 pub struct Catalog {
     copyrights: Vec<Entry>,
     artists: Vec<Entry>,
     tags: Vec<Entry>,
+    characters: Vec<Entry>,
 }
 
 async fn entries(pool: &SqlitePool, category: Category) -> Result<Vec<Entry>, sqlx::Error> {
-    QueryBuilder::<Sqlite>::new(
-        "SELECT CAST(d.id AS TEXT) id, d.name, (SELECT count(*) FROM media m WHERE ",
-    )
-    .push(category.relation())
-    .push(") count FROM ")
-    .push(category.table())
-    .push(" d ORDER BY d.name_key, d.id")
-    .build_query_as()
-    .fetch_all(pool)
-    .await
+    let mut query = QueryBuilder::<Sqlite>::new("SELECT CAST(d.id AS TEXT) id, d.name, ");
+    query.push(if matches!(category, Category::Character) {
+        "(SELECT name FROM copyrights WHERE id = d.copyright_id)"
+    } else {
+        "NULL"
+    });
+    query
+        .push(" copyright, (SELECT count(*) FROM media m WHERE ")
+        .push(category.relation())
+        .push(") count FROM ")
+        .push(category.table())
+        .push(" d ORDER BY d.name_key, d.id")
+        .build_query_as()
+        .fetch_all(pool)
+        .await
 }
 #[tauri::command]
 #[tracing::instrument(skip_all, err)]
@@ -63,6 +75,9 @@ pub async fn get_taxonomy(database: tauri::State<'_, Database>) -> Result<Catalo
             .await
             .map_err(|e| e.to_string())?,
         artists: entries(pool, Category::Artist)
+            .await
+            .map_err(|e| e.to_string())?,
+        characters: entries(pool, Category::Character)
             .await
             .map_err(|e| e.to_string())?,
         tags: entries(pool, Category::Tag)
@@ -133,6 +148,10 @@ async fn remove(pool: &SqlitePool, category: Category, id: i64) -> Result<u64, s
         Category::Artist => {
             sqlx::query("UPDATE media SET needs_distribution = 1, artist_id = NULL, updated_at = CAST(unixepoch('subsec') * 1000 AS INTEGER) WHERE artist_id = ?")
                 .bind(id).execute(&mut *tx).await?.rows_affected()
+        }
+        Category::Character => {
+            sqlx::query("DELETE FROM media_characters WHERE character_id = ?").bind(id).execute(&mut *tx).await?;
+            0
         }
         Category::Tag => {
             sqlx::query("DELETE FROM media_tags WHERE tag_id = ?").bind(id).execute(&mut *tx).await?;
@@ -292,6 +311,104 @@ mod tests {
                 .unwrap()
                 .count,
             1
+        );
+    }
+    #[tokio::test]
+    async fn character_rename_preserves_qualified_links_and_scopes_duplicates() {
+        let (_root, db) = fixture().await;
+        rename(db.pool(), Category::Character, 1, "Hero")
+            .await
+            .unwrap();
+        rename(db.pool(), Category::Character, 2, "Hero")
+            .await
+            .unwrap();
+        sqlx::query(
+            "INSERT INTO characters(id,copyright_id,name,name_key) VALUES(3,1,'Other','other')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        assert!(
+            rename(db.pool(), Category::Character, 3, "HERO")
+                .await
+                .is_err()
+        );
+        let catalog = entries(db.pool(), Category::Character).await.unwrap();
+        assert_eq!(catalog.len(), 3);
+        let entry = catalog.iter().find(|entry| entry.id == "1").unwrap();
+        assert_eq!(entry.name, "Hero");
+        assert_eq!(entry.copyright.as_deref(), Some("World"));
+        assert_eq!(entry.count, 1);
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM media_characters")
+                .fetch_one(db.pool())
+                .await
+                .unwrap(),
+            2
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT needs_distribution FROM media")
+                .fetch_one(db.pool())
+                .await
+                .unwrap(),
+            0
+        );
+    }
+    #[tokio::test]
+    async fn character_deletion_preserves_other_metadata_and_rolls_back_on_failure() {
+        let (root, db) = fixture().await;
+        sqlx::raw_sql("CREATE TRIGGER reject_character_delete BEFORE DELETE ON characters BEGIN SELECT RAISE(ABORT,'blocked'); END;").execute(db.pool()).await.unwrap();
+        assert!(remove(db.pool(), Category::Character, 1).await.is_err());
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM media_characters")
+                .fetch_one(db.pool())
+                .await
+                .unwrap(),
+            2
+        );
+        sqlx::raw_sql("DROP TRIGGER reject_character_delete;")
+            .execute(db.pool())
+            .await
+            .unwrap();
+        assert_eq!(remove(db.pool(), Category::Character, 1).await.unwrap(), 0);
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT character_id FROM media_characters")
+                .fetch_one(db.pool())
+                .await
+                .unwrap(),
+            2
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM media_copyrights")
+                .fetch_one(db.pool())
+                .await
+                .unwrap(),
+            2
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM media_tags")
+                .fetch_one(db.pool())
+                .await
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            sqlx::query_as::<_, (i64, i64, String)>(
+                "SELECT needs_distribution,artist_id,relative_path FROM media"
+            )
+            .fetch_one(db.pool())
+            .await
+            .unwrap(),
+            (0, 1, "image.png".into())
+        );
+        db.close().await;
+        let reopened = Database::open(&root.path().join("vault.db")).await.unwrap();
+        let catalog = entries(reopened.pool(), Category::Character).await.unwrap();
+        assert_eq!(catalog.len(), 1);
+        assert_eq!(catalog[0].id, "2");
+        assert_eq!(
+            std::fs::read(root.path().join("image.png")).unwrap(),
+            b"unchanged media bytes"
         );
     }
     #[tokio::test]

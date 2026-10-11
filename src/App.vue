@@ -744,7 +744,13 @@ onBeforeUnmount(() => {
                 <button
                   v-for="(suggestion, index) in suggestions"
                   :id="`metadata-option-${index}`"
-                  :key="`${suggestion.category}:${suggestion.name}`"
+                  :key="
+                    JSON.stringify([
+                      suggestion.category,
+                      suggestion.name,
+                      suggestion.copyright,
+                    ])
+                  "
                   type="button"
                   role="option"
                   :aria-selected="suggestionIndex === index"
@@ -752,7 +758,11 @@ onBeforeUnmount(() => {
                   @mousedown.prevent
                   @click="chooseSearchSuggestion(suggestion.name)"
                 >
-                  <span>{{ suggestion.name }}</span
+                  <span
+                    >{{ suggestion.name
+                    }}{{
+                      suggestion.copyright ? ` (${suggestion.copyright})` : ""
+                    }}</span
                   ><small>{{ suggestion.category }}</small>
                 </button>
               </div>
