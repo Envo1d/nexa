@@ -16,6 +16,8 @@ mod windows_com;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     use tauri::Manager;
+    #[cfg(desktop)]
+    use tauri_plugin_window_state::{AppHandleExt, StateFlags, WindowExt};
     let paths = config::AppPaths::resolve().expect("Could not resolve NexaNew storage");
     let log_guard = logging::init(&paths.logs_path).expect("Could not initialize NexaNew tracing");
     tracing::info!(version = env!("CARGO_PKG_VERSION"), "Starting NexaNew");
@@ -44,6 +46,15 @@ pub fn run() {
         }
     }));
 
+    #[cfg(desktop)]
+    let builder = builder.plugin(
+        tauri_plugin_window_state::Builder::default()
+            .with_state_flags(StateFlags::SIZE | StateFlags::POSITION)
+            .with_filter(|label| label == "main")
+            .skip_initial_state("main")
+            .build(),
+    );
+
     let result = builder
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
@@ -52,6 +63,19 @@ pub fn run() {
         .plugin(tauri_plugin_os::init())
         .setup(move |app| {
             let _span = tracing::info_span!("application_setup").entered();
+            #[cfg(desktop)]
+            {
+                let _span = tracing::info_span!("restore_window_state", window = "main").entered();
+                tracing::info!("Restoring saved window position and size");
+                if let Some(window) = app.get_webview_window("main") {
+                    match window.restore_state(StateFlags::SIZE | StateFlags::POSITION) {
+                        Ok(()) => tracing::info!("Window geometry initialized from saved state or configured defaults"),
+                        Err(error) => tracing::warn!(%error, "Window state restoration failed; using available window geometry"),
+                    }
+                } else {
+                    tracing::warn!("Main window unavailable for geometry restoration");
+                }
+            }
             let database_path = paths.database_path.clone();
             let cache_path = paths.cache_path.clone();
             let store = config::ConfigStore::load(paths).map_err(std::io::Error::other)?;
@@ -109,6 +133,15 @@ pub fn run() {
     let result = result.map(|app| {
         app.run(|app, event| {
             if matches!(event, tauri::RunEvent::Exit) {
+                #[cfg(desktop)]
+                {
+                    let _span = tracing::info_span!("save_window_state", window = "main").entered();
+                    tracing::info!("Saving window position and size");
+                    match app.save_window_state(StateFlags::SIZE | StateFlags::POSITION) {
+                        Ok(()) => tracing::info!("Window position and size saved"),
+                        Err(error) => tracing::warn!(%error, "Window state could not be saved; previous geometry may be restored next launch"),
+                    }
+                }
                 tauri::async_runtime::block_on(app.state::<database::Database>().close());
             }
         });
