@@ -2,8 +2,9 @@
 //! The result is opaque RGB, not source-image transparency or encoded cache data.
 //! Shell may consult/populate its own system cache; Nexa writes no cache here.
 
-use image::RgbImage;
 use std::path::Path;
+
+use image::RgbImage;
 
 /// Bounds requested dimensions and conversion allocations (at most 16 MiB BGRA).
 pub const MAX_THUMBNAIL_EDGE: u32 = 2048;
@@ -58,18 +59,22 @@ impl ThumbnailError {
 /// or an icon fallback. Actual dimensions may be smaller. Does not save the result.
 pub fn get_thumbnail(path: &Path, size: u32) -> Result<RgbImage, ThumbnailError> {
     let _span = tracing::debug_span!("get_thumbnail", requested_edge = size).entered();
+
     tracing::debug!("Thumbnail extraction started");
+
     #[cfg(windows)]
     let result = if (1..=MAX_THUMBNAIL_EDGE).contains(&size) {
         windows_provider::extract(path, size)
     } else {
         Err(ThumbnailError::InvalidSize)
     };
+
     #[cfg(not(windows))]
     let result = {
         let _ = path;
         Err::<RgbImage, _>(ThumbnailError::UnsupportedPlatform)
     };
+
     match &result {
         Ok(image) => tracing::debug!(
             width = image.width(),
@@ -105,6 +110,7 @@ mod windows_provider {
     };
 
     struct OwnedBitmap(HBITMAP);
+
     impl Drop for OwnedBitmap {
         fn drop(&mut self) {
             // SAFETY: uniquely owned bitmap, never selected into a DC by this module.
@@ -115,6 +121,7 @@ mod windows_provider {
     }
 
     struct MemoryDc(HDC);
+
     impl Drop for MemoryDc {
         fn drop(&mut self) {
             // SAFETY: this DC was created by CreateCompatibleDC on this thread.
@@ -137,12 +144,14 @@ mod windows_provider {
         }
         // Shell accepts normal absolute DOS/UNC syntax; canonicalize can add \\?\.
         let path = std::path::absolute(path).map_err(ThumbnailError::File)?;
+
         if !std::fs::metadata(&path)
             .map_err(ThumbnailError::File)?
             .is_file()
         {
             return Err(ThumbnailError::NotAFile);
         }
+
         let _apartment =
             Apartment::initialize().map_err(|error| native_error("initialize_com", error))?;
         // SAFETY: COM initialized, native absolute Unicode path has no embedded NUL.
@@ -168,10 +177,13 @@ mod windows_provider {
 
     fn dimensions(width: i32, height: i32) -> Result<(u32, u32, usize), ThumbnailError> {
         let width = u32::try_from(width).map_err(|_| ThumbnailError::InvalidBitmap)?;
+
         let height = height.unsigned_abs();
+
         if width == 0 || height == 0 || width > MAX_THUMBNAIL_EDGE || height > MAX_THUMBNAIL_EDGE {
             return Err(ThumbnailError::InvalidBitmap);
         }
+
         let length = (width as usize)
             .checked_mul(height as usize)
             .and_then(|pixels| pixels.checked_mul(4))
@@ -189,12 +201,15 @@ mod windows_provider {
                 Some((&mut descriptor as *mut BITMAP).cast::<c_void>()),
             )
         };
+
         if copied != size_of::<BITMAP>() as i32 {
             return Err(ThumbnailError::Gdi {
                 operation: "get_bitmap_descriptor",
             });
         }
+
         let (width, height, length) = dimensions(descriptor.bmWidth, descriptor.bmHeight)?;
+
         let mut info = BITMAPINFO {
             bmiHeader: BITMAPINFOHEADER {
                 biSize: size_of::<BITMAPINFOHEADER>() as u32,
@@ -207,6 +222,7 @@ mod windows_provider {
             },
             ..Default::default()
         };
+
         let mut pixels = Vec::new();
         pixels
             .try_reserve_exact(length)
@@ -214,11 +230,13 @@ mod windows_provider {
         pixels.resize(length, 0);
         // SAFETY: null source creates a memory DC owned by this thread.
         let dc = unsafe { CreateCompatibleDC(None) };
+
         if dc.0.is_null() {
             return Err(ThumbnailError::Gdi {
                 operation: "create_memory_dc",
             });
         }
+
         let dc = MemoryDc(dc);
         // SAFETY: bitmap is not selected into a DC; buffer fits all requested 32-bit
         // rows. At 32 bpp each row is already aligned to the required DWORD boundary.
@@ -233,6 +251,7 @@ mod windows_provider {
                 DIB_RGB_COLORS,
             )
         };
+
         if copied != height as i32 {
             return Err(ThumbnailError::IncompleteCopy {
                 copied,
@@ -249,8 +268,10 @@ mod windows_provider {
     ) -> Result<RgbImage, ThumbnailError> {
         // Compact in place: never treat BI_RGB's reserved byte as valid alpha.
         let count = pixels.len() / 4;
+
         for index in 0..count {
             let source = index * 4;
+
             let [b, g, r] = [pixels[source], pixels[source + 1], pixels[source + 2]];
             pixels[index * 3..index * 3 + 3].copy_from_slice(&[r, g, b]);
         }
@@ -289,6 +310,7 @@ mod windows_provider {
         #[test]
         fn validates_size_and_file_input() {
             let directory = tempfile::tempdir().unwrap();
+
             for size in [0, MAX_THUMBNAIL_EDGE + 1, u32::MAX] {
                 assert!(matches!(
                     get_thumbnail(directory.path(), size),
@@ -312,6 +334,7 @@ mod windows_provider {
         #[test]
         fn copies_top_down_bitmap_and_releases_gdi_handle() {
             use windows::Win32::Graphics::Gdi::CreateDIBSection;
+
             let info = BITMAPINFO {
                 bmiHeader: BITMAPINFOHEADER {
                     biSize: size_of::<BITMAPINFOHEADER>() as u32,
@@ -324,7 +347,9 @@ mod windows_provider {
                 },
                 ..Default::default()
             };
+
             let mut bits = std::ptr::null_mut();
+
             let bitmap = OwnedBitmap(
                 unsafe { CreateDIBSection(None, &info, DIB_RGB_COLORS, &mut bits, None, 0) }
                     .unwrap(),
@@ -337,11 +362,14 @@ mod windows_provider {
                     8,
                 );
             }
+
             let image = bitmap_to_rgb(&bitmap).unwrap();
             assert_eq!(image.dimensions(), (1, 2));
             assert_eq!(image.as_raw(), &[255, 0, 0, 0, 0, 255]);
+
             let handle = bitmap.0;
             drop(bitmap);
+
             let mut descriptor = BITMAP::default();
             assert_eq!(
                 unsafe {
@@ -358,10 +386,12 @@ mod windows_provider {
         #[test]
         fn extracts_unicode_thumbnail_and_preserves_source_bytes() {
             let directory = tempfile::tempdir().unwrap();
+
             let path = directory.path().join("превью 日本.bmp");
             // Uncompressed 2x1 24-bit BMP: red followed by blue.
             let mut bytes = vec![0_u8; 62];
             bytes[0..2].copy_from_slice(b"BM");
+
             for (offset, value) in [(2, 62_u32), (10, 54), (14, 40), (18, 2), (22, 1), (34, 8)] {
                 bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
             }
@@ -369,6 +399,7 @@ mod windows_provider {
             bytes[28..30].copy_from_slice(&24_u16.to_le_bytes());
             bytes[54..60].copy_from_slice(&[0, 0, 255, 255, 0, 0]);
             std::fs::write(&path, &bytes).unwrap();
+
             for _ in 0..3 {
                 let image = get_thumbnail(&path, 64).unwrap();
                 assert!(image.width() > 0 && image.width() <= 64);
@@ -380,6 +411,7 @@ mod windows_provider {
         #[test]
         fn does_not_return_icon_for_file_without_thumbnail() {
             let directory = tempfile::tempdir().unwrap();
+
             let path = directory.path().join("plain.txt");
             std::fs::write(&path, b"not an image").unwrap();
             assert!(matches!(

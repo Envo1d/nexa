@@ -1,5 +1,6 @@
 //! Thread-bound COM lifetime shared by the unused native media providers.
 use std::{marker::PhantomData, rc::Rc};
+
 use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx, CoUninitialize};
 
 // !Send/!Sync: initialization and teardown must occur on the same thread.

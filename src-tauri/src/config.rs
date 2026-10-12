@@ -1,6 +1,7 @@
+use std::{fs, io::Write, path::PathBuf, sync::Mutex};
+
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
-use std::{fs, io::Write, path::PathBuf, sync::Mutex};
 
 type ConfigResult<T> = Result<T, String>;
 
@@ -83,11 +84,13 @@ impl ConfigStore {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 let defaults = AppConfig::default();
                 Self::write(&paths, &defaults, false)?;
+
                 tracing::info!("Default configuration created");
                 defaults
             }
             Err(error) => return Err(format!("Cannot read configuration: {error}")),
         };
+
         tracing::info!("Configuration loaded");
         Ok(Self {
             paths,
@@ -102,14 +105,17 @@ impl ConfigStore {
             .ok_or("Invalid configuration path")?;
         fs::create_dir_all(parent)
             .map_err(|error| format!("Cannot create config directory: {error}"))?;
+
         let mut file = tempfile::NamedTempFile::new_in(parent)
             .map_err(|error| format!("Cannot create temporary config: {error}"))?;
+
         let json = serde_json::to_vec_pretty(settings).map_err(|error| error.to_string())?;
         file.write_all(&json)
             .map_err(|error| format!("Cannot write configuration: {error}"))?;
         file.as_file()
             .sync_all()
             .map_err(|error| format!("Cannot flush configuration: {error}"))?;
+
         let result = if replace {
             file.persist(&paths.config_path)
         } else {
@@ -122,6 +128,7 @@ impl ConfigStore {
     #[tracing::instrument(skip_all, err)]
     pub fn snapshot(&self) -> ConfigResult<ConfigSnapshot> {
         tracing::debug!("Reading configuration snapshot");
+
         let settings = self
             .settings
             .lock()
@@ -140,6 +147,7 @@ impl ConfigStore {
             .map_err(|_| "Configuration lock poisoned")?;
         Self::write(&self.paths, &draft, true)?;
         *settings = draft;
+
         tracing::info!("Configuration saved");
         Ok(())
     }
@@ -165,102 +173,15 @@ pub fn save_config(
 #[tracing::instrument(skip_all, fields(logs_path = %store.paths.logs_path.display()), err)]
 pub fn open_logs(app: tauri::AppHandle, store: tauri::State<'_, ConfigStore>) -> ConfigResult<()> {
     use tauri_plugin_opener::OpenerExt;
+
     tracing::debug!("Opening logs directory");
     app.opener()
         .open_path(store.paths.logs_path.to_string_lossy(), None::<&str>)
         .map_err(|error| error.to_string())?;
+
     tracing::info!("Logs directory open requested");
     Ok(())
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn paths(root: &std::path::Path) -> AppPaths {
-        AppPaths {
-            config_path: root.join("config/settings.json"),
-            database_path: root.join("data/db/vault.db"),
-            cache_path: root.join("cache/thumbnails"),
-            logs_path: root.join("data/logs"),
-        }
-    }
-
-    #[test]
-    fn creates_defaults_and_round_trips_replacement() {
-        let dir = tempfile::tempdir().unwrap();
-        let paths = paths(dir.path());
-        let store = ConfigStore::load(paths.clone()).unwrap();
-        assert_eq!(store.snapshot().unwrap().settings, AppConfig::default());
-        let draft = AppConfig {
-            library_path: Some(dir.path().join("Медиа")),
-            artist_directory: false,
-            auto_scan: true,
-            gif_subfolder: "GIFs".into(),
-            ..AppConfig::default()
-        };
-        store.save(draft.clone()).unwrap();
-        assert_eq!(
-            ConfigStore::load(paths)
-                .unwrap()
-                .snapshot()
-                .unwrap()
-                .settings,
-            draft
-        );
-        assert_eq!(fs::read_dir(dir.path().join("config")).unwrap().count(), 1);
-    }
-
-    #[test]
-    fn preserves_invalid_configuration_and_reports_read_errors() {
-        let dir = tempfile::tempdir().unwrap();
-        let paths = paths(dir.path());
-        fs::create_dir_all(paths.config_path.parent().unwrap()).unwrap();
-        fs::write(&paths.config_path, b"broken json").unwrap();
-        assert!(ConfigStore::load(paths.clone()).is_err());
-        assert_eq!(fs::read(&paths.config_path).unwrap(), b"broken json");
-        fs::remove_file(&paths.config_path).unwrap();
-        fs::create_dir(&paths.config_path).unwrap();
-        assert!(ConfigStore::load(paths).is_err());
-    }
-
-    #[test]
-    fn failed_save_preserves_committed_state() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = ConfigStore::load(paths(dir.path())).unwrap();
-        fs::remove_file(&store.paths.config_path).unwrap();
-        fs::create_dir(&store.paths.config_path).unwrap();
-        assert!(
-            store
-                .save(AppConfig {
-                    auto_scan: true,
-                    ..AppConfig::default()
-                })
-                .is_err()
-        );
-        assert_eq!(store.snapshot().unwrap().settings, AppConfig::default());
-    }
-
-    #[test]
-    fn missing_fields_use_current_defaults_and_unknown_fields_are_rejected() {
-        assert_eq!(
-            serde_json::from_str::<AppConfig>("{}").unwrap(),
-            AppConfig::default()
-        );
-        assert!(serde_json::from_str::<AppConfig>(r#"{"databasePath":"legacy.db"}"#).is_err());
-        assert_eq!(AppConfig::default().character_separator, " х ");
-        let old: AppConfig = serde_json::from_str(r#"{"videoSubfolder":"Clips"}"#).unwrap();
-        assert_eq!(old.gif_subfolder, "Animations");
-        assert_eq!(old.video_subfolder, "Clips");
-    }
-
-    #[test]
-    fn service_paths_are_isolated_from_legacy_application() {
-        let new = AppPaths::resolve().unwrap();
-        let old = ProjectDirs::from("com", "Envo1d", "Nexa").unwrap();
-        assert!(!new.config_path.starts_with(old.config_dir()));
-        assert!(!new.database_path.starts_with(old.data_local_dir()));
-        assert!(!new.cache_path.starts_with(old.cache_dir()));
-        assert!(!new.logs_path.starts_with(old.data_local_dir()));
-    }
-}
+mod tests;
