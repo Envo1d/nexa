@@ -461,11 +461,18 @@ async fn grouped_targets(
                     "GIF destination uses configured animation subfolder"
                 );
             }
-            let key = name_key(&folder.join(format!("{stem}.{extension}")).to_string_lossy());
-            let key = serde_json::to_string(&(root, key)).map_err(|e| e.to_string())?;
-            let position = if row.get::<Option<String>, _>("naming_order_key").as_deref()
-                == Some(key.as_str())
-            {
+            let key = name_key(&folder.join(&stem).to_string_lossy());
+            let key = serde_json::to_string(&(root, key, "stem")).map_err(|e| e.to_string())?;
+            // Accept saved extension-specific positions until the next explicit save.
+            let legacy_key =
+                name_key(&folder.join(format!("{stem}.{extension}")).to_string_lossy());
+            let legacy_key =
+                serde_json::to_string(&(root, legacy_key)).map_err(|e| e.to_string())?;
+            let saved_key = row.get::<Option<String>, _>("naming_order_key");
+            let position = if saved_key.as_deref() == Some(key.as_str()) {
+                row.get::<Option<i64>, _>("naming_order")
+            } else if saved_key.as_deref() == Some(legacy_key.as_str()) {
+                tracing::debug!(media_id = id, "Using legacy extension-specific file order");
                 row.get::<Option<i64>, _>("naming_order")
             } else {
                 None
@@ -865,6 +872,149 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn mixed_extensions_share_indices_and_persistent_order_for_images_and_videos() {
+        for (kind, extensions, stem, folder) in [
+            (
+                "image",
+                ["png", "jpg", "png"],
+                "Alice х Zed [Artist]",
+                "Alpha/Artist",
+            ),
+            (
+                "video",
+                ["mp4", "webm", "mp4"],
+                "Alice х Zed - Clip [Artist]",
+                "Alpha/Artist/Videos",
+            ),
+        ] {
+            let (temp, db, root, _) = fixture().await;
+            sqlx::query("DELETE FROM media WHERE id=4")
+                .execute(db.pool())
+                .await
+                .unwrap();
+            for (index, extension) in extensions.iter().enumerate() {
+                sqlx::query("UPDATE media SET kind=?,extension=? WHERE id=?")
+                    .bind(kind)
+                    .bind(extension)
+                    .bind(index as i64 + 1)
+                    .execute(db.pool())
+                    .await
+                    .unwrap();
+            }
+            if kind == "video" {
+                sqlx::query(
+                    "INSERT INTO video_metadata(media_id,title) SELECT id,'Clip' FROM media",
+                )
+                .execute(db.pool())
+                .await
+                .unwrap();
+            }
+            let settings = AppConfig::default();
+            let path = |index: usize, id: usize| {
+                Path::new(&root)
+                    .join(folder)
+                    .join(format!("{stem} - {index}.{}", extensions[id - 1]))
+            };
+            run(db.pool(), &root, &settings).await;
+            for id in 1..=3 {
+                assert_eq!(
+                    fs::read(path(id, id)).unwrap(),
+                    format!("independent content {id}").as_bytes()
+                );
+            }
+            let (key, group) = find_order_group(db.pool(), &root, &settings, 2)
+                .await
+                .unwrap();
+            assert_eq!(
+                group.iter().map(|file| file.id).collect::<Vec<_>>(),
+                [1, 2, 3]
+            );
+            let expected = ["1", "2", "3"].map(String::from);
+            let ordered = ["3", "1", "2"].map(String::from);
+            persist_order(db.pool(), &root, &settings, &key, &expected, &ordered)
+                .await
+                .unwrap();
+            db.close().await;
+            let db = Database::open(&temp.path().join("vault.db")).await.unwrap();
+            run(db.pool(), &root, &settings).await;
+            run(db.pool(), &root, &settings).await;
+            for (index, id) in [3, 1, 2].into_iter().enumerate() {
+                assert_eq!(
+                    fs::read(path(index + 1, id)).unwrap(),
+                    format!("independent content {id}").as_bytes()
+                );
+            }
+            assert!(!path(3, 3).exists());
+            // A format replacement keeps the saved rank in the stem-based group.
+            sqlx::query("UPDATE media SET extension='other' WHERE id=1")
+                .execute(db.pool())
+                .await
+                .unwrap();
+            let (updated_key, group) = find_order_group(db.pool(), &root, &settings, 1)
+                .await
+                .unwrap();
+            assert_eq!(updated_key, key);
+            assert_eq!(
+                group.iter().map(|file| file.id).collect::<Vec<_>>(),
+                [3, 1, 2]
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn legacy_extension_orders_merge_deterministically_and_keep_destination_folders_separate()
+    {
+        let (_temp, db, root, _) = fixture().await;
+        let settings = AppConfig::default();
+        for (id, extension, position) in [(1, "png", 1), (2, "jpg", 0), (3, "png", 0)] {
+            let relative = name_key(
+                &Path::new("Alpha")
+                    .join("Artist")
+                    .join(format!("Alice х Zed [Artist].{extension}"))
+                    .to_string_lossy(),
+            );
+            let key = serde_json::to_string(&(&root, relative)).unwrap();
+            sqlx::query(
+                "UPDATE media SET extension=?,naming_order_key=?,naming_order=? WHERE id=?",
+            )
+            .bind(extension)
+            .bind(key)
+            .bind(position)
+            .bind(id)
+            .execute(db.pool())
+            .await
+            .unwrap();
+        }
+        sqlx::query("UPDATE media SET extension='gif' WHERE id=4")
+            .execute(db.pool())
+            .await
+            .unwrap();
+        let (key, group) = find_order_group(db.pool(), &root, &settings, 1)
+            .await
+            .unwrap();
+        assert_eq!(
+            group.iter().map(|file| file.id).collect::<Vec<_>>(),
+            [2, 3, 1]
+        );
+        let (gif_key, group) = find_order_group(db.pool(), &root, &settings, 4)
+            .await
+            .unwrap();
+        assert_ne!(gif_key, key);
+        assert_eq!(group.len(), 1);
+        let merged = AppConfig {
+            gif_subfolder: String::new(),
+            ..settings
+        };
+        let (_, group) = find_order_group(db.pool(), &root, &merged, 4)
+            .await
+            .unwrap();
+        assert_eq!(
+            group.iter().map(|file| file.id).collect::<Vec<_>>(),
+            [2, 3, 1, 4]
+        );
+    }
+
+    #[tokio::test]
     async fn video_order_survives_swaps_reopen_and_batch_deletion_without_content_changes() {
         let (temp, db, root, stage) = fixture().await;
         fs::write(
@@ -1173,7 +1323,7 @@ mod tests {
         settings.artist_directory = false;
         run(db.pool(), &root, &settings).await;
         assert_eq!(
-            fs::read(Path::new(&root).join("Alice х Zed [Artist].gif")).unwrap(),
+            fs::read(Path::new(&root).join("Alice х Zed [Artist] - 1.gif")).unwrap(),
             bytes
         );
         assert!(!custom_path.exists());
