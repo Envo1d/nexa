@@ -1,10 +1,24 @@
-name: Windows release
+name: Windows build and release
 
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
     tags:
       - "v*"
+    paths:
+      - ".github/workflows/release-windows.yml"
+      - ".github/tauri-ci.json"
+      - "src/**"
+      - "src-tauri/**"
+      - "public/**"
+      - "scripts/**"
+      - "package*.json"
+      - "*config*"
+      - ".prettierrc.json"
+      - ".gitattributes"
+      - "index.html"
 
 permissions:
   contents: write
@@ -26,22 +40,10 @@ jobs:
         with:
           node-version: "24"
           cache: npm
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
-      - name: Install frontend dependencies
-        run: npm ci
       - name: Validate release versions
         run: node scripts/validate-release.mjs
-      - name: Validate frontend
-        run: npm run check:ui
-      - name: Validate Rust formatting
-        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
-      - name: Validate Rust targets
-        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
-      - name: Test Rust
-        run: cargo test --manifest-path src-tauri/Cargo.toml --locked -- --test-threads=1
       - name: Require updater signing key
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
         shell: pwsh
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -49,7 +51,35 @@ jobs:
           if (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
             throw "Add the TAURI_SIGNING_PRIVATE_KEY repository secret before releasing."
           }
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - name: Restore Rust dependencies and compiled targets
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          shared-key: windows-build
+          # Tags can restore main's cache, but cannot share caches with other tags.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Install frontend dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Validate frontend formatting
+        run: npm run format:check
+      - name: Lint frontend
+        run: npm run lint
+      - name: Build frontend
+        run: npm run build
+      - name: Validate Rust formatting
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+      - name: Validate Rust targets
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
+      - name: Test Rust
+        run: cargo test --manifest-path src-tauri/Cargo.toml --locked -- --test-threads=1
+      - name: Warm release compilation cache on main
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: npm run tauri build -- --ci --no-bundle --config .github/tauri-ci.json -- --locked
       - name: Build signed installer and draft release
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
         uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -62,6 +92,6 @@ jobs:
           releaseDraft: true
           prerelease: false
           # Tauri options precede --; Cargo options follow it.
-          args: --bundles nsis -- --locked
+          args: --ci --config .github/tauri-ci.json --bundles nsis -- --locked
           uploadUpdaterJson: true
           updaterJsonPreferNsis: true
