@@ -1,15 +1,20 @@
 <script setup lang="ts">
 import { computed } from "vue";
+
 import type { MediaItem } from "../types/media";
+
 import { formatDate, formatDuration, formatSize } from "../types/media";
+
 import MediaPreview from "./MediaPreview.vue";
 import MetadataRow from "./MetadataRow.vue";
 import AppIcon from "./AppIcon.vue";
+
 const props = defineProps<{
   item: MediaItem;
   showPreviews: boolean;
   stage?: boolean;
 }>();
+
 defineEmits<{
   close: [];
   favorite: [];
@@ -17,6 +22,7 @@ defineEmits<{
   action: [name: string];
   search: [value: string];
 }>();
+
 const attribution = computed(() => [
   { label: "Copyright", category: "copyright", values: props.item.copyrights },
   {
@@ -32,6 +38,7 @@ const attribution = computed(() => [
   },
   { label: "Tags", category: "tags", values: props.item.tags },
 ]);
+
 const metadata = computed(() => [
   {
     icon: "files",

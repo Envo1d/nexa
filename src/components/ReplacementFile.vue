@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+
 import type { MediaItem } from "../types/media";
+
 import { formatDuration, formatSize } from "../types/media";
+
 import MediaPreview from "./MediaPreview.vue";
 import AppIcon from "./AppIcon.vue";
 
@@ -14,17 +17,25 @@ const props = withDefaults(
   }>(),
   { openLabel: "", openDisabled: false },
 );
+
 const emit = defineEmits<{ open: [] }>();
+
 const element = ref<HTMLElement | null>(null);
+
 const visible = ref(false);
+
 const previewEnabled = computed(() => props.showPreviews && visible.value);
+
 let observer: IntersectionObserver | undefined;
+
 onMounted(() => {
   observer = new IntersectionObserver(([entry]) => {
     visible.value = Boolean(entry?.isIntersecting);
   });
+
   if (element.value) observer.observe(element.value);
 });
+
 onBeforeUnmount(() => observer?.disconnect());
 </script>
 

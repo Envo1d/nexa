@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import { invoke, isTauri } from "@tauri-apps/api/core";
+
 import AppIcon from "./AppIcon.vue";
+
 import {
   categoryKey,
   type TaxonomyCatalog,
   type TaxonomyCategory,
   type TaxonomyEntry,
 } from "../types/taxonomy";
+
 const props = defineProps<{
   demoCatalog: TaxonomyCatalog;
   changeDemo: (
@@ -17,52 +20,74 @@ const props = defineProps<{
     copyright?: string,
   ) => number;
 }>();
+
 const emit = defineEmits<{ changed: []; notice: [message: string] }>();
+
 const native = isTauri();
+
 const catalog = ref<TaxonomyCatalog>({
   copyrights: [],
   artists: [],
   tags: [],
   characters: [],
 });
+
 const category = ref<TaxonomyCategory>("copyright");
+
 const categories = [
   { id: "copyright", label: "Copyrights", key: "copyrights" },
   { id: "artist", label: "Artists", key: "artists" },
   { id: "character", label: "Characters", key: "characters" },
   { id: "tag", label: "Tags", key: "tags" },
 ] as const;
+
 const repeatedOnly = ref(false);
+
 const search = ref("");
+
 const searchInput = ref<HTMLInputElement | null>(null);
+
 function clearSearch() {
   search.value = "";
   searchInput.value?.focus();
 }
+
 const loading = ref(false);
+
 const busy = ref(false);
+
 const error = ref("");
+
 const pending = ref<{ entry: TaxonomyEntry; action: "edit" | "delete" } | null>(
   null,
 );
+
 const name = ref("");
+
 const data = computed(() => (native ? catalog.value : props.demoCatalog));
+
 const characterNameKey = (name: string) =>
   name.normalize("NFC").toLocaleLowerCase();
+
 const repeatedNames = computed(() => {
   const copyrightsByName = new Map<string, Set<string>>();
+
   for (const entry of data.value.characters) {
     const key = characterNameKey(entry.name);
+
     const copyrights = copyrightsByName.get(key) ?? new Set<string>();
+
     copyrights.add(entry.copyright ?? "");
     copyrightsByName.set(key, copyrights);
   }
+
   return new Set(
     [...copyrightsByName]
       .filter(([, copyrights]) => copyrights.size > 1)
       .map(([name]) => name),
   );
 });
+
 const entries = computed(() =>
   data.value[categoryKey[category.value]].filter(
     (entry) =>
@@ -74,10 +99,13 @@ const entries = computed(() =>
         .includes(search.value.trim().toLocaleLowerCase()),
   ),
 );
+
 async function load() {
   if (!native) return;
+
   loading.value = true;
   error.value = "";
+
   try {
     catalog.value = await invoke<TaxonomyCatalog>("get_taxonomy");
   } catch (cause) {
@@ -86,22 +114,29 @@ async function load() {
     loading.value = false;
   }
 }
+
 function begin(entry: TaxonomyEntry, action: "edit" | "delete") {
   pending.value = { entry, action };
   name.value = entry.name;
   error.value = "";
 }
+
 watch([category, search, repeatedOnly], () => {
   pending.value = null;
   error.value = "";
 });
+
 async function apply() {
   const operation = pending.value;
+
   if (!operation || busy.value) return;
+
   busy.value = true;
   error.value = "";
+
   try {
     let count = 0;
+
     if (native) {
       if (operation.action === "edit")
         await invoke("rename_taxonomy", {
@@ -121,6 +156,7 @@ async function apply() {
         operation.action === "edit" ? name.value : undefined,
         operation.entry.copyright,
       );
+
     pending.value = null;
     emit("changed");
     emit(
@@ -129,6 +165,7 @@ async function apply() {
         ? "Name updated."
         : `Entry deleted.${count ? ` ${count} file(s) queued in Stage for redistribution.` : ""}`,
     );
+
     if (native) await load();
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : String(cause);
@@ -136,6 +173,7 @@ async function apply() {
     busy.value = false;
   }
 }
+
 onMounted(load);
 </script>
 

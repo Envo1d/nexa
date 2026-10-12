@@ -2,23 +2,33 @@
 import { onMounted, ref, watch } from "vue";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
+
 import { defaultConfig, type ConfigSnapshot } from "../types/config";
 import { version } from "../../package.json";
+
 import ToggleSwitch from "./ToggleSwitch.vue";
 import SettingsRow from "./SettingsRow.vue";
 import AppIcon from "./AppIcon.vue";
+
 import { useStageScan } from "../composables/useStageScan";
 import { useCacheUsage } from "../composables/useCacheUsage";
 import { useUpdater } from "../composables/useUpdater";
+
 const updater = useUpdater();
+
 const cacheUsage = useCacheUsage();
+
 const stageScan = useStageScan();
+
 async function scanStage(library = false) {
   if (!native) {
     emit("preview", library ? "Scan library" : "Scan Stage folder");
+
     return;
   }
+
   error.value = "";
+
   try {
     await stageScan.start(library);
   } catch (cause) {
@@ -27,21 +37,34 @@ async function scanStage(library = false) {
 }
 
 const emit = defineEmits<{ preview: [action: string]; close: []; saved: [] }>();
+
 const native = isTauri();
+
 const draft = ref(defaultConfig());
+
 const paths = ref<ConfigSnapshot["paths"] | null>(null);
+
 const loading = ref(native);
+
 const ready = ref(!native);
+
 const busy = ref(false);
+
 const error = ref("");
+
 const saved = ref(false);
+
 const legacyFound = ref(false);
+
 const importing = ref(false);
+
 const importMessage = ref("");
+
 const importError = ref("");
 
 async function checkLegacyDatabase() {
   if (!native) return;
+
   try {
     legacyFound.value = await invoke<boolean>("find_legacy_database");
   } catch (cause) {
@@ -55,12 +78,14 @@ async function importLegacyDatabase() {
   busy.value = true;
   importError.value = "";
   importMessage.value = "Importing old Nexa data…";
+
   try {
     const result = await invoke<{
       libraryAdded: number;
       stageAdded: number;
       skipped: number;
     }>("import_legacy_database");
+
     importMessage.value = `Import complete: ${result.libraryAdded} Library files and ${result.stageAdded} Stage files added. ${result.skipped} existing files skipped.`;
   } catch (cause) {
     importMessage.value = "";
@@ -71,6 +96,7 @@ async function importLegacyDatabase() {
     busy.value = false;
   }
 }
+
 watch(
   draft,
   () => {
@@ -78,16 +104,21 @@ watch(
   },
   { deep: true, flush: "sync" },
 );
+
 onMounted(async () => {
   if (!native) return;
+
   try {
     await stageScan.connect();
   } catch (cause) {
     error.value = String(cause);
   }
+
   await checkLegacyDatabase();
+
   try {
     const snapshot = await invoke<ConfigSnapshot>("get_config");
+
     draft.value = snapshot.settings;
     paths.value = snapshot.paths;
     ready.value = true;
@@ -97,20 +128,26 @@ onMounted(async () => {
     loading.value = false;
   }
 });
+
 async function browse(section: string) {
   if (!native) {
     emit("preview", `Browse ${section} directory`);
+
     return;
   }
+
   busy.value = true;
   error.value = "";
+
   try {
     const key = section === "library" ? "libraryPath" : "stagingPath";
+
     const selected = await open({
       directory: true,
       multiple: false,
       defaultPath: draft.value[key] ?? undefined,
     });
+
     if (typeof selected === "string") {
       draft.value[key] = selected;
       saved.value = false;
@@ -121,14 +158,18 @@ async function browse(section: string) {
     busy.value = false;
   }
 }
+
 async function saveChanges() {
   if (!native) {
     emit("preview", "Save changes");
+
     return;
   }
+
   busy.value = true;
   error.value = "";
   saved.value = false;
+
   try {
     await invoke("save_config", { settings: { ...draft.value } });
     saved.value = true;
@@ -139,19 +180,25 @@ async function saveChanges() {
     busy.value = false;
   }
 }
+
 async function openLogs() {
   if (!native) {
     emit("preview", "Open logs folder");
+
     return;
   }
+
   try {
     await invoke("open_logs");
   } catch (cause) {
     error.value = `Could not open logs: ${String(cause)}`;
   }
 }
+
 const scrollArea = ref<HTMLElement | null>(null);
+
 const activeSection = ref("library");
+
 const sections = [
   {
     id: "library",
@@ -202,30 +249,42 @@ const sections = [
     description: "Personalize your workspace.",
   },
 ];
+
 function goToSection(id: string) {
   if (id === "indexing" && !importing.value) void checkLegacyDatabase();
+
   const area = scrollArea.value;
+
   const target = area?.querySelector<HTMLElement>(`#settings-${id}`);
+
   if (!area || !target) return;
+
   area.scrollTo({
     top: target.offsetTop - 24,
     behavior: "instant",
   });
   activeSection.value = id;
 }
+
 function trackSection() {
   const area = scrollArea.value;
+
   if (!area) return;
+
   if (area.scrollTop + area.clientHeight >= area.scrollHeight - 2) {
     activeSection.value = "appearance";
+
     return;
   }
+
   for (const section of sections) {
     const element = area.querySelector<HTMLElement>(`#settings-${section.id}`);
+
     if (element && element.offsetTop <= area.scrollTop + 80)
       activeSection.value = section.id;
   }
 }
+
 function resetDrafts() {
   draft.value = defaultConfig();
   saved.value = false;

@@ -21,7 +21,9 @@ export function normalizeMetadataSearch(search: string): string {
 
 export function chooseMetadataSuggestion(search: string, name: string): string {
   const parts = search.split(";");
+
   parts.pop();
+
   return normalizeMetadataSearch([...parts, name].join("; "));
 }
 
@@ -30,12 +32,18 @@ export function metadataSuggestions(
   entries: MetadataSuggestion[],
 ): MetadataSuggestion[] {
   const parts = search.split(";");
+
   const query = parts.pop()?.trim().toLocaleLowerCase() ?? "";
+
   if (!query) return [];
+
   const existing = parts.map((value) => value.trim().toLocaleLowerCase());
+
   const values = new Map<string, MetadataSuggestion>();
+
   for (const value of entries) {
     const normalized = value.name.toLocaleLowerCase();
+
     if (normalized.includes(query) && !existing.includes(normalized)) {
       values.set(
         JSON.stringify([value.category, normalized, value.copyright ?? ""]),
@@ -43,6 +51,7 @@ export function metadataSuggestions(
       );
     }
   }
+
   return [...values.values()]
     .sort(
       (a, b) =>
@@ -56,6 +65,7 @@ export function catalogSuggestions(
   catalog?: MetadataCatalog,
 ): MetadataSuggestion[] {
   if (!catalog) return [];
+
   return [
     ...catalog.artists.map((name) => ({ name, category: "Artist" })),
     ...catalog.copyrights.map((name) => ({ name, category: "Copyright" })),

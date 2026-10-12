@@ -1,8 +1,13 @@
 import { computed, ref, watch, onScopeDispose } from "vue";
+
 import { useMediaSelection } from "./useMediaSelection";
+
 import { invoke, isTauri } from "@tauri-apps/api/core";
+
 import { createMockMedia } from "../data/mockMedia";
+
 import type { MediaItem, MediaKind } from "../types/media";
+
 import {
   chooseMetadataSuggestion,
   metadataSuggestions,
@@ -12,21 +17,35 @@ import {
 
 export function useLibrary() {
   const native = isTauri();
+
   const media = ref<MediaItem[]>(native ? [] : createMockMedia());
+
   const total = ref(0);
+
   const loading = ref(false);
+
   const error = ref("");
+
   const nativeCounts = ref({ all: 0, video: 0, image: 0 });
+
   const nativeTags = ref<{ name: string; count: number }[]>([]);
+
   const characterCatalog = ref<{ name: string; copyright: string }[]>([]);
+
   const nativeSuggestions = ref<{ name: string; category: string }[]>([]);
+
   const hasMore = computed(() => native && media.value.length < total.value);
+
   let version = 0;
+
   async function refresh(append = false) {
     if (!native || (append && loading.value)) return;
+
     const request = append ? version : ++version;
+
     loading.value = true;
     error.value = "";
+
     try {
       type NativeFile = Omit<
         MediaItem,
@@ -47,6 +66,7 @@ export function useLibrary() {
         width: number | null;
         height: number | null;
       };
+
       const page = await invoke<{
         files: NativeFile[];
         total: number;
@@ -64,7 +84,9 @@ export function useLibrary() {
           offset: append ? media.value.length : 0,
         },
       });
+
       if (request !== version) return;
+
       const items: MediaItem[] = page.files.map((file) => ({
         ...file,
         id: `database-${file.id}`,
@@ -87,6 +109,7 @@ export function useLibrary() {
           ),
         ],
       }));
+
       media.value = append ? [...media.value, ...items] : items;
       total.value = page.total;
       nativeCounts.value = {
@@ -104,22 +127,33 @@ export function useLibrary() {
       if (request === version) loading.value = false;
     }
   }
+
   async function loadMore() {
     if (hasMore.value) await refresh(true);
   }
+
   onScopeDispose(() => {
     ++version;
   });
+
   const scope = ref<"gallery" | "favorites">("gallery");
+
   const search = ref("");
+
   const appliedSearch = ref("");
+
   const kind = ref<"all" | MediaKind>("all");
+
   const sortMode = ref<"newest" | "older" | "name-asc" | "name-desc">("newest");
+
   const taggedOnly = ref(false);
+
   const hideUntagged = ref(false);
+
   const scopedMedia = computed(() =>
     media.value.filter((item) => scope.value === "gallery" || item.favorite),
   );
+
   const typeCounts = computed(() =>
     native
       ? nativeCounts.value
@@ -131,21 +165,28 @@ export function useLibrary() {
             .length,
         },
   );
+
   const tags = computed(() => {
     if (native) return nativeTags.value;
+
     const counts = new Map<string, number>();
+
     for (const item of scopedMedia.value)
       for (const tag of item.tags) counts.set(tag, (counts.get(tag) ?? 0) + 1);
+
     return [...counts]
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
   });
+
   const results = computed(() => {
     if (native) return media.value;
+
     const queries = appliedSearch.value
       .split(";")
       .map((value) => value.trim().toLocaleLowerCase())
       .filter(Boolean);
+
     return scopedMedia.value
       .filter(
         (item) =>
@@ -166,11 +207,13 @@ export function useLibrary() {
             numeric: true,
             sensitivity: "base",
           });
+
           return (
             (sortMode.value === "name-asc" ? order : -order) ||
             a.id.localeCompare(b.id)
           );
         }
+
         return (
           (sortMode.value === "newest"
             ? b.modifiedAt - a.modifiedAt
@@ -178,7 +221,9 @@ export function useLibrary() {
         );
       });
   });
+
   const selection = useMediaSelection(results);
+
   const heading = computed(() =>
     appliedSearch.value
       ? appliedSearch.value
@@ -186,6 +231,7 @@ export function useLibrary() {
         ? "Favorites"
         : "All files",
   );
+
   const activeFilterCount = computed(
     () =>
       Number(Boolean(appliedSearch.value.trim())) +
@@ -195,16 +241,20 @@ export function useLibrary() {
 
   const suggestions = computed(() => {
     const values = new Map<string, MetadataSuggestion>();
+
     const add = (value: MetadataSuggestion) => {
       const normalized = value.name.toLocaleLowerCase();
+
       values.set(
         JSON.stringify([value.category, normalized, value.copyright ?? ""]),
         value,
       );
     };
+
     if (native) {
       for (const value of nativeSuggestions.value)
         if (value.category !== "Character") add(value);
+
       for (const value of characterCatalog.value)
         add({ ...value, category: "Character" });
     } else {
@@ -216,6 +266,7 @@ export function useLibrary() {
         ] as const) {
           for (const name of names) add({ name, category });
         }
+
         for (const value of item.characterCopyrights ??
           item.characters.map((name) => ({
             name,
@@ -224,6 +275,7 @@ export function useLibrary() {
           add({ ...value, category: "Character" });
       }
     }
+
     return metadataSuggestions(search.value, [...values.values()]);
   });
 
@@ -231,36 +283,47 @@ export function useLibrary() {
     search.value = normalizeMetadataSearch(search.value);
     appliedSearch.value = search.value;
   }
+
   function chooseSuggestion(name: string) {
     search.value = chooseMetadataSuggestion(search.value, name);
     commitSearch();
   }
+
   function addSearch(name: string) {
     const parts = appliedSearch.value
       .split(";")
       .map((value) => value.trim())
       .filter(Boolean);
+
     if (
       !parts.some(
         (value) => value.toLocaleLowerCase() === name.toLocaleLowerCase(),
       )
     )
       parts.push(name);
+
     search.value = parts.join("; ");
     commitSearch();
   }
+
   function clearSearch() {
     search.value = "";
     appliedSearch.value = "";
   }
+
   const favoriteBusy = new Set<string>();
+
   async function toggleFavorite(item: MediaItem) {
     if (favoriteBusy.has(item.id)) return;
+
     if (!native) {
       item.favorite = !item.favorite;
+
       return;
     }
+
     favoriteBusy.add(item.id);
+
     try {
       await invoke("set_library_favorite", {
         id: item.nativeId,
@@ -273,6 +336,7 @@ export function useLibrary() {
       favoriteBusy.delete(item.id);
     }
   }
+
   function reset() {
     clearSearch();
     kind.value = "all";
@@ -280,12 +344,14 @@ export function useLibrary() {
     taggedOnly.value = false;
     hideUntagged.value = false;
   }
+
   watch(
     [scope, appliedSearch, kind, sortMode, taggedOnly, hideUntagged],
     () => {
       if (native) void refresh();
     },
   );
+
   const catalog = computed(() =>
     native
       ? {
@@ -302,6 +368,7 @@ export function useLibrary() {
         }
       : undefined,
   );
+
   return {
     catalog,
     total,

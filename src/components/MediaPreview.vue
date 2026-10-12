@@ -1,20 +1,28 @@
 <script setup lang="ts">
 import { computed, toRef } from "vue";
+
 import { useNativePreview } from "../composables/useNativePreview";
+
 import type { MediaItem } from "../types/media";
+
 import { formatDuration } from "../types/media";
+
 import AppIcon from "./AppIcon.vue";
+
 const props = defineProps<{
   item: MediaItem;
   showPreviews: boolean;
   variant: "card" | "detail" | "wizard";
 }>();
+
 const duration = computed(() => formatDuration(props.item.duration ?? 0));
+
 const nativePreview = useNativePreview(
   toRef(props, "item"),
   toRef(props, "showPreviews"),
   props.variant !== "card",
 );
+
 const preview = computed(() => props.item.preview || nativePreview.value);
 </script>
 
