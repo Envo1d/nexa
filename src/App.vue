@@ -1038,10 +1038,12 @@ onBeforeUnmount(() => {
     <ReplacementDialog
       v-if="replacementTarget"
       :item="replacementTarget"
+      :opening="fileActionBusy"
       :catalog="library.catalog.value"
       :show-previews="showPreviews"
       @close="replacementTarget = null"
       @replaced="replacementCompleted"
+      @open="(item, main) => stageFileAction('Open file', [item], main)"
     />
     <DistributionDialog
       v-if="distributionQueue.length"

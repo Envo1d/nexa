@@ -3,8 +3,18 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import type { MediaItem } from "../types/media";
 import { formatDuration, formatSize } from "../types/media";
 import MediaPreview from "./MediaPreview.vue";
+import AppIcon from "./AppIcon.vue";
 
-const props = defineProps<{ item: MediaItem; showPreviews: boolean }>();
+const props = withDefaults(
+  defineProps<{
+    item: MediaItem;
+    showPreviews: boolean;
+    openLabel?: string;
+    openDisabled?: boolean;
+  }>(),
+  { openLabel: "", openDisabled: false },
+);
+const emit = defineEmits<{ open: [] }>();
 const element = ref<HTMLElement | null>(null);
 const visible = ref(false);
 const previewEnabled = computed(() => props.showPreviews && visible.value);
@@ -49,6 +59,16 @@ onBeforeUnmount(() => observer?.disconnect());
         </template>
       </span>
     </div>
+    <button
+      v-if="openLabel"
+      type="button"
+      class="secondary-button replacement-open"
+      :aria-label="openLabel"
+      :disabled="openDisabled"
+      @click="emit('open')"
+    >
+      <AppIcon name="arrow" :size="14" />Open file
+    </button>
   </div>
 </template>
 
@@ -72,11 +92,16 @@ onBeforeUnmount(() => observer?.disconnect());
   object-fit: contain;
 }
 .replacement-description {
+  flex: 1;
   min-width: 0;
   display: grid;
   gap: 6px;
   text-align: left;
   overflow-wrap: anywhere;
+}
+.replacement-open {
+  margin-left: auto;
+  flex-shrink: 0;
 }
 .replacement-description span {
   font-size: 12px;
