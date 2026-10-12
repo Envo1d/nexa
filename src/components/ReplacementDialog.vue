@@ -22,9 +22,14 @@ import {
 const props = defineProps<{
   item: MediaItem;
   showPreviews: boolean;
+  opening: boolean;
   catalog?: MetadataCatalog;
 }>();
-const emit = defineEmits<{ close: []; replaced: [] }>();
+const emit = defineEmits<{
+  close: [];
+  replaced: [];
+  open: [item: MediaItem, library: boolean];
+}>();
 type NativeFile = Omit<
   MediaItem,
   "size" | "width" | "height" | "modifiedAt" | "createdAt" | "artist"
@@ -81,7 +86,7 @@ const loading = ref(true);
 const saving = ref(false);
 const error = ref("");
 const acknowledged = ref(false);
-const busy = computed(() => loading.value || saving.value);
+const busy = computed(() => loading.value || saving.value || props.opening);
 let version = 0;
 let disposed = false;
 let trigger: HTMLElement | null = null;
@@ -273,6 +278,9 @@ onBeforeUnmount(() => {
             <ReplacementFile
               :item="source.item"
               :show-previews="showPreviews"
+              open-label="Open new Stage version"
+              :open-disabled="saving || opening"
+              @open="emit('open', source.item, false)"
             />
           </div>
           <template v-if="source && !selected">
@@ -391,6 +399,9 @@ onBeforeUnmount(() => {
               <ReplacementFile
                 :item="selected.item"
                 :show-previews="showPreviews"
+                open-label="Open current Main version"
+                :open-disabled="saving || opening"
+                @open="emit('open', selected.item, true)"
               />
             </div>
             <button
