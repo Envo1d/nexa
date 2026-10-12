@@ -1,2 +1,5 @@
+# Match Prettier's LF policy on every platform, including Windows CI checkout.
+* text=auto eol=lf
+
 # Keep embedded migration checksums independent of Git checkout settings.
 src-tauri/migrations/*.sql text eol=lf
