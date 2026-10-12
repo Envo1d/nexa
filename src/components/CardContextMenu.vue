@@ -7,8 +7,11 @@ import {
   ref,
   watch,
 } from "vue";
+
 import type { MediaItem } from "../types/media";
+
 import AppIcon from "./AppIcon.vue";
+
 const props = defineProps<{
   item: MediaItem;
   stage: boolean;
@@ -16,11 +19,17 @@ const props = defineProps<{
   x: number;
   y: number;
 }>();
+
 const emit = defineEmits<{ close: []; action: [action: string] }>();
+
 const menu = ref<HTMLElement | null>(null);
+
 const left = ref(props.x);
+
 const top = ref(props.y);
+
 let trigger: HTMLElement | null = null;
+
 const actions = computed<{ label: string; action?: string; icon: string }[]>(
   () => [
     { label: props.stage ? "Open" : "Open file", icon: "arrow" },
@@ -59,9 +68,12 @@ const actions = computed<{ label: string; action?: string; icon: string }[]>(
     },
   ],
 );
+
 async function position() {
   await nextTick();
+
   if (!menu.value) return;
+
   left.value = Math.max(
     8,
     Math.min(props.x, window.innerWidth - menu.value.offsetWidth - 8),
@@ -72,19 +84,25 @@ async function position() {
   );
   menu.value.querySelector<HTMLButtonElement>("button")?.focus();
 }
+
 function outside(event: PointerEvent) {
   if (!menu.value?.contains(event.target as Node)) emit("close");
 }
+
 function dismiss() {
   emit("close");
 }
+
 function keyboard(event: KeyboardEvent) {
   const buttons = [
     ...menu.value!.querySelectorAll<HTMLButtonElement>("button"),
   ];
+
   const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+
   if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
     event.preventDefault();
+
     const next =
       event.key === "Home"
         ? 0
@@ -92,14 +110,18 @@ function keyboard(event: KeyboardEvent) {
           ? buttons.length - 1
           : (index + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) %
             buttons.length;
+
     buttons[next]?.focus();
   } else if (event.key === "Escape" || event.key === "Tab") {
     if (event.key === "Escape") event.preventDefault();
+
     event.stopPropagation();
     emit("close");
   }
 }
+
 watch(() => [props.x, props.y, props.item.id], position);
+
 onMounted(() => {
   trigger = document.activeElement as HTMLElement;
   void position();
@@ -108,11 +130,13 @@ onMounted(() => {
   window.addEventListener("resize", dismiss);
   window.addEventListener("blur", dismiss);
 });
+
 onBeforeUnmount(() => {
   document.removeEventListener("pointerdown", outside);
   document.removeEventListener("scroll", dismiss, true);
   window.removeEventListener("resize", dismiss);
   window.removeEventListener("blur", dismiss);
+
   if (menu.value?.contains(document.activeElement)) trigger?.focus();
 });
 </script>

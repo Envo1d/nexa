@@ -1,5 +1,6 @@
 <script setup lang="ts">
 withDefaults(defineProps<{ trailing?: boolean }>(), { trailing: false });
+
 const model = defineModel<boolean>({ required: true });
 </script>
 

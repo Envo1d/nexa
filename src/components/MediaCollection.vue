@@ -7,7 +7,9 @@ import {
   ref,
   watch,
 } from "vue";
+
 import type { MediaItem } from "../types/media";
+
 import MediaCard from "./MediaCard.vue";
 import AppIcon from "./AppIcon.vue";
 
@@ -26,6 +28,7 @@ const props = defineProps<{
   loading?: boolean;
   error?: string;
 }>();
+
 const emit = defineEmits<{
   select: [item: MediaItem, event: MouseEvent];
   selectMany: [ids: string[]];
@@ -38,18 +41,29 @@ const emit = defineEmits<{
   loadMore: [];
   retry: [];
 }>();
+
 const viewport = ref<HTMLElement | null>(null);
+
 const width = ref(660);
+
 const height = ref(600);
+
 const scrollTop = ref(0);
+
 const showBackToTop = computed(
   () => height.value > 0 && scrollTop.value >= height.value * 2 && !drag.value,
 );
+
 const loaded = ref(36);
+
 const remSize = ref(13);
+
 const cardWidth = computed(() => 17.5 * remSize.value);
+
 const gap = computed(() => remSize.value);
+
 const gridPadding = computed(() => 0.3 * remSize.value);
+
 const columns = computed(() =>
   props.mode === "grid"
     ? Math.max(
@@ -61,31 +75,41 @@ const columns = computed(() =>
       )
     : 1,
 );
+
 const rowHeight = computed(() =>
   props.mode === "grid"
     ? ((cardWidth.value - 2) * 9) / 16 + 6.5 * remSize.value + 2 + gap.value
     : 88,
 );
+
 const loadedCount = computed(() => Math.min(loaded.value, props.items.length));
+
 const totalCount = computed(() => props.total ?? props.items.length);
+
 const rowCount = computed(() => Math.ceil(loadedCount.value / columns.value));
+
 const startRow = computed(() =>
   Math.max(0, Math.floor(scrollTop.value / rowHeight.value) - 2),
 );
+
 const endRow = computed(() =>
   Math.min(
     rowCount.value,
     Math.ceil((scrollTop.value + height.value) / rowHeight.value) + 3,
   ),
 );
+
 const visibleItems = computed(() =>
   props.items.slice(
     startRow.value * columns.value,
     endRow.value * columns.value,
   ),
 );
+
 let observer: ResizeObserver | undefined;
+
 let scrollFrame: number | undefined;
+
 const drag = ref<{
   x: number;
   y: number;
@@ -94,10 +118,15 @@ const drag = ref<{
   base: string[];
   pointerId: number;
 } | null>(null);
+
 let dragFrame: number | undefined;
+
 let pointerY = 0;
+
 let pointerX = 0;
+
 let gesturePointer: number | undefined;
+
 const selectionBox = computed(() =>
   drag.value
     ? {
@@ -108,30 +137,45 @@ const selectionBox = computed(() =>
       }
     : {},
 );
+
 function updateDrag() {
   const area = viewport.value;
+
   const current = drag.value;
+
   if (!area || !current) return;
+
   const bounds = area.getBoundingClientRect();
+
   current.endX = Math.max(
     0,
     Math.min(area.clientWidth, pointerX - bounds.left),
   );
   current.endY = Math.max(0, pointerY - bounds.top + area.scrollTop);
+
   const left = Math.min(current.x, current.endX);
+
   const right = Math.max(current.x, current.endX);
+
   const top = Math.min(current.y, current.endY);
+
   const bottom = Math.max(current.y, current.endY);
+
   const gridWidth =
     columns.value * cardWidth.value + (columns.value - 1) * gap.value;
+
   const offset = props.mode === "grid" ? (width.value - gridWidth) / 2 : 0;
+
   const ids = props.items
     .slice(0, loadedCount.value)
     .filter((_, index) => {
       const x =
         offset + (index % columns.value) * (cardWidth.value + gap.value);
+
       const y = Math.floor(index / columns.value) * rowHeight.value;
+
       const w = props.mode === "grid" ? cardWidth.value : width.value;
+
       return (
         x < right &&
         x + w > left &&
@@ -140,29 +184,40 @@ function updateDrag() {
       );
     })
     .map((item) => item.id);
+
   emit("selectMany", [...new Set([...current.base, ...ids])]);
 }
+
 function dragTick() {
   const area = viewport.value;
+
   if (!drag.value || !area) return;
+
   const bounds = area.getBoundingClientRect();
+
   const speed =
     pointerY < bounds.top + 32 ? -12 : pointerY > bounds.bottom - 32 ? 12 : 0;
+
   if (speed) {
     area.scrollTop += speed;
     updateScroll();
   }
+
   updateDrag();
   dragFrame = requestAnimationFrame(dragTick);
 }
+
 async function startSelection(event: PointerEvent) {
   if (
     event.button !== 0 ||
     (event.target as HTMLElement).closest("button, .media-card")
   )
     return;
+
   const area = viewport.value;
+
   if (!area) return;
+
   event.preventDefault();
   pointerX = event.clientX;
   pointerY = event.clientY;
@@ -171,13 +226,20 @@ async function startSelection(event: PointerEvent) {
   emit("selectionStart");
   // Measure after details disappear and the responsive grid has resized.
   await nextTick();
+
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
   if (gesturePointer !== event.pointerId) return;
+
   width.value = area.clientWidth;
   height.value = area.clientHeight;
+
   const bounds = area.getBoundingClientRect();
+
   const x = event.clientX - bounds.left;
+
   const y = event.clientY - bounds.top + area.scrollTop;
+
   drag.value = {
     x,
     y,
@@ -188,19 +250,27 @@ async function startSelection(event: PointerEvent) {
   };
   dragTick();
 }
+
 function moveSelection(event: PointerEvent) {
   if (gesturePointer === undefined) return;
+
   pointerX = event.clientX;
   pointerY = event.clientY;
   updateDrag();
 }
+
 function endSelection() {
   if (dragFrame !== undefined) cancelAnimationFrame(dragFrame);
+
   dragFrame = undefined;
+
   const id = gesturePointer;
+
   gesturePointer = undefined;
   drag.value = null;
+
   if (id !== undefined) emit("selectionEnd", props.selectedIds ?? []);
+
   if (id !== undefined && viewport.value?.hasPointerCapture(id))
     viewport.value.releasePointerCapture(id);
 }
@@ -208,24 +278,31 @@ function endSelection() {
 function onScroll() {
   // Read the latest position once per frame, even when scroll events arrive faster.
   if (scrollFrame !== undefined) return;
+
   scrollFrame = requestAnimationFrame(() => {
     scrollFrame = undefined;
     updateScroll();
   });
 }
+
 function cancelScrollFrame() {
   if (scrollFrame === undefined) return;
+
   cancelAnimationFrame(scrollFrame);
   scrollFrame = undefined;
 }
+
 function updateScroll() {
   if (!viewport.value) return;
+
   scrollTop.value = viewport.value.scrollTop;
+
   if (
     scrollTop.value + height.value >=
     rowCount.value * rowHeight.value - rowHeight.value * 3
   ) {
     loaded.value = Math.min(loaded.value + 36, props.items.length);
+
     if (
       props.hasMore &&
       !props.loading &&
@@ -234,6 +311,7 @@ function updateScroll() {
       emit("loadMore");
   }
 }
+
 function resetScroll() {
   endSelection();
   cancelScrollFrame();
@@ -241,6 +319,7 @@ function resetScroll() {
   scrollTop.value = 0;
   viewport.value?.scrollTo({ top: 0 });
 }
+
 function scrollToTop() {
   viewport.value?.focus({ preventScroll: true });
   viewport.value?.scrollTo({
@@ -250,15 +329,22 @@ function scrollToTop() {
       : "smooth",
   });
 }
+
 watch(columns, async (count, previous) => {
   if (props.mode !== "grid" || count === previous) return;
+
   cancelScrollFrame();
+
   const firstItem = Math.floor(scrollTop.value / rowHeight.value) * previous;
+
   await nextTick();
+
   if (!viewport.value) return;
+
   viewport.value.scrollTop = Math.floor(firstItem / count) * rowHeight.value;
   updateScroll();
 });
+
 watch(
   () => props.items,
   (items, previous) => {
@@ -267,11 +353,13 @@ watch(
       items.length > previous.length &&
       previous.length > 0 &&
       previous.every((item, index) => items[index]?.id === item.id);
+
     if (appended) {
       void nextTick(updateScroll);
     } else resetScroll();
   },
 );
+
 watch(
   () => props.mode,
   async () => {
@@ -282,6 +370,7 @@ watch(
     viewport.value?.scrollTo({ top: 0 });
   },
 );
+
 onMounted(() => {
   observer = new ResizeObserver(([entry]) => {
     if (entry) {
@@ -292,8 +381,10 @@ onMounted(() => {
       height.value = entry.contentRect.height;
     }
   });
+
   if (viewport.value) observer.observe(viewport.value);
 });
+
 onBeforeUnmount(() => {
   endSelection();
   observer?.disconnect();

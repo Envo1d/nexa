@@ -7,12 +7,15 @@ import {
   ref,
   watch,
 } from "vue";
+
 import AppIcon from "./AppIcon.vue";
+
 export interface MetadataValue {
   id: string;
   name: string;
   copyright?: string;
 }
+
 const props = withDefaults(
   defineProps<{
     modelValue?: MetadataValue[];
@@ -28,11 +31,14 @@ const props = withDefaults(
   }>(),
   { modelValue: () => [], textValue: "", customCopyrights: undefined },
 );
+
 const emit = defineEmits<{
   "update:modelValue": [values: MetadataValue[]];
   "update:textValue": [value: string];
 }>();
+
 const search = ref("");
+
 const query = computed({
   get: () => (props.textInput ? (props.textValue ?? "") : search.value),
   set: (value: string) => {
@@ -40,13 +46,20 @@ const query = computed({
     else search.value = value;
   },
 });
+
 const focused = ref(false);
+
 const active = ref(-1);
+
 const input = ref<HTMLInputElement | null>(null);
+
 const assignment = ref<MetadataValue[]>([]);
+
 const matches = computed(() => {
   const name = query.value.trim().toLocaleLowerCase();
+
   if (!name) return [];
+
   return props.options
     .filter(
       (value) =>
@@ -56,6 +69,7 @@ const matches = computed(() => {
     )
     .slice(0, 30);
 });
+
 const showSuggestions = computed(
   () =>
     focused.value &&
@@ -63,15 +77,21 @@ const showSuggestions = computed(
     Boolean(query.value.trim()) &&
     !assignment.value.length,
 );
+
 const canCreate = computed(
   () =>
     !props.textInput &&
     (props.allowCustom || Boolean(props.customCopyrights?.length)),
 );
+
 const entry = ref<HTMLElement | null>(null);
+
 const popup = ref<HTMLElement | null>(null);
+
 const popupTarget = ref<HTMLElement | null>(null);
+
 const anchorVisible = ref(true);
+
 const popupStyle = ref({
   left: "0px",
   top: "0px",
@@ -79,20 +99,30 @@ const popupStyle = ref({
   width: "0px",
   maxHeight: "200px",
 });
+
 let observer: ResizeObserver | undefined;
+
 let frame: number | undefined;
+
 const popupOpen = computed(
   () => showSuggestions.value || Boolean(assignment.value.length),
 );
+
 function positionPopup() {
   const anchor = entry.value;
+
   const target = popupTarget.value;
+
   if (!anchor || !target || !popupOpen.value) return;
+
   const bounds = anchor.getBoundingClientRect();
+
   const parent = target.getBoundingClientRect();
+
   const scroll = anchor
     .closest(".distribution-scroll")
     ?.getBoundingClientRect();
+
   anchorVisible.value =
     !scroll || (bounds.bottom > scroll.top && bounds.bottom <= scroll.bottom);
   popupStyle.value = {
@@ -107,13 +137,16 @@ function positionPopup() {
     maxHeight: `${Math.max(0, Math.min(220, props.panel ? bounds.top - (scroll?.top ?? 16) - 4 : window.innerHeight - bounds.bottom - 16))}px`,
   };
 }
+
 function schedulePosition() {
   if (frame !== undefined) return;
+
   frame = requestAnimationFrame(() => {
     frame = undefined;
     positionPopup();
   });
 }
+
 function dismissAssignment(event: PointerEvent) {
   if (
     assignment.value.length &&
@@ -123,10 +156,12 @@ function dismissAssignment(event: PointerEvent) {
   )
     assignment.value = [];
 }
+
 watch([popupOpen, query, () => props.modelValue.length], async () => {
   await nextTick();
   positionPopup();
 });
+
 onMounted(() => {
   popupTarget.value =
     entry.value?.closest<HTMLElement>(".distribution-dialog") ?? null;
@@ -134,21 +169,28 @@ onMounted(() => {
   document.addEventListener("pointerdown", dismissAssignment, true);
   window.addEventListener("resize", schedulePosition);
   observer = new ResizeObserver(schedulePosition);
+
   if (entry.value) observer.observe(entry.value);
 });
+
 onBeforeUnmount(() => {
   document.removeEventListener("scroll", schedulePosition, true);
   document.removeEventListener("pointerdown", dismissAssignment, true);
   window.removeEventListener("resize", schedulePosition);
   observer?.disconnect();
+
   if (frame !== undefined) cancelAnimationFrame(frame);
 });
+
 watch(active, async () => {
   await nextTick();
+
   const option = popup.value?.querySelector<HTMLElement>(
     "[aria-selected='true']",
   );
+
   if (!option || !popup.value) return;
+
   if (option.offsetTop < popup.value.scrollTop)
     popup.value.scrollTop = option.offsetTop;
   else if (
@@ -158,10 +200,12 @@ watch(active, async () => {
     popup.value.scrollTop =
       option.offsetTop + option.offsetHeight - popup.value.clientHeight;
 });
+
 watch(query, () => {
   active.value = -1;
   assignment.value = [];
 });
+
 watch(
   () => props.customCopyrights,
   (copyrights) => {
@@ -170,22 +214,27 @@ watch(
     );
   },
 );
+
 function choose(value: MetadataValue) {
   if (props.textInput) {
     query.value = value.name;
     focused.value = false;
     active.value = -1;
+
     return;
   }
+
   if (!props.modelValue.some((entry) => entry.id === value.id))
     emit(
       "update:modelValue",
       props.single ? [value] : [...props.modelValue, value],
     );
+
   assignment.value = [];
   query.value = "";
   active.value = -1;
 }
+
 async function assign(choices: MetadataValue[]) {
   assignment.value = choices;
   focused.value = false;
@@ -194,24 +243,34 @@ async function assign(choices: MetadataValue[]) {
   await nextTick();
   popup.value?.querySelector<HTMLButtonElement>("button")?.focus();
 }
+
 function commit() {
   if (props.textInput) {
     focused.value = false;
+
     return;
   }
+
   const name = query.value.trim();
+
   if (!name || props.disabled) return;
+
   const exact = props.options.filter(
     (value) => value.name.toLocaleLowerCase() === name.toLocaleLowerCase(),
   );
+
   if (exact.length === 1) {
     choose(exact[0]!);
+
     return;
   }
+
   if (exact.length > 1) {
     assign(exact);
+
     return;
   }
+
   if (props.customCopyrights?.length) {
     const choices = props.customCopyrights.map((copyright) => ({
       id: JSON.stringify([
@@ -221,23 +280,31 @@ function commit() {
       name,
       copyright,
     }));
+
     if (choices.length === 1) choose(choices[0]!);
     else assign(choices);
   } else if (props.allowCustom) choose({ id: name.toLocaleLowerCase(), name });
 }
+
 function addValue() {
   commit();
+
   if (!assignment.value.length) nextTick(() => input.value?.focus());
 }
+
 function cancelAssignment() {
   assignment.value = [];
   query.value = "";
+
   nextTick(() => input.value?.focus());
 }
+
 function chooseAssignment(value: MetadataValue) {
   choose(value);
+
   nextTick(() => input.value?.focus());
 }
+
 function keydown(event: KeyboardEvent) {
   if (event.key === "ArrowDown" || event.key === "ArrowUp") {
     event.preventDefault();
@@ -253,9 +320,11 @@ function keydown(event: KeyboardEvent) {
       : -1;
   } else if (event.key === "Enter") {
     event.preventDefault();
+
     const value = showSuggestions.value
       ? matches.value[active.value]
       : undefined;
+
     if (value) choose(value);
     else commit();
   } else if (event.key === "Escape" && showSuggestions.value) {

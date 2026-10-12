@@ -83,6 +83,7 @@ const icons: Record<string, Component> = {
   staging: FolderInput,
   structure: GitBranch,
 };
+
 const icon = computed(() => icons[props.name] ?? Info);
 </script>
 

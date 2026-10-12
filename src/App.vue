@@ -1,92 +1,42 @@
 <script setup lang="ts">
-import {
-  computed,
-  nextTick,
-  onBeforeUnmount,
-  onMounted,
-  ref,
-  watch,
-} from "vue";
-import { invoke, isTauri } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { confirm } from "@tauri-apps/plugin-dialog";
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { platform, version } from "@tauri-apps/plugin-os";
-import { usesSystemWindowCorners } from "./utils/windowCorners";
+import { useTemplateRef } from "vue";
+import { isTauri } from "@tauri-apps/api/core";
+
 import AppIcon from "./components/AppIcon.vue";
 import ToggleSwitch from "./components/ToggleSwitch.vue";
 import SortSelect from "./components/SortSelect.vue";
 import MediaCollection from "./components/MediaCollection.vue";
 import FileDetails from "./components/FileDetails.vue";
 import CardContextMenu from "./components/CardContextMenu.vue";
-import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import SettingsPanel from "./components/SettingsPanel.vue";
 import DistributionDialog from "./components/DistributionDialog.vue";
 import TagsPanel from "./components/TagsPanel.vue";
 import DuplicateOrderDialog from "./components/DuplicateOrderDialog.vue";
 import ReplacementDialog from "./components/ReplacementDialog.vue";
-import { useDemoTaxonomy } from "./composables/useDemoTaxonomy";
-import { useLibrary } from "./composables/useLibrary";
-import { useStage } from "./composables/useStage";
-import { useStageScan } from "./composables/useStageScan";
-import { useCacheUsage } from "./composables/useCacheUsage";
-import { useUpdater } from "./composables/useUpdater";
-const cacheUsage = useCacheUsage();
-let stopCacheUsage: (() => void) | undefined;
-let cacheUsageDisposed = false;
-import type { MediaItem, MediaKind, MediaMetadataDraft } from "./types/media";
+
+import { useWorkspace } from "./app/useWorkspace";
+
 import "./styles.css";
 
-const diskSync = ref<{
-  running: boolean;
-  completed: number;
-  total: number;
-  error: string | null;
-}>({ running: false, completed: 0, total: 0, error: null });
-let stopDiskSync: (() => void) | undefined;
-async function retryDiskSync() {
-  await invoke("retry_disk_sync");
-}
-const library = useLibrary();
-const stage = useStage();
-const stageScan = useStageScan();
-watch(
-  () => stageScan.status.value.running,
-  (running, previous) => {
-    if (previous && !running) {
-      void refreshRedistribution();
-      void library.refresh();
-    }
-  },
-);
-const demoTaxonomy = useDemoTaxonomy(library.media, stage.media);
-async function refreshAll() {
-  await Promise.all([refreshRedistribution(), library.refresh()]);
-}
-async function refreshRedistribution() {
-  try {
-    await stage.refreshRedistribution();
-  } catch {
-    notify("Could not load Stage files. Reopen Stage to retry.");
-  }
-}
-const distributionQueue = ref<MediaItem[]>([]);
-const replacementTarget = ref<MediaItem | null>(null);
-async function replacementCompleted() {
-  stage.clearSelection();
-  await refreshAll();
-  notify("File replaced. Old version deleted.");
-}
-const editingMetadata = ref(false);
-function distribute(item?: MediaItem) {
-  editingMetadata.value = false;
-  if (item && !stage.selectedIds.value.includes(item.id)) stage.select(item);
-  distributionQueue.value = stage.results.value.filter((entry) =>
-    stage.selectedIds.value.includes(entry.id),
-  );
-  context.value = null;
-}
+const searchInput = useTemplateRef<HTMLInputElement>("searchInput");
+
+const tagInput = useTemplateRef<HTMLInputElement>("tagInput");
+
+const modalElement = useTemplateRef<HTMLElement>("modalElement");
+
 const {
+  diskSync,
+  retryDiskSync,
+  library,
+  stage,
+  demoTaxonomy,
+  refreshAll,
+  refreshRedistribution,
+  distributionQueue,
+  replacementTarget,
+  replacementCompleted,
+  editingMetadata,
+  distribute,
   scope,
   search,
   kind,
@@ -101,479 +51,43 @@ const {
   tags,
   typeCounts,
   activeFilterCount,
-} = library;
-const view = ref<"main" | "stage" | "settings" | "tags">("main");
-watch(view, (next) => {
-  if (next === "stage") void refreshRedistribution();
-  if (next === "main") void library.refresh();
-});
-const mode = ref<"grid" | "list">("grid");
-const showPreviews = ref(true);
-const sidebarExpanded = ref(false);
-const showAllTags = ref(false);
-const searchInput = ref<HTMLInputElement | null>(null);
-const searchFocused = ref(false);
-const suggestionIndex = ref(-1);
-watch(search, () => {
-  suggestionIndex.value = -1;
-});
-function chooseSearchSuggestion(name: string) {
-  library.chooseSuggestion(name);
-  searchFocused.value = false;
-}
-function searchKeydown(event: KeyboardEvent) {
-  if (event.key === "Escape") {
-    searchFocused.value = false;
-  } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-    event.preventDefault();
-    searchFocused.value = true;
-    const count = suggestions.value.length;
-    suggestionIndex.value = count
-      ? (suggestionIndex.value +
-          (event.key === "ArrowDown" ? 1 : count - 1) +
-          count) %
-        count
-      : -1;
-  } else if (event.key === "Enter") {
-    event.preventDefault();
-    const suggestion = searchFocused.value
-      ? suggestions.value[suggestionIndex.value]
-      : undefined;
-    if (suggestion) chooseSearchSuggestion(suggestion.name);
-    else {
-      library.commitSearch();
-      searchFocused.value = false;
-    }
-  }
-}
-const tagInput = ref<HTMLInputElement | null>(null);
-const tagTarget = ref<MediaItem | null>(null);
-const orderTarget = ref<MediaItem | null>(null);
-const draftTags = ref<string[]>([]);
-const newTag = ref("");
-const tagError = ref("");
-const tagSaving = ref(false);
-
-const context = ref<{
-  item: MediaItem;
-  x: number;
-  y: number;
-  stage: boolean;
-} | null>(null);
-function openContext(item: MediaItem, event: MouseEvent | KeyboardEvent) {
-  const selection = view.value === "stage" ? stage : library;
-  if (!selection.selectedIds.value.includes(item.id))
-    selection.selectMany([item.id], false);
-  const bounds = (event.target as HTMLElement).getBoundingClientRect();
-  context.value = {
-    item,
-    x:
-      event instanceof MouseEvent && event.clientX
-        ? event.clientX
-        : bounds.left,
-    y:
-      event instanceof MouseEvent && event.clientY
-        ? event.clientY
-        : bounds.bottom,
-    stage: view.value === "stage",
-  };
-}
-async function contextAction(action: string) {
-  const item = context.value?.item;
-  const stageContext = context.value?.stage;
-  const selection = context.value?.stage ? stage : library;
-  const targets = selection.results.value.filter((entry) =>
-    selection.selectedIds.value.includes(entry.id),
-  );
-  context.value = null;
-  if (!item) return;
-  if (action === "Replace in Main Library" && stageContext && item.nativeId) {
-    replacementTarget.value = item;
-    return;
-  }
-  if (action === "Change file order") {
-    orderTarget.value = item;
-    return;
-  }
-  if (action === "Edit metadata") {
-    editingMetadata.value = true;
-    distributionQueue.value = targets.length ? targets : [item];
-    return;
-  }
-  if (action === "Delete file") {
-    if (isTauri() && item.nativeId) {
-      await stageFileAction(
-        action,
-        targets.length ? targets : [item],
-        !stageContext,
-      );
-      return;
-    }
-    notify(
-      `Delete ${targets.length || 1} file(s) is a UI preview. No files were deleted.`,
-    );
-    return;
-  }
-  if (action === "Copy filename") {
-    try {
-      if (isTauri()) await writeText(item.filename);
-      else await navigator.clipboard.writeText(item.filename);
-      notify("Filename copied.");
-    } catch {
-      notify("Could not copy the filename.");
-    }
-  } else previewAction(action, item);
-}
-async function saveMetadata(ids: string[], draft: MediaMetadataDraft) {
-  if (isTauri()) {
-    const nativeIds = ids.map(
-      (id) => distributionQueue.value.find((item) => item.id === id)?.nativeId,
-    );
-    await invoke(
-      editingMetadata.value ? "save_library_metadata" : "distribute_files",
-      { ids: nativeIds, draft },
-    );
-    await refreshAll();
-    return;
-  }
-  if (!editingMetadata.value) {
-    const distributed = stage.media.value.filter((item) =>
-      ids.includes(item.id),
-    );
-    stage.media.value = stage.media.value.filter(
-      (item) => !ids.includes(item.id),
-    );
-    library.media.value.push(...distributed);
-  }
-  const alphabetically = (values: string[]) =>
-    [...values].sort((a, b) => a.localeCompare(b));
-  for (const item of library.media.value) {
-    if (!ids.includes(item.id)) continue;
-    item.copyrights = alphabetically(draft.copyrights);
-    item.artists = [...draft.artists];
-    item.artist = draft.artists.join(", ");
-    item.characterCopyrights = draft.characters
-      .map((entry) => ({ ...entry }))
-      .sort(
-        (a, b) =>
-          a.name.localeCompare(b.name) ||
-          a.copyright.localeCompare(b.copyright),
-      );
-    item.characters = alphabetically([
-      ...new Set(draft.characters.map((entry) => entry.name)),
-    ]);
-    item.tags = alphabetically(draft.tags);
-    if (item.kind === "video") item.videoTitle = draft.videoTitle;
-  }
-}
-watch([view, mode, results, stage.results], () => {
-  context.value = null;
-});
-const toast = ref("");
-const maximized = ref(false);
-const systemWindowCorners =
-  isTauri() && usesSystemWindowCorners(platform(), version());
-let toastTimer: ReturnType<typeof setTimeout> | undefined;
-let unlistenResize: (() => void) | undefined;
-const displayedTags = computed(() =>
-  showAllTags.value ? tags.value : tags.value.slice(0, 8),
-);
-const typeOptions: { value: "all" | MediaKind; label: string; icon: string }[] =
-  [
-    { value: "all", label: "All files", icon: "files" },
-    { value: "video", label: "Videos", icon: "video" },
-    { value: "image", label: "Images", icon: "image" },
-  ];
-
-function notify(message: string) {
-  toast.value = message;
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => {
-    toast.value = "";
-  }, 4500);
-}
-function navigate(nextScope: "gallery" | "favorites") {
-  scope.value = nextScope;
-  view.value = "main";
-}
-const fileActionBusy = ref(false);
-async function stageFileAction(
-  action: string,
-  items: MediaItem[],
-  main = view.value === "main",
-) {
-  if (fileActionBusy.value) return;
-  const operation =
-    action === "Share"
-      ? "share"
-      : action === "Delete file"
-        ? "delete"
-        : action === "Open file" || action === "Open"
-          ? "open"
-          : "reveal";
-  fileActionBusy.value = true;
-  context.value = null;
-  try {
-    if (operation === "delete") {
-      const names = items
-        .slice(0, 5)
-        .map((item) => item.filename)
-        .join("\n");
-      const accepted = await confirm(
-        `Delete ${items.length} file(s) from disk?\n\n${names}${items.length > 5 ? "\n…" : ""}\n\nFiles will be moved to the Recycle Bin when available. Windows will ask before permanently deleting files that cannot be recycled.`,
-        {
-          title: "Delete files",
-          kind: "warning",
-          okLabel: "Delete files",
-          cancelLabel: "Cancel",
-        },
-      );
-      if (!accepted) return;
-    }
-    const report = await invoke<{ succeeded: string[]; failed: string[] }>(
-      "stage_file_action",
-      {
-        ids: items.map((item) => item.nativeId),
-        action: operation,
-        library: main,
-      },
-    );
-    if (operation === "delete") {
-      if (main) library.clearSelection();
-      else stage.clearSelection();
-      await Promise.all([stage.refreshRedistribution(), library.refresh()]);
-    }
-    if (report.failed.length)
-      notify(
-        `${report.succeeded.length} completed; ${report.failed.length} failed. ${report.failed[0]}`,
-      );
-    else if (operation === "delete")
-      notify(`${report.succeeded.length} file(s) deleted.`);
-  } catch (cause) {
-    notify(`File action failed: ${String(cause)}`);
-  } finally {
-    fileActionBusy.value = false;
-  }
-}
-async function previewAction(action: string, item: MediaItem) {
-  if (action === "Distribute" && view.value === "stage") {
-    distribute(item);
-    return;
-  }
-  if (
-    isTauri() &&
-    item.nativeId &&
-    ["Open", "Open file", "Open folder", "Show in Explorer", "Share"].includes(
-      action,
-    )
-  ) {
-    await stageFileAction(action, [item]);
-    return;
-  }
-  if (action === "File options") {
-    context.value = {
-      item,
-      stage: view.value === "stage",
-      x: window.innerWidth - 320,
-      y: window.innerHeight - 250,
-    };
-    return;
-  }
-  if (action === "Copy path") {
-    try {
-      if (isTauri()) await writeText(item.path);
-      else await navigator.clipboard.writeText(item.path);
-      notify("Path copied.");
-    } catch {
-      notify("Could not copy the path.");
-    }
-  } else {
-    notify(
-      `${action} is a UI preview. Real file actions will be connected after UI approval.`,
-    );
-  }
-  context.value = null;
-}
-async function editTags(item: MediaItem) {
-  tagTarget.value = item;
-  draftTags.value = [...item.tags];
-  newTag.value = "";
-  tagError.value = "";
-  context.value = null;
-  await nextTick();
-  tagInput.value?.focus();
-}
-function addDraftTag() {
-  const value = newTag.value.trim();
-  if (!value) return;
-  if (value.length > 24) {
-    tagError.value = "Keep tag names within 24 characters.";
-    return;
-  }
-  if (!draftTags.value.some((tag) => tag.toLowerCase() === value.toLowerCase()))
-    draftTags.value.push(value);
-  newTag.value = "";
-  tagError.value = "";
-}
-async function saveTags() {
-  if (tagSaving.value) return;
-  addDraftTag();
-  if (tagError.value || !tagTarget.value) return;
-  if (isTauri()) {
-    tagSaving.value = true;
-    try {
-      await invoke("save_library_tags", {
-        id: tagTarget.value.nativeId,
-        tags: draftTags.value,
-      });
-      await library.refresh();
-    } catch (cause) {
-      tagError.value = `Could not save tags: ${String(cause)}`;
-      return;
-    } finally {
-      tagSaving.value = false;
-    }
-  } else tagTarget.value.tags = [...draftTags.value];
-  tagTarget.value = null;
-  notify("Tags updated.");
-}
-async function windowAction(action: "minimize" | "maximize" | "close") {
-  if (!isTauri()) {
-    notify("Window controls are available in the Nexa desktop app.");
-    return;
-  }
-  try {
-    const appWindow = getCurrentWindow();
-    if (action === "minimize") await appWindow.minimize();
-    else if (action === "close") await appWindow.close();
-    else {
-      await appWindow.toggleMaximize();
-      maximized.value = await appWindow.isMaximized();
-    }
-  } catch {
-    notify("The window action could not be completed.");
-  }
-}
-async function startDrag(event: PointerEvent) {
-  if (event.button !== 0 || !isTauri()) return;
-  try {
-    await getCurrentWindow().startDragging();
-  } catch {
-    notify("Window dragging is unavailable.");
-  }
-}
-function preventBrowserContextMenu(event: MouseEvent) {
-  event.preventDefault();
-}
-function keyboard(event: KeyboardEvent) {
-  if (
-    (event.ctrlKey || event.metaKey) &&
-    event.key.toLowerCase() === "f" &&
-    !tagTarget.value &&
-    !orderTarget.value &&
-    !distributionQueue.value.length &&
-    (view.value === "main" || view.value === "stage") &&
-    !context.value
-  ) {
-    event.preventDefault();
-    nextTick(() => searchInput.value?.focus());
-  }
-  if (event.key === "Escape") {
-    if (orderTarget.value) return;
-    if (distributionQueue.value.length) distributionQueue.value = [];
-    else if (tagTarget.value && !tagSaving.value) tagTarget.value = null;
-    else if (view.value === "settings" || view.value === "tags")
-      view.value = "main";
-    else if (context.value) context.value = null;
-    else if (view.value === "stage") stage.clearSelection();
-    else library.clearSelection();
-  }
-}
-// Keep keyboard focus inside modal previews and restore it when they close.
-const modalElement = ref<HTMLElement | null>(null);
-let modalTrigger: HTMLElement | null = null;
-const modalOpen = computed(() => Boolean(tagTarget.value));
-watch(modalOpen, async (open) => {
-  if (open) {
-    modalTrigger =
-      document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : null;
-    await nextTick();
-    const focusTarget = tagTarget.value
-      ? tagInput.value
-      : modalElement.value?.querySelector<HTMLElement>("button, input");
-    focusTarget?.focus();
-  } else modalTrigger?.focus();
-});
-function trapFocus(event: KeyboardEvent) {
-  if (event.key !== "Tab" || !modalElement.value) return;
-  const focusable = [
-    ...modalElement.value.querySelectorAll<HTMLElement>(
-      "button:not([disabled]), input, [tabindex='0']",
-    ),
-  ];
-  const first = focusable[0];
-  const last = focusable[focusable.length - 1];
-  if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault();
-    last?.focus();
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault();
-    first?.focus();
-  }
-}
-onMounted(async () => {
-  void useUpdater().checkOnStartup(notify);
-  void cacheUsage
-    .connect(notify)
-    .then((stop) => {
-      if (cacheUsageDisposed) stop();
-      else stopCacheUsage = stop;
-    })
-    .catch(() => notify("Could not connect cache usage notifications."));
-  void stageScan
-    .connect()
-    .catch(() => notify("Could not connect Stage scan progress."));
-  void refreshRedistribution();
-  void library.refresh();
-  document.addEventListener("contextmenu", preventBrowserContextMenu, true);
-  document.addEventListener("keydown", keyboard);
-  if (isTauri()) {
-    let received = false;
-    stopDiskSync = await listen<typeof diskSync.value>(
-      "disk-sync-status",
-      (event) => {
-        received = true;
-        const previous = diskSync.value;
-        diskSync.value = event.payload;
-        if (previous.running && !event.payload.running) void refreshAll();
-      },
-    );
-    if (cacheUsageDisposed) {
-      stopDiskSync();
-      return;
-    }
-    const snapshot = await invoke<typeof diskSync.value>(
-      "get_disk_sync_status",
-    );
-    if (!received) diskSync.value = snapshot;
-    const appWindow = getCurrentWindow();
-    maximized.value = await appWindow.isMaximized();
-    unlistenResize = await appWindow.onResized(async () => {
-      maximized.value = await appWindow.isMaximized();
-    });
-  }
-});
-onBeforeUnmount(() => {
-  cacheUsageDisposed = true;
-  stopCacheUsage?.();
-  stopDiskSync?.();
-  document.removeEventListener("contextmenu", preventBrowserContextMenu, true);
-  document.removeEventListener("keydown", keyboard);
-  clearTimeout(toastTimer);
-  unlistenResize?.();
-});
+  view,
+  mode,
+  showPreviews,
+  sidebarExpanded,
+  showAllTags,
+  searchFocused,
+  suggestionIndex,
+  chooseSearchSuggestion,
+  searchKeydown,
+  tagTarget,
+  orderTarget,
+  draftTags,
+  newTag,
+  tagError,
+  tagSaving,
+  context,
+  openContext,
+  contextAction,
+  saveMetadata,
+  toast,
+  maximized,
+  systemWindowCorners,
+  displayedTags,
+  typeOptions,
+  notify,
+  navigate,
+  fileActionBusy,
+  stageFileAction,
+  previewAction,
+  editTags,
+  addDraftTag,
+  saveTags,
+  windowAction,
+  startDrag,
+  modalOpen,
+  trapFocus,
+} = useWorkspace({ searchInput, tagInput, modalElement });
 </script>
 
 <template>

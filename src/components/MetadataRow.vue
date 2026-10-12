@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AppIcon from "./AppIcon.vue";
+
 defineProps<{ label: string; icon?: string; value?: string | number }>();
 </script>
 

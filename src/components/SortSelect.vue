@@ -7,21 +7,30 @@ import {
   ref,
   useId,
 } from "vue";
+
 import AppIcon from "./AppIcon.vue";
 
 type SortMode = "newest" | "older" | "name-asc" | "name-desc";
+
 const model = defineModel<SortMode>({ required: true });
+
 const options: { value: SortMode; label: string }[] = [
   { value: "newest", label: "Newest first" },
   { value: "older", label: "Older first" },
   { value: "name-asc", label: "Name A → Z" },
   { value: "name-desc", label: "Name Z → A" },
 ];
+
 const id = useId();
+
 const root = ref<HTMLElement | null>(null);
+
 const trigger = ref<HTMLButtonElement | null>(null);
+
 const open = ref(false);
+
 const active = ref(0);
+
 const label = computed(
   () => options.find((option) => option.value === model.value)?.label,
 );
@@ -34,14 +43,17 @@ async function show(
   await nextTick();
   root.value?.querySelector<HTMLElement>('[role="listbox"]')?.focus();
 }
+
 function close() {
   open.value = false;
   trigger.value?.focus();
 }
+
 function choose(index: number) {
   model.value = options[index]!.value;
   close();
 }
+
 function onKey(event: KeyboardEvent) {
   switch (event.key) {
     case "ArrowDown":
@@ -73,6 +85,7 @@ function onKey(event: KeyboardEvent) {
       const index = options.findIndex((option) =>
         option.label.toLowerCase().startsWith(event.key.toLowerCase()),
       );
+
       if (event.key.length === 1 && index >= 0) {
         event.preventDefault();
         active.value = index;
@@ -80,11 +93,14 @@ function onKey(event: KeyboardEvent) {
     }
   }
 }
+
 function dismiss(event: Event) {
   if (event.target instanceof Node && !root.value?.contains(event.target))
     open.value = false;
 }
+
 onMounted(() => document.addEventListener("pointerdown", dismiss));
+
 onBeforeUnmount(() => document.removeEventListener("pointerdown", dismiss));
 </script>
 

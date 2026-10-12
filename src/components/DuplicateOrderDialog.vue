@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
+
 import type { MediaItem, MediaKind } from "../types/media";
+
 import AppIcon from "./AppIcon.vue";
 import DuplicateOrderRow from "./DuplicateOrderRow.vue";
 
 const props = defineProps<{ item: MediaItem; showPreviews: boolean }>();
+
 const emit = defineEmits<{ close: []; saved: [] }>();
+
 type Group = {
   key: string;
   files: {
@@ -16,20 +20,33 @@ type Group = {
     revision: string | null;
   }[];
 };
+
 const dialog = ref<HTMLElement | null>(null);
+
 const files = ref<MediaItem[]>([]);
+
 const originalIds = ref<string[]>([]);
+
 const key = ref("");
+
 const loading = ref(false);
+
 const saving = ref(false);
+
 const error = ref("");
+
 const dragging = ref<string | null>(null);
+
 const dropTarget = ref<string | null>(null);
+
 const busy = computed(() => loading.value || saving.value);
+
 const changed = computed(() =>
   files.value.some((file, index) => file.nativeId !== originalIds.value[index]),
 );
+
 let trigger: HTMLElement | null = null;
+
 let disposed = false;
 
 async function load() {
@@ -37,13 +54,18 @@ async function load() {
   error.value = "";
   dragging.value = null;
   dropTarget.value = null;
+
   try {
     const group = await invoke<Group>("get_duplicate_order", {
       id: props.item.nativeId,
     });
+
     if (disposed) return;
+
     key.value = group.key;
+
     originalIds.value = group.files.map((file) => file.id);
+
     files.value = group.files.map((file) => ({
       ...props.item,
       id: `order-${file.id}`,
@@ -61,9 +83,12 @@ async function load() {
     if (!disposed) loading.value = false;
   }
 }
+
 async function move(id: string, destination: number) {
   if (busy.value) return;
+
   const source = files.value.findIndex((file) => file.id === id);
+
   if (
     source < 0 ||
     destination < 0 ||
@@ -71,38 +96,51 @@ async function move(id: string, destination: number) {
     source === destination
   )
     return;
+
   const [file] = files.value.splice(source, 1);
+
   files.value.splice(destination, 0, file!);
   await nextTick();
+
   const row = dialog.value?.querySelector<HTMLElement>(
     `[data-file-id="${id}"]`,
   );
+
   row?.focus({ preventScroll: true });
   row?.scrollIntoView({ block: "nearest" });
 }
+
 function dragStart(event: DragEvent, id: string) {
   if (busy.value || !event.dataTransfer) {
     event.preventDefault();
+
     return;
   }
+
   dragging.value = id;
   event.dataTransfer.effectAllowed = "move";
   event.dataTransfer.setData("text/plain", id);
 }
+
 function drop(index: number) {
   if (dragging.value) void move(dragging.value, index);
+
   dragging.value = null;
   dropTarget.value = null;
 }
+
 async function save() {
   if (busy.value || !changed.value || error.value) return;
+
   saving.value = true;
+
   try {
     await invoke("save_duplicate_order", {
       key: key.value,
       expectedIds: originalIds.value,
       ids: files.value.map((file) => file.nativeId),
     });
+
     emit("saved");
     emit("close");
   } catch (cause) {
@@ -111,9 +149,11 @@ async function save() {
     saving.value = false;
   }
 }
+
 function keyboard(event: KeyboardEvent) {
   if (event.key === "Escape") {
     event.preventDefault();
+
     if (!saving.value) emit("close");
   } else if (event.key === "Tab") {
     const focusable = [
@@ -121,8 +161,11 @@ function keyboard(event: KeyboardEvent) {
         "button:not(:disabled), [tabindex='0']",
       ) ?? []),
     ];
+
     const first = focusable[0];
+
     const last = focusable[focusable.length - 1];
+
     if (event.shiftKey && document.activeElement === first) {
       event.preventDefault();
       last?.focus();
@@ -132,6 +175,7 @@ function keyboard(event: KeyboardEvent) {
     }
   }
 }
+
 onMounted(() => {
   trigger =
     document.activeElement instanceof HTMLElement
@@ -140,6 +184,7 @@ onMounted(() => {
   dialog.value?.querySelector<HTMLButtonElement>("button")?.focus();
   void load();
 });
+
 onBeforeUnmount(() => {
   disposed = true;
   trigger?.focus();

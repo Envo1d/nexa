@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+
 import type { MediaItem } from "../types/media";
+
 import MediaPreview from "./MediaPreview.vue";
 import AppIcon from "./AppIcon.vue";
 
@@ -11,21 +13,30 @@ const props = defineProps<{
   busy: boolean;
   showPreviews: boolean;
 }>();
+
 const emit = defineEmits<{ move: [offset: number] }>();
+
 const row = ref<HTMLElement | null>(null);
+
 const visible = ref(false);
+
 const previewEnabled = computed(() => props.showPreviews && visible.value);
+
 let observer: IntersectionObserver | undefined;
+
 onMounted(() => {
   if (!row.value) return;
+
   observer = new IntersectionObserver(
     ([entry]) => {
       visible.value = Boolean(entry?.isIntersecting);
     },
     { root: row.value.closest(".order-list"), rootMargin: "96px" },
   );
+
   observer.observe(row.value);
 });
+
 onBeforeUnmount(() => observer?.disconnect());
 </script>
 

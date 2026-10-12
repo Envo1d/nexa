@@ -7,13 +7,17 @@ import {
   ref,
   watch,
 } from "vue";
+
 import type { MediaItem, MediaMetadataDraft } from "../types/media";
+
 import { formatDate, formatDuration, formatSize } from "../types/media";
+
 import MetadataInput, { type MetadataValue } from "./MetadataInput.vue";
 import ToggleSwitch from "./ToggleSwitch.vue";
 import MediaPreview from "./MediaPreview.vue";
 import MetadataRow from "./MetadataRow.vue";
 import AppIcon from "./AppIcon.vue";
+
 const props = defineProps<{
   items: MediaItem[];
   library: MediaItem[];
@@ -27,28 +31,42 @@ const props = defineProps<{
   };
   persist?: (ids: string[], draft: MediaMetadataDraft) => Promise<void>;
 }>();
+
 const emit = defineEmits<{
   close: [];
   open: [item: MediaItem];
   processed: [count: number];
   save: [ids: string[], draft: MediaMetadataDraft];
 }>();
+
 const position = ref(0);
+
 const current = computed(() => props.items[position.value]!);
+
 const resolution = computed(() =>
   current.value.width && current.value.height
     ? `${current.value.width} × ${current.value.height}`
     : "Unavailable",
 );
+
 const remaining = computed(() => props.items.length - position.value);
+
 const retain = ref(false);
+
 const copyrights = ref<MetadataValue[]>([]);
+
 const artist = ref("");
+
 const characters = ref<MetadataValue[]>([]);
+
 const tags = ref<MetadataValue[]>([]);
+
 const title = ref("");
+
 const error = ref("");
+
 const dialog = ref<HTMLElement | null>(null);
+
 const steps = [
   "Information",
   "Copyrights",
@@ -57,13 +75,19 @@ const steps = [
   "Details",
   "Confirmation",
 ];
+
 const step = ref(0);
+
 const allFiles = ref(false);
+
 const completedCount = ref(0);
+
 const done = ref(false);
+
 const targets = computed(() =>
   allFiles.value ? props.items.slice(position.value) : [current.value],
 );
+
 const summary = computed<[string, string][]>(() => [
   ["Copyrights", copyrights.value.map((value) => value.name).join(", ")],
   ["Artist", artist.value.trim()],
@@ -76,29 +100,37 @@ const summary = computed<[string, string][]>(() => [
   ["Tags", tags.value.map((value) => value.name).join(", ")],
   ["Video title", title.value.trim()],
 ]);
+
 function focusStep() {
   nextTick(() => {
     dialog.value?.querySelector(".distribution-scroll")?.scrollTo({ top: 0 });
     dialog.value?.querySelector<HTMLElement>(".wizard-page-heading")?.focus();
   });
 }
+
 watch([step, done], focusStep);
+
 watch(allFiles, () => {
   error.value = "";
 });
+
 watch(error, (message) => {
   if (message)
     nextTick(() => {
       const alert = dialog.value?.querySelector<HTMLElement>(".error-message");
+
       alert?.scrollIntoView({ block: "nearest" });
       alert?.focus();
     });
 });
+
 function navigate(value: number) {
   if (saving.value) return;
+
   error.value = "";
   step.value = value;
 }
+
 function values(names: string[], sort = true): MetadataValue[] {
   const entries = [
     ...new Map(
@@ -110,27 +142,33 @@ function values(names: string[], sort = true): MetadataValue[] {
         ]),
     ).values(),
   ];
+
   return sort ? entries.sort((a, b) => a.name.localeCompare(b.name)) : entries;
 }
+
 const copyrightOptions = computed(() =>
   values(
     props.catalog?.copyrights ??
       props.library.flatMap((item) => item.copyrights),
   ),
 );
+
 const artistOptions = computed(() =>
   values(
     props.catalog?.artists ??
       props.library.flatMap((item) => item.artists ?? [item.artist]),
   ),
 );
+
 const tagOptions = computed(() =>
   values(props.catalog?.tags ?? props.library.flatMap((item) => item.tags)),
 );
+
 function loadMetadata(item: MediaItem) {
   copyrights.value = values(item.copyrights, false);
   artist.value = item.artists?.[0] ?? item.artist;
   tags.value = values(item.tags, false);
+
   const inferCopyright = (name: string) => [
     ...new Set(
       props.library
@@ -146,19 +184,23 @@ function loadMetadata(item: MediaItem) {
         .filter((copyright) => item.copyrights.includes(copyright)),
     ),
   ];
+
   const knownCopyrights = [
     ...new Set(
       item.characters.flatMap((name) => {
         const candidates = inferCopyright(name);
+
         return candidates.length === 1 ? candidates : [];
       }),
     ),
   ];
+
   const qualified =
     item.characterCopyrights ??
     item.characters.map((name) => {
       // Legacy fixtures have names only; use unambiguous single-copyright examples.
       const candidates = inferCopyright(name);
+
       return {
         name,
         copyright:
@@ -169,6 +211,7 @@ function loadMetadata(item: MediaItem) {
               : (item.copyrights[0] ?? ""),
       };
     });
+
   characters.value = qualified.map((entry) => ({
     ...entry,
     id: JSON.stringify([
@@ -176,6 +219,7 @@ function loadMetadata(item: MediaItem) {
       entry.name.toLocaleLowerCase(),
     ]),
   }));
+
   title.value =
     item.kind === "video"
       ? (item.videoTitle ??
@@ -184,8 +228,10 @@ function loadMetadata(item: MediaItem) {
         "")
       : "";
 }
+
 const characterOptions = computed(() => {
   const entries = new Map<string, MetadataValue>();
+
   const sources = props.catalog
     ? [
         {
@@ -195,12 +241,14 @@ const characterOptions = computed(() => {
         },
       ]
     : props.library;
+
   for (const item of sources) {
     const pairs =
       item.characterCopyrights ??
       item.copyrights.flatMap((copyright) =>
         item.characters.map((name) => ({ name, copyright })),
       );
+
     for (const { name, copyright } of pairs) {
       if (
         !copyrights.value.some(
@@ -209,19 +257,23 @@ const characterOptions = computed(() => {
         )
       )
         continue;
+
       const id = JSON.stringify([
         copyright.toLocaleLowerCase(),
         name.toLocaleLowerCase(),
       ]);
+
       entries.set(id, { id, name, copyright });
     }
   }
+
   return [...entries.values()].sort(
     (a, b) =>
       a.name.localeCompare(b.name) ||
       (a.copyright ?? "").localeCompare(b.copyright ?? ""),
   );
 });
+
 watch(copyrights, () => {
   characters.value = characters.value.filter((character) =>
     copyrights.value.some(
@@ -231,26 +283,35 @@ watch(copyrights, () => {
     ),
   );
 });
+
 const needsTitle = computed(
   () =>
     current.value.kind === "video" ||
     props.items.slice(position.value).some((item) => item.kind === "video"),
 );
+
 const saving = ref(false);
+
 async function process() {
   if (saving.value) return;
+
   error.value = "";
+
   if (
     !artist.value.trim() ||
     ((allFiles.value ? needsTitle.value : current.value.kind === "video") &&
       !title.value.trim())
   ) {
     error.value = "Enter an artist and a title for videos.";
+
     return;
   }
+
   completedCount.value = targets.value.length;
+
   if (props.editing || props.persist) {
     const ids = targets.value.map((item) => item.id);
+
     const draft = {
       copyrights: copyrights.value.map((value) => value.name),
       artists: [artist.value.trim()],
@@ -261,22 +322,28 @@ async function process() {
       tags: tags.value.map((value) => value.name),
       videoTitle: title.value.trim(),
     };
+
     saving.value = true;
+
     try {
       if (props.persist) await props.persist(ids, draft);
       else emit("save", ids, draft);
     } catch (cause) {
       error.value = `Could not save metadata: ${String(cause)}`;
+
       return;
     } finally {
       saving.value = false;
     }
   }
+
   done.value = true;
   emit("processed", completedCount.value);
 }
+
 function nextFile() {
   position.value += completedCount.value;
+
   if (props.editing) loadMetadata(current.value);
   else if (!retain.value) {
     copyrights.value = [];
@@ -285,29 +352,38 @@ function nextFile() {
     tags.value = [];
     title.value = "";
   }
+
   step.value = 0;
   done.value = false;
   allFiles.value = false;
   error.value = "";
   focusStep();
 }
+
 function keyboard(event: KeyboardEvent) {
   if (saving.value && event.key === "Escape") {
     event.stopPropagation();
+
     return;
   }
+
   if (event.key === "Escape") {
     event.stopPropagation();
     emit("close");
   }
+
   if (event.key !== "Tab") return;
+
   const elements = [
     ...(dialog.value?.querySelectorAll<HTMLElement>(
       "button:not([disabled]):not([tabindex='-1']), input:not([disabled]), select:not([disabled]), textarea:not([disabled])",
     ) ?? []),
   ];
+
   const first = elements[0];
+
   const last = elements[elements.length - 1];
+
   if (event.shiftKey && document.activeElement === first) {
     event.preventDefault();
     last?.focus();
@@ -316,15 +392,19 @@ function keyboard(event: KeyboardEvent) {
     first?.focus();
   }
 }
+
 let trigger: HTMLElement | null = null;
+
 onMounted(() => {
   if (props.editing) loadMetadata(current.value);
+
   trigger =
     document.activeElement instanceof HTMLElement
       ? document.activeElement
       : null;
   focusStep();
 });
+
 onBeforeUnmount(() => trigger?.focus());
 </script>
 

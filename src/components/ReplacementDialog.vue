@@ -8,9 +8,12 @@ import {
   watch,
 } from "vue";
 import { invoke } from "@tauri-apps/api/core";
+
 import type { MediaItem } from "../types/media";
+
 import ReplacementFile from "./ReplacementFile.vue";
 import AppIcon from "./AppIcon.vue";
+
 import {
   catalogSuggestions,
   chooseMetadataSuggestion,
@@ -25,11 +28,13 @@ const props = defineProps<{
   opening: boolean;
   catalog?: MetadataCatalog;
 }>();
+
 const emit = defineEmits<{
   close: [];
   replaced: [];
   open: [item: MediaItem, library: boolean];
 }>();
+
 type NativeFile = Omit<
   MediaItem,
   "size" | "width" | "height" | "modifiedAt" | "createdAt" | "artist"
@@ -43,7 +48,9 @@ type NativeFile = Omit<
   createdAt: number | null;
   artist: string | null;
 };
+
 type Choice = { item: MediaItem; token: string };
+
 function choice(file: NativeFile): Choice {
   return {
     token: file.token,
@@ -67,38 +74,64 @@ function choice(file: NativeFile): Choice {
     },
   };
 }
+
 const dialog = ref<HTMLElement | null>(null);
+
 const searchInput = ref<HTMLInputElement | null>(null);
+
 const source = ref<Choice | null>(null);
+
 const selected = ref<Choice | null>(null);
+
 const files = ref<Choice[]>([]);
+
 const query = ref("");
+
 const appliedQuery = ref("");
+
 const searchFocused = ref(false);
+
 const suggestionIndex = ref(-1);
+
 const suggestions = computed(() =>
   metadataSuggestions(query.value, catalogSuggestions(props.catalog)),
 );
+
 const cursor = ref<string | null>(null);
+
 const syncWithDisk = ref(false);
+
 const hasAnnotations = ref(false);
+
 const loading = ref(true);
+
 const saving = ref(false);
+
 const error = ref("");
+
 const acknowledged = ref(false);
+
 const busy = computed(() => loading.value || saving.value || props.opening);
+
 let version = 0;
+
 let disposed = false;
+
 let trigger: HTMLElement | null = null;
+
 async function load(append = false) {
   if (saving.value || !source.value) return;
+
   const request = ++version;
+
   loading.value = true;
   error.value = "";
+
   if (!append) {
     files.value = [];
     cursor.value = null;
   }
+
   try {
     const page = await invoke<{ files: NativeFile[]; next: string | null }>(
       "get_replacement_candidates",
@@ -108,7 +141,9 @@ async function load(append = false) {
         after: append ? cursor.value : null,
       },
     );
+
     if (disposed || request !== version) return;
+
     files.value = append
       ? [...files.value, ...page.files.map(choice)]
       : page.files.map(choice);
@@ -119,18 +154,22 @@ async function load(append = false) {
     if (!disposed && request === version) loading.value = false;
   }
 }
+
 async function reload() {
   selected.value = null;
   acknowledged.value = false;
   loading.value = true;
   error.value = "";
+
   try {
     const result = await invoke<{
       file: NativeFile;
       syncWithDisk: boolean;
       hasAnnotations: boolean;
     }>("get_replacement_source", { id: props.item.nativeId });
+
     if (disposed) return;
+
     source.value = choice(result.file);
     syncWithDisk.value = result.syncWithDisk;
     hasAnnotations.value = result.hasAnnotations;
@@ -141,9 +180,11 @@ async function reload() {
     if (!disposed) loading.value = false;
   }
 }
+
 watch(query, () => {
   suggestionIndex.value = -1;
 });
+
 function commitSearch() {
   query.value = normalizeMetadataSearch(query.value);
   appliedQuery.value = query.value;
@@ -152,17 +193,21 @@ function commitSearch() {
   acknowledged.value = false;
   void load();
 }
+
 function chooseSuggestion(name: string) {
   query.value = chooseMetadataSuggestion(query.value, name);
   commitSearch();
 }
+
 function searchKeydown(event: KeyboardEvent) {
   if (event.key === "Escape" && searchFocused.value) {
     event.stopPropagation();
     searchFocused.value = false;
   } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
     event.preventDefault();
+
     const count = suggestions.value.length;
+
     suggestionIndex.value = count
       ? (suggestionIndex.value + (event.key === "ArrowDown" ? 1 : -1) + count) %
         count
@@ -170,18 +215,22 @@ function searchKeydown(event: KeyboardEvent) {
     searchFocused.value = true;
   } else if (event.key === "Enter") {
     event.preventDefault();
+
     const suggestion = searchFocused.value
       ? suggestions.value[suggestionIndex.value]
       : undefined;
+
     if (suggestion) chooseSuggestion(suggestion.name);
     else commitSearch();
   }
 }
+
 function select(file: Choice) {
   selected.value = file;
   acknowledged.value = false;
   error.value = "";
 }
+
 async function save() {
   if (
     !source.value ||
@@ -191,7 +240,9 @@ async function save() {
     error.value
   )
     return;
+
   saving.value = true;
+
   try {
     await invoke("replace_library_file", {
       request: {
@@ -210,19 +261,26 @@ async function save() {
     saving.value = false;
   }
 }
+
 function keyboard(event: KeyboardEvent) {
   if (event.key === "Escape") {
     event.preventDefault();
+
     if (!saving.value) emit("close");
   }
+
   if (event.key !== "Tab") return;
+
   const controls = [
     ...(dialog.value?.querySelectorAll<HTMLElement>(
       "button:not(:disabled), input:not(:disabled), [tabindex='0']",
     ) ?? []),
   ];
+
   const first = controls[0];
+
   const last = controls[controls.length - 1];
+
   if (event.shiftKey && document.activeElement === first) {
     event.preventDefault();
     last?.focus();
@@ -231,6 +289,7 @@ function keyboard(event: KeyboardEvent) {
     first?.focus();
   }
 }
+
 onMounted(async () => {
   trigger =
     document.activeElement instanceof HTMLElement
@@ -239,8 +298,10 @@ onMounted(async () => {
   dialog.value?.querySelector<HTMLButtonElement>("button")?.focus();
   await reload();
   await nextTick();
+
   if (!disposed) searchInput.value?.focus();
 });
+
 onBeforeUnmount(() => {
   disposed = true;
   ++version;

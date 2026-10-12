@@ -1,5 +1,7 @@
 import { computed, watch, type Ref } from "vue";
+
 import type { MediaItem } from "../types/media";
+
 import {
   categoryKey,
   type TaxonomyCategory,
@@ -12,30 +14,36 @@ export function useDemoTaxonomy(
   stage: Ref<MediaItem[]>,
 ) {
   const characters = new Map<string, { name: string; copyright: string }>();
+
   const characterId = (name: string, copyright: string) =>
     JSON.stringify([copyright, name]);
+
   const qualified = (item: MediaItem) =>
     item.characterCopyrights ??
     item.characters.map((name) => ({
       name,
       copyright: item.copyrights[0] ?? "",
     }));
+
   const dictionaries = {
     copyrights: new Set<string>(),
     artists: new Set<string>(),
     tags: new Set<string>(),
     characters: new Set<string>(),
   };
+
   const names = (item: MediaItem, category: TaxonomyCategory) =>
     category === "artist"
       ? (item.artists ?? (item.artist ? [item.artist] : []))
       : item[categoryKey[category]];
+
   watch(
     [library, stage],
     () => {
       for (const item of [...library.value, ...stage.value]) {
         for (const entry of qualified(item))
           characters.set(characterId(entry.name, entry.copyright), entry);
+
         for (const category of ["copyright", "artist", "tag"] as const)
           for (const name of names(item, category))
             dictionaries[categoryKey[category]].add(name);
@@ -43,6 +51,7 @@ export function useDemoTaxonomy(
     },
     { deep: true, immediate: true },
   );
+
   const catalog = computed<TaxonomyCatalog>(() => {
     const result: TaxonomyCatalog = {
       copyrights: [],
@@ -50,9 +59,12 @@ export function useDemoTaxonomy(
       tags: [],
       characters: [],
     };
+
     for (const category of ["copyright", "artist", "tag"] as const) {
       const key = categoryKey[category];
+
       const items = [...library.value, ...stage.value];
+
       // Read refs to refresh counts even if the dictionary itself has no new entries.
       result[key] = [...dictionaries[key]]
         .map((name) => ({
@@ -63,6 +75,7 @@ export function useDemoTaxonomy(
         }))
         .sort((a, b) => a.name.localeCompare(b.name));
     }
+
     result.characters = [...characters]
       .map(([id, entry]): TaxonomyEntry => ({
         id,
@@ -79,8 +92,10 @@ export function useDemoTaxonomy(
           a.name.localeCompare(b.name) ||
           (a.copyright ?? "").localeCompare(b.copyright ?? ""),
       );
+
     return result;
   });
+
   function change(
     category: TaxonomyCategory,
     old: string,
@@ -88,7 +103,9 @@ export function useDemoTaxonomy(
     copyright?: string,
   ) {
     const key = categoryKey[category];
+
     const next = replacement?.trim();
+
     if (
       replacement !== undefined &&
       (!next ||
@@ -98,9 +115,11 @@ export function useDemoTaxonomy(
         ))
     )
       throw new Error("Enter a nonempty name without control characters.");
+
     if (category === "character") {
       if (copyright === undefined)
         throw new Error("Select a copyright-qualified character.");
+
       if (
         [...characters.values()].some(
           (entry) =>
@@ -112,6 +131,7 @@ export function useDemoTaxonomy(
         )
       )
         throw new Error("This character already exists in the copyright.");
+
       for (const item of [...library.value, ...stage.value]) {
         item.characterCopyrights = qualified(item).flatMap((entry) =>
           entry.name === old && entry.copyright === copyright
@@ -120,16 +140,22 @@ export function useDemoTaxonomy(
               : []
             : [entry],
         );
+
         item.characters = [
           ...new Set(item.characterCopyrights.map((entry) => entry.name)),
         ];
       }
+
       characters.delete(characterId(old, copyright));
+
       if (next)
         characters.set(characterId(next, copyright), { name: next, copyright });
+
       library.value = [...library.value];
+
       return 0;
     }
+
     if (
       next &&
       [...dictionaries[key]].some(
@@ -140,14 +166,17 @@ export function useDemoTaxonomy(
       )
     )
       throw new Error("This name already exists in the category.");
+
     const affected = library.value.filter((item) =>
       names(item, category).includes(old),
     );
+
     for (const item of [...library.value, ...stage.value]) {
       if (category === "artist") {
         item.artists = names(item, category).flatMap((name) =>
           name === old ? (next ? [next] : []) : [name],
         );
+
         item.artist = item.artists.join(", ");
       } else if (category === "tag") {
         item.tags = item.tags.flatMap((name) =>
@@ -155,9 +184,11 @@ export function useDemoTaxonomy(
         );
       } else {
         const hadCopyright = item.copyrights.includes(old);
+
         item.copyrights = item.copyrights.flatMap((name) =>
           name === old ? (next ? [next] : []) : [name],
         );
+
         if (item.characterCopyrights) {
           item.characterCopyrights = item.characterCopyrights.flatMap(
             (entry) =>
@@ -167,6 +198,7 @@ export function useDemoTaxonomy(
                   : []
                 : [entry],
           );
+
           item.characters = [
             ...new Set(item.characterCopyrights.map((entry) => entry.name)),
           ];
@@ -176,10 +208,13 @@ export function useDemoTaxonomy(
         }
       }
     }
+
     if (category === "copyright") {
       for (const [id, entry] of [...characters]) {
         if (entry.copyright !== old) continue;
+
         characters.delete(id);
+
         if (next)
           characters.set(characterId(entry.name, next), {
             ...entry,
@@ -187,11 +222,16 @@ export function useDemoTaxonomy(
           });
       }
     }
+
     dictionaries[key].delete(old);
+
     if (next) dictionaries[key].add(next);
+
     if (!next && category !== "tag") {
       const ids = new Set(affected.map((item) => item.id));
+
       library.value = library.value.filter((item) => !ids.has(item.id));
+
       for (const item of affected)
         if (!stage.value.some((entry) => entry.id === item.id))
           stage.value.push(item);
@@ -199,7 +239,9 @@ export function useDemoTaxonomy(
       // Invalidate the computed dictionary after renaming unused entries too.
       library.value = [...library.value];
     }
+
     return !next && category !== "tag" ? affected.length : 0;
   }
+
   return { catalog, change };
 }
