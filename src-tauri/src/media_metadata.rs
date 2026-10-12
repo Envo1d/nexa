@@ -79,14 +79,18 @@ pub enum MetadataError {
 /// Returns partial metadata when individual properties fail; opening failures are errors.
 pub fn query_media_metadata(path: &Path, kind: MediaKind) -> Result<MediaMetadata, MetadataError> {
     let _span = tracing::debug_span!("query_media_metadata", ?kind).entered();
+
     tracing::debug!("Metadata query started");
+
     #[cfg(windows)]
     let result = windows_provider::query(path, kind);
+
     #[cfg(not(windows))]
     let result = {
         let _ = path;
         Err::<MediaMetadata, _>(MetadataError::UnsupportedPlatform)
     };
+
     match &result {
         Ok(metadata) => tracing::debug!(
             known_fields = usize::from(metadata.width.is_some())
@@ -111,6 +115,7 @@ pub fn query_media_metadata(path: &Path, kind: MediaKind) -> Result<MediaMetadat
                 #[cfg(windows)]
                 MetadataError::Windows { .. } => "windows",
             };
+
             tracing::warn!(
                 category,
                 "Metadata query failed; caller may retry or mark extraction failed"
@@ -123,6 +128,7 @@ pub fn query_media_metadata(path: &Path, kind: MediaKind) -> Result<MediaMetadat
 #[cfg(windows)]
 fn codec_label(value: &str) -> String {
     let normalized = value.trim_matches(['{', '}']).to_ascii_lowercase();
+
     if let Some(prefix) = normalized.strip_suffix("-0000-0010-8000-00aa00389b71") {
         let known = match prefix {
             "34363248" | "31435641" => Some("H.264"),
@@ -133,6 +139,7 @@ fn codec_label(value: &str) -> String {
             "47504a4d" => Some("Motion JPEG"),
             _ => None,
         };
+
         if let Some(known) = known {
             return known.into();
         }
@@ -172,6 +179,7 @@ mod windows_provider {
         fn drop(&mut self) {
             // SAFETY: GetValue returned an owned initialized PROPVARIANT.
             let result = unsafe { PropVariantClear(&mut self.0) };
+
             if let Err(error) = result {
                 tracing::warn!(hresult = error.code().0, "Property value cleanup failed");
             }
@@ -192,12 +200,14 @@ mod windows_provider {
         // Keep regular DOS/UNC syntax: canonicalize adds a verbatim \\?\ prefix
         // which Shell parsing handlers can reject even for otherwise valid files.
         let path = std::path::absolute(path).map_err(MetadataError::File)?;
+
         if !std::fs::metadata(&path)
             .map_err(MetadataError::File)?
             .is_file()
         {
             return Err(MetadataError::NotAFile);
         }
+
         let _apartment =
             Apartment::initialize().map_err(|error| native_error("initialize_com", error))?;
         // SAFETY: COM initialized; native Unicode absolute path has no embedded NUL.
@@ -208,7 +218,9 @@ mod windows_provider {
         let store: IPropertyStore =
             unsafe { item.GetPropertyStore(GPS_BESTEFFORT | GPS_OPENSLOWITEM) }
                 .map_err(|error| native_error("open_property_store", error))?;
+
         let mut metadata = MediaMetadata::default();
+
         let (width, height) = match kind {
             MediaKind::Image => (PKEY_Image_HorizontalSize, PKEY_Image_VerticalSize),
             MediaKind::Video => (PKEY_Video_FrameWidth, PKEY_Video_FrameHeight),
@@ -235,6 +247,7 @@ mod windows_provider {
             MetadataProperty::Height,
             &mut metadata.issues,
         );
+
         if kind == MediaKind::Video {
             metadata.bitrate_bps = positive(
                 read(
@@ -269,6 +282,7 @@ mod windows_provider {
             )
             .map(frame_rate);
         }
+
         if !metadata.issues.is_empty() {
             tracing::warn!(
                 issue_count = metadata.issues.len(),
@@ -294,6 +308,7 @@ mod windows_provider {
                     property,
                     hresult: error.code().0,
                 });
+
                 return None;
             }
         };
@@ -309,16 +324,19 @@ mod windows_provider {
                     property: MetadataProperty::Codec,
                     hresult: error.code().0,
                 });
+
                 return None;
             }
         };
         // SAFETY: discriminate before accessing pointers owned by the property value.
         unsafe {
             let inner = &value.0.Anonymous.Anonymous;
+
             match inner.vt {
                 VT_EMPTY | VT_NULL => None,
                 VT_LPWSTR if !inner.Anonymous.pwszVal.is_null() => {
                     let text = inner.Anonymous.pwszVal.to_string().ok()?;
+
                     let text = text.trim();
                     (!text.is_empty()).then(|| codec_label(text))
                 }
@@ -345,6 +363,7 @@ mod windows_provider {
         // SAFETY: vt is the discriminant; union members are read only after matching it.
         unsafe {
             let inner = &value.0.Anonymous.Anonymous;
+
             match inner.vt {
                 VT_EMPTY | VT_NULL => None,
                 VT_UI8 if wide => Some(inner.Anonymous.uhVal),
@@ -377,6 +396,7 @@ mod windows_provider {
 
     fn frame_rate(raw: u32) -> FrameRate {
         let (mut a, mut b) = (raw, 1000);
+
         while b != 0 {
             (a, b) = (b, a % b);
         }
@@ -423,6 +443,7 @@ mod windows_provider {
         #[test]
         fn distinguishes_missing_zero_duration_and_wrong_types() {
             let mut value = PropertyValue(PROPVARIANT::default());
+
             let mut issues = Vec::new();
             assert_eq!(
                 decode(&value, MetadataProperty::Duration, true, &mut issues),
@@ -461,6 +482,7 @@ mod windows_provider {
         #[test]
         fn extracts_unicode_image_dimensions_without_modifying_file() {
             let directory = tempfile::tempdir().unwrap();
+
             let path = directory.path().join("зображення 日本.bmp");
             // Uncompressed 2x1 24-bit BMP with one padded pixel row.
             let mut bytes = vec![0_u8; 62];
@@ -474,6 +496,7 @@ mod windows_provider {
             bytes[28..30].copy_from_slice(&24_u16.to_le_bytes());
             bytes[34..38].copy_from_slice(&8_u32.to_le_bytes());
             std::fs::write(&path, &bytes).unwrap();
+
             for _ in 0..2 {
                 let metadata = query_media_metadata(&path, MediaKind::Image).unwrap();
                 assert_eq!((metadata.width, metadata.height), (Some(2), Some(1)));
@@ -487,6 +510,7 @@ mod windows_provider {
         fn nested_sta_initialization_remains_balanced() {
             std::thread::spawn(|| {
                 let outer = Apartment::initialize().unwrap();
+
                 let inner = Apartment::initialize().unwrap();
                 drop(inner);
                 // The outer initialization must still keep this thread in STA.
