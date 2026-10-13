@@ -1,6 +1,5 @@
-import { ref } from "vue";
+import { onScopeDispose, ref, shallowRef } from "vue";
 import { invoke } from "@tauri-apps/api/core";
-import { confirm } from "@tauri-apps/plugin-dialog";
 
 import type { MediaItem } from "../../types/media";
 import type { LibraryModel, StageModel, Notify } from "./model";
@@ -14,12 +13,36 @@ export function useFileActions(
 ) {
   const fileActionBusy = ref(false);
 
+  const deletionRequest = shallowRef<{
+    items: MediaItem[];
+    trigger: HTMLElement | null;
+  } | null>(null);
+
+  let resolveDeletion: ((accepted: boolean) => void) | null = null;
+
+  function answerDeletion(accepted: boolean) {
+    const resolve = resolveDeletion;
+
+    resolveDeletion = null;
+    deletionRequest.value = null;
+    resolve?.(accepted);
+  }
+
+  onScopeDispose(() => answerDeletion(false));
+
   async function stageFileAction(
     action: string,
     items: MediaItem[],
     main = isMain(),
   ) {
-    if (fileActionBusy.value) return;
+    if (fileActionBusy.value || !items.length) return;
+
+    items = [...items];
+
+    const trigger =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
 
     const operation =
       action === "Share"
@@ -35,20 +58,10 @@ export function useFileActions(
 
     try {
       if (operation === "delete") {
-        const names = items
-          .slice(0, 5)
-          .map((item) => item.filename)
-          .join("\n");
-
-        const accepted = await confirm(
-          `Delete ${items.length} file(s) from disk?\n\n${names}${items.length > 5 ? "\n…" : ""}\n\nFiles will be moved to the Recycle Bin when available. Windows will ask before permanently deleting files that cannot be recycled.`,
-          {
-            title: "Delete files",
-            kind: "warning",
-            okLabel: "Delete files",
-            cancelLabel: "Cancel",
-          },
-        );
+        const accepted = await new Promise<boolean>((resolve) => {
+          resolveDeletion = resolve;
+          deletionRequest.value = { items, trigger };
+        });
 
         if (!accepted) return;
       }
@@ -82,5 +95,5 @@ export function useFileActions(
     }
   }
 
-  return { fileActionBusy, stageFileAction };
+  return { fileActionBusy, deletionRequest, answerDeletion, stageFileAction };
 }
