@@ -98,7 +98,9 @@ const summary = computed<[string, string][]>(() => [
       .join(", "),
   ],
   ["Tags", tags.value.map((value) => value.name).join(", ")],
-  ["Video title", title.value.trim()],
+  ...(current.value.kind === "video"
+    ? [["Video title", title.value.trim()] as [string, string]]
+    : []),
 ]);
 
 function focusStep() {
