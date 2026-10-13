@@ -363,15 +363,13 @@ function nextFile() {
 }
 
 function keyboard(event: KeyboardEvent) {
-  if (saving.value && event.key === "Escape") {
+  if (event.key === "Escape") {
+    event.preventDefault();
     event.stopPropagation();
+
+    if (!saving.value) emit("close");
 
     return;
-  }
-
-  if (event.key === "Escape") {
-    event.stopPropagation();
-    emit("close");
   }
 
   if (event.key !== "Tab") return;
@@ -412,7 +410,7 @@ onBeforeUnmount(() => trigger?.focus());
 
 <template>
   <Teleport to="body">
-    <div class="modal-backdrop" @click.self="!saving && emit('close')">
+    <div class="modal-backdrop">
       <section
         ref="dialog"
         class="distribution-dialog"
