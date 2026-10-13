@@ -48,6 +48,7 @@ const modifiedDateTime = computed(() =>
 
 defineEmits<{
   select: [event: MouseEvent];
+  open: [];
   favorite: [];
   context: [event: MouseEvent | KeyboardEvent];
 }>();
@@ -63,9 +64,10 @@ defineEmits<{
   >
     <button
       class="card-select"
-      :aria-label="`View ${item.filename}`"
+      :aria-label="`Select ${item.filename}`"
       :aria-pressed="selected"
       @click="$emit('select', $event)"
+      @dblclick="$emit('open')"
     >
       <MediaPreview :item="item" :show-previews="showPreviews" variant="card" />
       <div class="card-body">

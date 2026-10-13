@@ -88,6 +88,36 @@ export function useWorkspace(elements: WorkspaceElements) {
 
   const sidebarExpanded = ref(false);
 
+  const detailsOpen = ref(false);
+
+  const detailsSelection = computed(() =>
+    view.value === "stage" ? stage : library,
+  );
+
+  const detailsCount = computed(
+    () => detailsSelection.value.selectedIds.value.length,
+  );
+
+  const detailsItem = computed(() => {
+    const selection = detailsSelection.value;
+
+    if (selection.selectedIds.value.length !== 1) return null;
+
+    return (
+      selection.results.value.find(
+        (item) => item.id === selection.selectedIds.value[0],
+      ) ?? null
+    );
+  });
+
+  function closeDetails() {
+    detailsOpen.value = false;
+
+    nextTick(() =>
+      document.querySelector<HTMLButtonElement>(".details-toggle")?.focus(),
+    );
+  }
+
   const showAllTags = ref(false);
 
   const context = ref<{
@@ -342,6 +372,7 @@ export function useWorkspace(elements: WorkspaceElements) {
       else if (view.value === "settings" || view.value === "tags")
         view.value = "main";
       else if (context.value) context.value = null;
+      else if (detailsOpen.value) closeDetails();
       else if (view.value === "stage") stage.clearSelection();
       else library.clearSelection();
     }
@@ -392,6 +423,10 @@ export function useWorkspace(elements: WorkspaceElements) {
     mode,
     showPreviews,
     sidebarExpanded,
+    detailsOpen,
+    detailsItem,
+    detailsCount,
+    closeDetails,
     showAllTags,
     searchFocused,
     suggestionIndex,

@@ -45,7 +45,6 @@ const {
   taggedOnly,
   hideUntagged,
   selectedId,
-  selected,
   results,
   heading,
   tags,
@@ -55,6 +54,10 @@ const {
   mode,
   showPreviews,
   sidebarExpanded,
+  detailsOpen,
+  detailsItem,
+  detailsCount,
+  closeDetails,
   showAllTags,
   searchFocused,
   suggestionIndex,
@@ -375,27 +378,20 @@ const {
           :mode="mode"
           :selected-id="selectedId"
           :selected-ids="library.selectedIds.value"
+          :details-open="detailsOpen"
           :heading="heading"
           :filtered="activeFilterCount > 0"
           @load-more="library.loadMore"
           @retry="library.refresh()"
           @select="library.select"
+          @open="previewAction('Open file', $event)"
+          @toggle-details="detailsOpen ? closeDetails() : (detailsOpen = true)"
           @selection-start="library.beginSelection"
           @select-many="library.selectMany($event, false)"
           @selection-end="library.selectMany"
           @favorite="library.toggleFavorite"
           @context="openContext"
           @reset="library.reset()"
-        />
-        <FileDetails
-          v-if="selected"
-          :item="selected"
-          :show-previews="showPreviews"
-          @close="library.clearSelection()"
-          @favorite="library.toggleFavorite(selected)"
-          @tags="editTags(selected)"
-          @search="library.addSearch"
-          @action="previewAction($event, selected)"
         />
       </template>
       <TagsPanel
@@ -455,12 +451,15 @@ const {
           :mode="mode"
           :selected-id="stage.selectedId.value"
           :selected-ids="stage.selectedIds.value"
+          :details-open="detailsOpen"
           heading="Stage"
           :filtered="Boolean(stage.search.value.trim())"
           stage
           @load-more="stage.loadMore"
           @retry="refreshRedistribution"
           @select="stage.select"
+          @open="previewAction('Open file', $event)"
+          @toggle-details="detailsOpen ? closeDetails() : (detailsOpen = true)"
           @selection-start="stage.beginSelection"
           @select-many="stage.selectMany($event, false)"
           @selection-end="stage.selectMany"
@@ -468,15 +467,49 @@ const {
           @context="openContext"
           @reset="stage.clearSearch()"
         />
-        <FileDetails
-          v-if="stage.selected.value"
-          :item="stage.selected.value"
-          :show-previews="showPreviews"
-          stage
-          @close="stage.clearSelection()"
-          @action="previewAction($event, stage.selected.value)"
-        />
       </template>
+      <Transition name="details-drawer">
+        <div
+          v-if="detailsOpen && (view === 'main' || view === 'stage')"
+          id="file-details-drawer"
+          class="details-drawer"
+        >
+          <FileDetails
+            v-if="detailsItem"
+            :item="detailsItem"
+            :show-previews="showPreviews"
+            :stage="view === 'stage'"
+            @close="closeDetails"
+            @favorite="library.toggleFavorite(detailsItem)"
+            @tags="editTags(detailsItem)"
+            @search="library.addSearch"
+            @action="previewAction($event, detailsItem)"
+          />
+          <aside v-else class="details-panel" aria-label="File information">
+            <header class="panel-heading">
+              <h2>File information</h2>
+              <button
+                class="icon-button"
+                aria-label="Close file information"
+                @click="closeDetails"
+              >
+                <AppIcon name="close" :size="18" />
+              </button>
+            </header>
+            <div class="details-empty" role="status">
+              <AppIcon name="info" :size="32" />
+              <h3>
+                {{
+                  detailsCount
+                    ? `${detailsCount} files selected`
+                    : "No file selected"
+                }}
+              </h3>
+              <p>Select one file to view its information.</p>
+            </div>
+          </aside>
+        </div>
+      </Transition>
     </main>
     <div class="notification-stack">
       <Transition name="toast">

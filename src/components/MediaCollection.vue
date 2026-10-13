@@ -27,10 +27,13 @@ const props = defineProps<{
   hasMore?: boolean;
   loading?: boolean;
   error?: string;
+  detailsOpen: boolean;
 }>();
 
 const emit = defineEmits<{
   select: [item: MediaItem, event: MouseEvent];
+  open: [item: MediaItem];
+  toggleDetails: [];
   selectMany: [ids: string[]];
   selectionStart: [];
   selectionEnd: [ids: string[]];
@@ -224,7 +227,7 @@ async function startSelection(event: PointerEvent) {
   gesturePointer = event.pointerId;
   area.setPointerCapture(event.pointerId);
   emit("selectionStart");
-  // Measure after details disappear and the responsive grid has resized.
+  // Measure after selection state updates before starting the gesture.
   await nextTick();
 
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
@@ -418,6 +421,22 @@ onBeforeUnmount(() => {
               : "Demo library"
         }}</span
       >
+      <button
+        type="button"
+        class="icon-button details-toggle"
+        :class="{ active: detailsOpen }"
+        :aria-label="
+          detailsOpen ? 'Close file information' : 'Open file information'
+        "
+        :title="
+          detailsOpen ? 'Close file information' : 'Open file information'
+        "
+        :aria-expanded="detailsOpen"
+        aria-controls="file-details-drawer"
+        @click="emit('toggleDetails')"
+      >
+        <AppIcon name="info" :size="20" />
+      </button>
     </header>
     <div class="collection-viewport">
       <div
@@ -460,6 +479,7 @@ onBeforeUnmount(() => {
                   : selectedId === item.id
               "
               @select="$emit('select', item, $event)"
+              @open="emit('open', item)"
               @favorite="$emit('favorite', item)"
               @context="$emit('context', item, $event)"
             />

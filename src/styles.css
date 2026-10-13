@@ -206,6 +206,7 @@ svg {
   color: #fff;
 }
 .workspace {
+  position: relative;
   flex: 1;
   min-height: 0;
   display: flex;
@@ -975,6 +976,66 @@ svg {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
+}
+.details-drawer {
+  position: absolute;
+  z-index: 9;
+  top: 59px;
+  right: 7px;
+  bottom: 7px;
+  width: min(360px, calc(100% - 14px));
+  border-radius: 10px;
+  box-shadow: -12px 0 36px #0008;
+}
+.details-drawer .details-panel {
+  width: 100%;
+  height: 100%;
+}
+.details-drawer-enter-active,
+.details-drawer-leave-active {
+  transition:
+    transform 0.22s ease,
+    opacity 0.22s ease;
+}
+.details-drawer-enter-from,
+.details-drawer-leave-to {
+  transform: translateX(calc(100% + 7px));
+  opacity: 0;
+}
+.details-drawer-leave-active {
+  pointer-events: none;
+}
+.details-toggle {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border: 1px solid #373044;
+  border-radius: 8px;
+}
+.details-toggle.active {
+  color: #c4a1ed;
+  background: #aa83dd19;
+  border-color: #8260a4;
+}
+.details-empty {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  color: #8f899e;
+  text-align: center;
+}
+.details-empty h3 {
+  color: #d5cde1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .details-drawer-enter-active,
+  .details-drawer-leave-active {
+    transition: none;
+  }
 }
 .details-panel .panel-heading {
   padding-right: 10px;
