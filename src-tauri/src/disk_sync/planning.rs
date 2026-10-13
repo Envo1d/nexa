@@ -22,6 +22,38 @@ pub(super) struct Target {
     pub(super) revision: Option<String>,
 }
 
+fn current_position(target: &Target, root: &str) -> Option<u64> {
+    let current = Path::new(&target.current_relative);
+
+    let same_destination = name_key(&target.current_root) == name_key(root)
+        && name_key(&current.parent()?.to_string_lossy())
+            == name_key(&target.folder.to_string_lossy());
+
+    if !same_destination {
+        return None;
+    }
+
+    let current_stem = name_key(current.file_stem()?.to_str()?);
+
+    let stem = name_key(&target.stem);
+
+    if current_stem == stem {
+        return Some(0);
+    }
+
+    let suffix = current_stem.strip_prefix(&format!("{stem} - "))?;
+
+    let canonical_index = !suffix.starts_with('0')
+        && !suffix.is_empty()
+        && suffix.bytes().all(|byte| byte.is_ascii_digit());
+
+    if !canonical_index {
+        return None;
+    }
+
+    suffix.parse().ok()
+}
+
 pub(super) async fn grouped_targets(
     pool: &SqlitePool,
     root: &str,
@@ -169,7 +201,20 @@ pub(super) async fn grouped_targets(
     }
 
     for group in groups.values_mut() {
-        group.sort_by_key(|target| (target.position.is_none(), target.position, target.id));
+        group.sort_by_cached_key(|target| {
+            if let Some(position) = target.position {
+                (0, position, 0, target.id)
+            } else if let Some(position) = current_position(target, root) {
+                (1, 0, position, target.id)
+            } else {
+                (2, 0, 0, target.id)
+            }
+        });
+
+        tracing::debug!(
+            files = group.len(),
+            "Naming group ordered by saved ranks, existing filenames and newcomer IDs"
+        );
     }
     Ok(groups)
 }

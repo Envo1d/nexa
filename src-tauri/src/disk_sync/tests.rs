@@ -83,6 +83,78 @@ fn indexed(root: &str, index: i64) -> PathBuf {
 }
 
 #[tokio::test]
+async fn lower_id_newcomers_append_after_existing_managed_files() {
+    let (temp, db, root, _) = fixture().await;
+
+    let settings = AppConfig::default();
+    sqlx::query("UPDATE media SET needs_distribution=1 WHERE id<>4")
+        .execute(db.pool())
+        .await
+        .unwrap();
+    run(db.pool(), &root, &settings).await;
+
+    let singleton = Path::new(&root).join("Alpha/Artist/Alice х Zed [Artist].png");
+    assert_eq!(fs::read(&singleton).unwrap(), b"independent content 4");
+
+    sqlx::query("UPDATE media SET needs_distribution=0 WHERE id=3")
+        .execute(db.pool())
+        .await
+        .unwrap();
+    run(db.pool(), &root, &settings).await;
+    assert_eq!(
+        fs::read(indexed(&root, 1)).unwrap(),
+        b"independent content 4"
+    );
+    assert_eq!(
+        fs::read(indexed(&root, 2)).unwrap(),
+        b"independent content 3"
+    );
+    assert!(!singleton.exists());
+    db.close().await;
+
+    let db = Database::open(&temp.path().join("vault.db")).await.unwrap();
+    sqlx::query("UPDATE media SET needs_distribution=0 WHERE id IN (1,2)")
+        .execute(db.pool())
+        .await
+        .unwrap();
+    run(db.pool(), &root, &settings).await;
+    run(db.pool(), &root, &settings).await;
+
+    for (index, id) in [4, 3, 1, 2].into_iter().enumerate() {
+        assert_eq!(
+            fs::read(indexed(&root, index as i64 + 1)).unwrap(),
+            format!("independent content {id}").as_bytes()
+        );
+    }
+
+    let (key, group) = find_order_group(db.pool(), &root, &settings, 1)
+        .await
+        .unwrap();
+
+    let expected = ["4", "3", "1", "2"].map(String::from);
+    assert_eq!(
+        group
+            .iter()
+            .map(|file| file.id.to_string())
+            .collect::<Vec<_>>(),
+        expected
+    );
+
+    let ordered = ["2", "1", "3", "4"].map(String::from);
+    persist_order(db.pool(), &root, &settings, &key, &expected, &ordered)
+        .await
+        .unwrap();
+    run(db.pool(), &root, &settings).await;
+
+    for (index, id) in [2, 1, 3, 4].into_iter().enumerate() {
+        assert_eq!(
+            fs::read(indexed(&root, index as i64 + 1)).unwrap(),
+            format!("independent content {id}").as_bytes()
+        );
+    }
+}
+
+#[tokio::test]
 async fn mixed_extensions_share_indices_and_persistent_order_for_images_and_videos() {
     for (kind, extensions, stem, folder) in [
         (
