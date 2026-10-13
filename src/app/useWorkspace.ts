@@ -131,13 +131,14 @@ export function useWorkspace(elements: WorkspaceElements) {
     context.value = null;
   };
 
-  const { fileActionBusy, stageFileAction } = useFileActions(
-    library,
-    stage,
-    () => view.value === "main",
-    closeContext,
-    notify,
-  );
+  const { fileActionBusy, deletionRequest, answerDeletion, stageFileAction } =
+    useFileActions(
+      library,
+      stage,
+      () => view.value === "main",
+      closeContext,
+      notify,
+    );
 
   const {
     distributionQueue,
@@ -350,6 +351,8 @@ export function useWorkspace(elements: WorkspaceElements) {
   }
 
   function keyboard(event: KeyboardEvent) {
+    if (deletionRequest.value) return;
+
     if (
       (event.ctrlKey || event.metaKey) &&
       event.key.toLowerCase() === "f" &&
@@ -450,6 +453,8 @@ export function useWorkspace(elements: WorkspaceElements) {
     notify,
     navigate,
     fileActionBusy,
+    deletionRequest,
+    answerDeletion,
     stageFileAction,
     previewAction,
     editTags,

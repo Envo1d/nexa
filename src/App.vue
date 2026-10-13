@@ -13,6 +13,7 @@ import DistributionDialog from "./components/DistributionDialog.vue";
 import TagsPanel from "./components/TagsPanel.vue";
 import DuplicateOrderDialog from "./components/DuplicateOrderDialog.vue";
 import ReplacementDialog from "./components/ReplacementDialog.vue";
+import DeleteFilesDialog from "./components/DeleteFilesDialog.vue";
 
 import { useWorkspace } from "./app/useWorkspace";
 
@@ -81,6 +82,8 @@ const {
   notify,
   navigate,
   fileActionBusy,
+  deletionRequest,
+  answerDeletion,
   stageFileAction,
   previewAction,
   editTags,
@@ -571,6 +574,13 @@ const {
       :y="context.y"
       @close="context = null"
       @action="contextAction"
+    />
+    <DeleteFilesDialog
+      v-if="deletionRequest"
+      :items="deletionRequest.items"
+      :trigger="deletionRequest.trigger"
+      :show-previews="showPreviews"
+      @answer="answerDeletion"
     />
     <DuplicateOrderDialog
       v-if="orderTarget"
