@@ -38,11 +38,7 @@ const preview = computed(() => props.item.preview || nativePreview.value);
       :height="variant === 'card' ? 360 : undefined"
       :draggable="variant === 'card' ? false : undefined"
     />
-    <AppIcon
-      v-else-if="variant === 'wizard' || !preview"
-      :name="item.kind"
-      :size="56"
-    />
+    <AppIcon v-else class="preview-placeholder" :name="item.kind" :size="56" />
     <span v-if="variant === 'detail'" class="preview-label">{{
       item.kind === "video" ? "Video preview" : "Image preview"
     }}</span>
@@ -62,3 +58,12 @@ const preview = computed(() => props.item.preview || nativePreview.value);
     >
   </div>
 </template>
+
+<style scoped>
+.preview-placeholder {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+</style>
