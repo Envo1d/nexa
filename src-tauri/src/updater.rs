@@ -1,22 +1,23 @@
-use std::{
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
-    time::Duration,
-};
+use std::sync::mpsc;
 
 use serde::Serialize;
 use tauri::{Manager, ipc::Channel};
-use tauri_plugin_updater::{Update, UpdaterExt};
 use tokio::sync::Mutex;
+use velopack::{UpdateCheck, UpdateManager, UpdateOptions};
+
+mod launch;
+mod source;
+
+#[cfg(test)]
+mod tests;
 
 #[derive(Default)]
 pub struct UpdateState(Mutex<Option<PendingUpdate>>);
 
+#[derive(Clone)]
 struct PendingUpdate {
-    update: Update,
-    shutdown_started: Arc<AtomicBool>,
+    manager: UpdateManager,
+    update: velopack::UpdateInfo,
 }
 
 #[derive(Serialize)]
@@ -29,14 +30,46 @@ pub struct UpdateInfo {
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DownloadProgress {
-    downloaded: u64,
-    total: Option<u64>,
+    percent: u8,
+}
+
+fn check_installed_update() -> Result<Option<PendingUpdate>, String> {
+    if !cfg!(windows) {
+        return Err("Package updates are supported on Windows only.".into());
+    }
+
+    let manager = UpdateManager::new(
+        source::SignedSource,
+        Some(UpdateOptions {
+            MaximumDeltasBeforeFallback: -1,
+            ..Default::default()
+        }),
+        None,
+    )
+    .map_err(|error| {
+        tracing::warn!(%error, "Velopack installation unavailable");
+        "Install the new Nexa Setup from GitHub Releases once to enable package updates. Development and old NSIS installations cannot use this updater.".to_string()
+    })?;
+
+    match manager.check_for_updates().map_err(|error| {
+        tracing::warn!(%error, "Signed update feed check failed; retry is available");
+        "Could not check or verify updates. Check your connection and published release, then retry.".to_string()
+    })? {
+        UpdateCheck::UpdateAvailable(update) => Ok(Some(PendingUpdate {
+            manager,
+            update: *update,
+        })),
+        UpdateCheck::NoUpdateAvailable => Ok(None),
+        UpdateCheck::RemoteIsEmpty => {
+            tracing::warn!("Update feed is empty; no version comparison was possible");
+            Err("No Windows update packages have been published yet. Try again later.".into())
+        }
+    }
 }
 
 #[tauri::command]
 #[tracing::instrument(skip_all)]
 pub async fn check_for_updates(
-    app: tauri::AppHandle,
     state: tauri::State<'_, UpdateState>,
 ) -> Result<Option<UpdateInfo>, String> {
     let mut pending = state
@@ -44,46 +77,29 @@ pub async fn check_for_updates(
         .try_lock()
         .map_err(|_| "An update operation is already running")?;
 
-    tracing::info!("Checking for updates");
+    tracing::info!("Checking for signed Velopack updates");
+    *pending = None;
 
-    let handle = app.clone();
+    let result = tauri::async_runtime::spawn_blocking(check_installed_update)
+        .await
+        .map_err(|error| {
+            tracing::error!(%error, "Update check worker failed");
+            "Could not finish checking for updates. Retry the check.".to_string()
+        })??;
 
-    let shutdown_started = Arc::new(AtomicBool::new(false));
+    let info = result.as_ref().map(|pending| {
+        let release = &pending.update.TargetFullRelease;
 
-    let shutdown_flag = shutdown_started.clone();
-
-    let result = async {
-        app.updater_builder()
-            .on_before_exit(move || {
-                shutdown_flag.store(true, Ordering::Release);
-                prepare_exit(&handle);
-            })
-            .timeout(Duration::from_secs(30))
-            .build()?
-            .check()
-            .await
-    }
-    .await;
-
-    match result {
-        Ok(update) => {
-            let info = update.as_ref().map(|update| UpdateInfo {
-                version: update.version.clone(),
-                notes: update.body.clone(),
-            });
-
-            tracing::info!(available = info.is_some(), "Update check completed");
-            *pending = update.map(|update| PendingUpdate {
-                update,
-                shutdown_started,
-            });
-            Ok(info)
+        UpdateInfo {
+            version: release.Version.clone(),
+            notes: (!release.NotesMarkdown.is_empty()).then(|| release.NotesMarkdown.clone()),
         }
-        Err(error) => {
-            tracing::warn!(%error, "Update check failed; manual retry is available");
-            Err("Could not check for updates. Check your connection and published release, then retry.".into())
-        }
-    }
+    });
+
+    *pending = result;
+    tracing::info!(available = info.is_some(), "Update check completed");
+
+    Ok(info)
 }
 
 #[tauri::command]
@@ -93,7 +109,6 @@ pub async fn install_update(
     state: tauri::State<'_, UpdateState>,
     progress: Channel<DownloadProgress>,
 ) -> Result<(), String> {
-    // Keep the pending update on failure so the user can explicitly retry.
     let pending = state
         .0
         .try_lock()
@@ -101,84 +116,92 @@ pub async fn install_update(
 
     let pending_update = pending
         .as_ref()
-        .ok_or("Check for an update before installing")?;
+        .ok_or("Check for an update before installing")?
+        .clone();
 
-    let update = &pending_update.update;
+    tracing::info!(version = %pending_update.update.TargetFullRelease.Version, "Downloading Velopack update");
 
-    tracing::info!(version = %update.version, "Downloading signed update");
+    let download = pending_update.clone();
 
-    let mut downloaded = 0_u64;
+    tauri::async_runtime::spawn_blocking(move || {
+        let (sender, receiver) = mpsc::channel::<i16>();
 
-    let bytes = update
-        .download(
-            |chunk, total| {
-                downloaded += chunk as u64;
+        std::thread::scope(|scope| {
+            scope.spawn(move || {
+                for percent in receiver {
+                    let _ = progress.send(DownloadProgress {
+                        percent: percent.clamp(0, 100) as u8,
+                    });
+                }
+            });
 
-                let _ = progress.send(DownloadProgress { downloaded, total });
-            },
-            || tracing::info!("Update download completed"),
-        )
-        .await
-        .map_err(|error| {
-            tracing::error!(%error, "Update download or signature verification failed");
-            "Could not download or verify the update. Installation was not started.".to_string()
-        })?;
+            download
+                .manager
+                .download_updates(&download.update, Some(sender))?;
+
+            // The SDK skips checksum validation when the target is cached.
+            source::verify_cached_package(&download.update.TargetFullRelease)
+        })
+    })
+    .await
+    .map_err(|error| {
+        tracing::error!(%error, "Update download worker failed");
+        "Could not finish downloading the update. You can retry.".to_string()
+    })?
+    .map_err(|error| {
+        tracing::error!(%error, "Update download or verification failed");
+        "Could not download or verify the update. Installation was not started.".to_string()
+    })?;
+
+    tracing::info!("Verified update download completed");
 
     let stage = app.state::<crate::stage::StageState>();
 
     let Some(_operation) = stage.try_operation() else {
-        tracing::warn!("Update installation deferred because a media operation is running");
+        tracing::warn!("Update deferred because a media operation is running");
 
         return Err(
             "A media operation is running. Wait for it to finish, then retry the update.".into(),
         );
     };
 
-    tracing::info!("Verified update ready; starting installer");
+    // Launch before cleanup so a launch failure leaves the database usable.
+    // Velopack waits for our PID to exit before replacing application files.
+    let logs_path = app
+        .state::<crate::config::ConfigStore>()
+        .snapshot()?
+        .paths
+        .logs_path;
 
-    let update = update.clone();
-
-    let shutdown_started = pending_update.shutdown_started.clone();
-
-    let environment = app.env();
     tauri::async_runtime::spawn_blocking(move || {
-        let result = update.install(bytes);
-
-        if let Err(error) = &result
-            && shutdown_started.load(Ordering::Acquire)
-        {
-            // The plugin invokes shutdown before ShellExecuteW. If Windows
-            // cannot launch the installer, SQLite/resources are already closed.
-            // Restart through the saved process environment, without using any
-            // Tauri APIs after cleanup or retrying installation automatically.
-            tracing::error!(%error, "Installer launch failed after shutdown; restarting Nexa for recovery");
-            tauri::process::restart(&environment);
-        }
-        result
+        launch::start(&pending_update.update.TargetFullRelease, &logs_path)
     })
-        .await
-        .map_err(|error| {
-            tracing::error!(%error, "Update installation worker failed");
-            "Could not start the update installer".to_string()
-        })?
-        .map_err(|error| {
-            tracing::error!(%error, "Update installer failed");
-            "Could not start the update installer. You can retry.".to_string()
-        })
+    .await
+    .map_err(|error| {
+        tracing::error!(%error, "Update launch worker failed");
+        "Could not start the updater. You can retry.".to_string()
+    })?
+    .map_err(|error| {
+        tracing::error!(%error, "Velopack updater launch failed; application remains open");
+        "Could not start the updater. Nexa remains open; you can retry.".to_string()
+    })?;
+
+    tracing::info!("Velopack updater started; preparing shutdown");
+    prepare_exit(&app).await;
+    // Keep both operation guards until the process actually terminates.
+    std::process::exit(0);
 }
 
-// Windows updater exits the process directly. Normal RunEvent::Exit is not
-// sufficient to close SQLite and save window geometry on this path.
-pub fn prepare_exit(app: &tauri::AppHandle) {
+async fn prepare_exit(app: &tauri::AppHandle) {
     use tauri_plugin_window_state::{AppHandleExt, StateFlags};
-
-    tracing::info!("Preparing application shutdown for update");
 
     if let Err(error) = app.save_window_state(StateFlags::SIZE | StateFlags::POSITION) {
         tracing::warn!(%error, "Could not save window geometry before update");
     }
-    tauri::async_runtime::block_on(app.state::<crate::database::Database>().close());
+
+    app.state::<crate::database::Database>().close().await;
     app.cleanup_before_exit();
 
     tracing::info!("Update shutdown preparation completed");
+    app.state::<crate::logging::ShutdownLogs>().flush();
 }

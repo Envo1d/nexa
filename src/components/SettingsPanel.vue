@@ -605,7 +605,7 @@ function resetDrafts() {
                   </button>
                 </SettingsRow>
                 <progress
-                  v-if="updater.busy.value && updater.downloaded.value > 0"
+                  v-if="updater.busy.value && updater.percent.value !== null"
                   :value="updater.percent.value ?? undefined"
                   max="100"
                   aria-label="Update download progress"
