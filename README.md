@@ -25,7 +25,7 @@ This repository contains the rewritten Nexa application. The previous implementa
 - **Native file actions:** open files, reveal them in Explorer, copy paths, delete with recycling where available, and open the Windows share sheet.
 - **Previews and indexing:** lazy previews with a bounded disk cache, manual scans and optional scans on startup. Preview and technical-metadata support depend on installed Windows handlers.
 - **Legacy import:** import records from the old Nexa database through Settings.
-- **Desktop updates:** check manually or on startup, review the available release and confirm installation. Velopack applies verified packages after Nexa closes and restarts the app; update manifests are signed and packages are checked against their SHA-256 hashes.
+- **Desktop updates:** check manually or on startup, review the available release and confirm installation. An independent animated Nexa window verifies the downloaded package, supervises installation after the main app closes and opens the new version. Update manifests are signed and packages are checked against their SHA-256 hashes.
 - **Window persistence:** remember the main window's position and size between normal launches.
 
 External filesystem changes are picked up by scans; a live filesystem watcher is not implemented. Browser mode uses session demo data; native library storage and file operations require the desktop application.

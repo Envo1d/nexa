@@ -10,25 +10,7 @@ pub(super) fn start(asset: &VelopackAsset, logs_path: &Path) -> Result<(), Error
 
     let locator = auto_locate_app_manifest(LocationContext::FromCurrentExe)?;
 
-    let packages_path = locator.get_packages_dir();
-
-    let package_path = packages_path.join(&asset.FileName);
-
-    // Match the SDK's wait-for-current-process launch, adding its documented
-    // --log override to keep application-triggered update logs in NexaNew.
-    let arguments = arguments(
-        &package_path,
-        &locator.get_root_dir(),
-        &packages_path,
-        &logs_path.join("velopack-update.log"),
-        std::process::id(),
-    );
-
-    let updater_path = locator.get_update_path();
-
-    velopack::process::run_process(&updater_path, arguments, updater_path.parent(), false, None)?;
-
-    Ok(())
+    super::helper::start(asset, &locator, logs_path).map_err(Error::Other)
 }
 
 pub(super) fn arguments(
@@ -40,6 +22,8 @@ pub(super) fn arguments(
 ) -> Vec<OsString> {
     vec![
         "apply".into(),
+        "--silent".into(),
+        "--norestart".into(),
         "--package".into(),
         package.into(),
         "--waitPid".into(),

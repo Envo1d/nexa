@@ -5,8 +5,11 @@ use tauri::{Manager, ipc::Channel};
 use tokio::sync::Mutex;
 use velopack::{UpdateCheck, UpdateManager, UpdateOptions};
 
+mod helper;
 mod launch;
 mod source;
+
+pub(crate) use helper::run as run_helper;
 
 #[cfg(test)]
 mod tests;
@@ -182,11 +185,11 @@ pub async fn install_update(
         "Could not start the updater. You can retry.".to_string()
     })?
     .map_err(|error| {
-        tracing::error!(%error, "Velopack updater launch failed; application remains open");
+        tracing::error!(%error, "Independent updater handoff failed; application remains open");
         "Could not start the updater. Nexa remains open; you can retry.".to_string()
     })?;
 
-    tracing::info!("Velopack updater started; preparing shutdown");
+    tracing::info!("Independent updater ready; preparing shutdown");
     prepare_exit(&app).await;
     // Keep both operation guards until the process actually terminates.
     std::process::exit(0);
