@@ -43,6 +43,14 @@ const categories = [
 
 const repeatedOnly = ref(false);
 
+const linkedCount = ref<"all" | 0 | 1>("all");
+
+const linkedCountOptions = [
+  { value: "all", label: "All links" },
+  { value: 0, label: "0 links" },
+  { value: 1, label: "1 link" },
+] as const;
+
 const search = ref("");
 
 const searchInput = ref<HTMLInputElement | null>(null);
@@ -88,17 +96,32 @@ const repeatedNames = computed(() => {
   );
 });
 
-const entries = computed(() =>
-  data.value[categoryKey[category.value]].filter(
-    (entry) =>
-      (category.value !== "character" ||
-        !repeatedOnly.value ||
-        repeatedNames.value.has(characterNameKey(entry.name))) &&
-      `${entry.name} ${entry.copyright ?? ""}`
-        .toLocaleLowerCase()
-        .includes(search.value.trim().toLocaleLowerCase()),
-  ),
+const characterFiltersActive = computed(
+  () =>
+    category.value === "character" &&
+    (repeatedOnly.value || linkedCount.value !== "all"),
 );
+
+const entries = computed(() => {
+  const query = search.value.trim().toLocaleLowerCase();
+
+  return data.value[categoryKey[category.value]].filter((entry) => {
+    if (category.value === "character") {
+      const matchesRepeatedName =
+        !repeatedOnly.value ||
+        repeatedNames.value.has(characterNameKey(entry.name));
+
+      const matchesLinkedCount =
+        linkedCount.value === "all" || entry.count === linkedCount.value;
+
+      if (!matchesRepeatedName || !matchesLinkedCount) return false;
+    }
+
+    return `${entry.name} ${entry.copyright ?? ""}`
+      .toLocaleLowerCase()
+      .includes(query);
+  });
+});
 
 async function load() {
   if (!native) return;
@@ -121,7 +144,7 @@ function begin(entry: TaxonomyEntry, action: "edit" | "delete") {
   error.value = "";
 }
 
-watch([category, search, repeatedOnly], () => {
+watch([category, search, repeatedOnly, linkedCount], () => {
   pending.value = null;
   error.value = "";
 });
@@ -233,11 +256,40 @@ onMounted(load);
         </button>
       </div>
     </div>
-    <label v-if="category === 'character'" class="taxonomy-repeat-filter">
-      <input v-model="repeatedOnly" type="checkbox" :disabled="busy" />
-      Same name in different copyrights only
-      <span class="muted">({{ repeatedNames.size }} repeated names)</span>
-    </label>
+    <div v-if="category === 'character'" class="taxonomy-character-filters">
+      <button
+        type="button"
+        class="taxonomy-repeat-filter"
+        :class="{ active: repeatedOnly }"
+        :aria-pressed="repeatedOnly"
+        :disabled="busy"
+        title="Show only the same character name in different copyrights"
+        @click="repeatedOnly = !repeatedOnly"
+      >
+        <span class="taxonomy-filter-check">
+          <AppIcon v-if="repeatedOnly" name="check" :size="12" />
+        </span>
+        Same name in different copyrights
+        <span class="taxonomy-filter-count">{{ repeatedNames.size }}</span>
+      </button>
+      <div
+        class="taxonomy-link-filters"
+        role="group"
+        aria-label="Filter characters by linked-file count"
+      >
+        <button
+          v-for="option in linkedCountOptions"
+          :key="option.value"
+          type="button"
+          :class="{ active: linkedCount === option.value }"
+          :aria-pressed="linkedCount === option.value"
+          :disabled="busy"
+          @click="linkedCount = option.value"
+        >
+          {{ option.label }}
+        </button>
+      </div>
+    </div>
     <p class="taxonomy-note muted">
       Deleting a copyright or artist sends linked files to Stage for
       redistribution. Files stay at their current paths, including when disk
@@ -258,7 +310,7 @@ onMounted(load);
       </p>
       <p v-else-if="!entries.length" class="taxonomy-empty muted">
         {{
-          search || (category === "character" && repeatedOnly)
+          search || characterFiltersActive
             ? "No matching names."
             : "No entries in this category yet."
         }}
@@ -403,14 +455,71 @@ onMounted(load);
   border-radius: 5px;
   padding: 2px 6px;
 }
-.taxonomy-repeat-filter {
+.taxonomy-character-filters {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 12px;
 }
-.taxonomy-repeat-filter input {
-  accent-color: var(--accent);
+.taxonomy-repeat-filter,
+.taxonomy-link-filters button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s;
+}
+.taxonomy-repeat-filter:hover:not(:disabled):not(.active),
+.taxonomy-link-filters button:hover:not(:disabled):not(.active) {
+  background: #ffffff08;
+  color: #eeedf6;
+}
+.taxonomy-repeat-filter.active,
+.taxonomy-link-filters button.active {
+  background: #272039;
+  border-color: #69518e;
+  color: #d3bfff;
+}
+.taxonomy-filter-check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+}
+.taxonomy-repeat-filter.active .taxonomy-filter-check {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #171321;
+}
+.taxonomy-filter-count {
+  border-radius: 5px;
+  padding: 2px 6px;
+  background: #ffffff0b;
+  font-size: 11px;
+}
+.taxonomy-link-filters {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.taxonomy-link-filters button {
+  border-color: transparent;
+  padding: 6px 12px;
 }
 .taxonomy-note {
   line-height: 1.6;
