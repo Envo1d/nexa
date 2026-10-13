@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from "vue";
+import { onMounted, onUnmounted, ref, watch } from "vue";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 
@@ -9,12 +9,20 @@ import { version } from "../../package.json";
 import ToggleSwitch from "./ToggleSwitch.vue";
 import SettingsRow from "./SettingsRow.vue";
 import AppIcon from "./AppIcon.vue";
+import UpdateConfirmDialog from "./UpdateConfirmDialog.vue";
 
 import { useStageScan } from "../composables/useStageScan";
 import { useCacheUsage } from "../composables/useCacheUsage";
 import { useUpdater } from "../composables/useUpdater";
 
 const updater = useUpdater();
+
+onUnmounted(updater.cancelInstall);
+
+function answerUpdate(accepted: boolean) {
+  if (accepted) void updater.confirmInstall();
+  else updater.cancelInstall();
+}
 
 const cacheUsage = useCacheUsage();
 
@@ -639,4 +647,9 @@ function resetDrafts() {
       </div>
     </div>
   </div>
+  <UpdateConfirmDialog
+    v-if="updater.confirmation.value"
+    :version="updater.confirmation.value.version"
+    @answer="answerUpdate"
+  />
 </template>
