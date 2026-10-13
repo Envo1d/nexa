@@ -24,3 +24,8 @@ mod windows_com;
 pub fn run() {
     bootstrap::run();
 }
+
+#[cfg(desktop)]
+pub fn run_update_helper(session: std::path::PathBuf) {
+    updater::run_helper(session);
+}

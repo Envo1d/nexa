@@ -35,6 +35,8 @@ fn updater_waits_for_current_process_and_keeps_logs_outside_replaceable_files() 
 
     let expected: Vec<OsString> = [
         "apply",
+        "--silent",
+        "--norestart",
         "--package",
         "install/packages/Nexa-full.nupkg",
         "--waitPid",
@@ -51,7 +53,7 @@ fn updater_waits_for_current_process_and_keeps_logs_outside_replaceable_files() 
     .collect();
 
     assert_eq!(arguments, expected);
-    assert!(!arguments.iter().any(|argument| argument == "--norestart"));
+    assert!(arguments.iter().any(|argument| argument == "--norestart"));
 }
 
 #[test]

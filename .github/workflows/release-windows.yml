@@ -19,6 +19,7 @@ on:
       - ".prettierrc.json"
       - ".gitattributes"
       - "index.html"
+      - "update.html"
 
 permissions:
   contents: write
