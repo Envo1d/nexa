@@ -1,4 +1,4 @@
-import { computed, ref } from "vue";
+import { ref } from "vue";
 import { Channel, invoke, isTauri } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 
@@ -15,9 +15,7 @@ const busy = ref(false);
 
 const status = ref("Not checked");
 
-const downloaded = ref(0);
-
-const total = ref<number | null>(null);
+const percent = ref<number | null>(null);
 
 let startupChecked = false;
 
@@ -31,6 +29,8 @@ async function check() {
   }
 
   busy.value = true;
+  available.value = null;
+  percent.value = null;
   status.value = "Checking for updates…";
 
   try {
@@ -58,22 +58,19 @@ async function install() {
 
     if (!accepted) return;
 
-    downloaded.value = 0;
-    total.value = null;
+    percent.value = 0;
     status.value = "Downloading and verifying update…";
 
     const progress = new Channel<{
-      downloaded: number;
-      total: number | null;
+      percent: number;
     }>();
 
     progress.onmessage = (value) => {
-      downloaded.value = value.downloaded;
-      total.value = value.total;
+      percent.value = Math.max(0, Math.min(100, value.percent));
     };
 
     await invoke("install_update", { progress });
-    status.value = "Update installer started.";
+    status.value = "Restarting Nexa to apply the update…";
   } catch (error) {
     status.value = String(error);
   } finally {
@@ -105,13 +102,7 @@ export function useUpdater() {
     available,
     busy,
     status,
-    downloaded,
-    total,
-    percent: computed(() =>
-      total.value
-        ? Math.min(100, Math.round((downloaded.value / total.value) * 100))
-        : null,
-    ),
+    percent,
     check,
     install,
     checkOnStartup,

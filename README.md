@@ -25,16 +25,18 @@ This repository contains the rewritten Nexa application. The previous implementa
 - **Native file actions:** open files, reveal them in Explorer, copy paths, delete with recycling where available, and open the Windows share sheet.
 - **Previews and indexing:** lazy previews with a bounded disk cache, manual scans and optional scans on startup. Preview and technical-metadata support depend on installed Windows handlers.
 - **Legacy import:** import records from the old Nexa database through Settings.
-- **Desktop updates:** check manually or on startup, review the available release and confirm installation. Update downloads are signature-verified.
+- **Desktop updates:** check manually or on startup, review the available release and confirm installation. Velopack applies verified packages after Nexa closes and restarts the app; update manifests are signed and packages are checked against their SHA-256 hashes.
 - **Window persistence:** remember the main window's position and size between normal launches.
 
 External filesystem changes are picked up by scans; a live filesystem watcher is not implemented. Browser mode uses session demo data; native library storage and file operations require the desktop application.
 
 ## Installation
 
-Download the Windows setup executable from **[GitHub Releases](https://github.com/Envo1d/nexa/releases/latest)** and run it. Installer names follow `Nexa_<version>_x64-setup.exe`.
+Download `Nexa-win-x64-Setup.exe` from **[GitHub Releases](https://github.com/Envo1d/nexa/releases/latest)** and run it. Setup installs in one step for the current user using Velopack.
 
 The installer installs for the current Windows user. If Microsoft Edge WebView2 is missing, setup downloads its bootstrapper, which requires an internet connection.
+
+Existing NSIS installations require a one-time transition: close Nexa, uninstall the old application through Windows Installed apps, then run the new Setup. Preserve your NexaNew settings/database and media folders; no database import is needed. Old shortcuts should be replaced with the shortcuts created by the new setup. Older versions cannot install Velopack packages through their Tauri updater.
 
 ## Getting Started
 
@@ -79,7 +81,9 @@ cargo test --manifest-path src-tauri/Cargo.toml --locked -- --test-threads=1
 npm run build:windows
 ```
 
-Installer builds require an updater signing key matching the configured public key. Build artifacts are written under `src-tauri/target/release/bundle/nsis/`.
+Installer builds require the .NET 8 runtime (or SDK) and an updater signing key matching `src-tauri/updater.pub`. The helper downloads a pinned, checksum-verified Velopack CLI into the ignored build directory. It reads the existing key from `%LOCALAPPDATA%\NexaNew\signing\updater.key`, or accepts `-SigningKeyPath` / `TAURI_SIGNING_PRIVATE_KEY`. Build artifacts are written under `src-tauri/target/release/bundle/velopack/<version>/`.
+
+GitHub release builds upload Setup, the full `.nupkg`, `releases.win-x64.json` and its `.sig` to a draft release. Publish a higher version to make updates available; published release assets are never overwritten by CI. Development and unpackaged binaries require installation through Setup before checking for package updates.
 
 ## Feedback
 

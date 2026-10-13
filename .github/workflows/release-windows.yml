@@ -42,6 +42,8 @@ jobs:
           cache: npm
       - name: Validate release versions
         run: node scripts/validate-release.mjs
+      - name: Test update feed signature validation
+        run: node --test scripts/verify-update-signature.test.mjs
       - name: Require updater signing key
         if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
         shell: pwsh
@@ -78,20 +80,45 @@ jobs:
       - name: Warm release compilation cache on main
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: npm run tauri build -- --ci --no-bundle --config .github/tauri-ci.json -- --locked
-      - name: Build signed installer and draft release
+      - uses: actions/setup-dotnet@v4
         if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
-        uses: tauri-apps/tauri-action@v1
+        with:
+          dotnet-version: "8.0.x"
+      - name: Build application for Velopack
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
+        run: npm run tauri build -- --ci --no-bundle --config .github/tauri-ci.json -- --locked
+      - name: Package Velopack setup and signed update feed
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        with:
-          tagName: v__VERSION__
-          releaseName: Nexa v__VERSION__
-          releaseBody: Download the Windows setup executable to install Nexa.
-          releaseDraft: true
-          prerelease: false
-          # Tauri options precede --; Cargo options follow it.
-          args: --ci --config .github/tauri-ci.json --bundles nsis -- --locked
-          uploadUpdaterJson: true
-          updaterJsonPreferNsis: true
+        run: ./scripts/build-windows.ps1 -SkipBuild
+      - name: Create draft release with Velopack assets
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $releaseVersion = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $tag = "v$releaseVersion"
+          $outputPath = "src-tauri/target/release/bundle/velopack/$releaseVersion"
+          $assets = Get-ChildItem -LiteralPath $outputPath -File |
+            Where-Object { $_.Name -match '(-Setup\.exe|-full\.nupkg|^releases\.win-x64\.json(\.sig)?|^RELEASES)$' } |
+            ForEach-Object { $_.FullName }
+          gh release view $tag --json isDraft --jq .isDraft 1> draft-state.txt 2> $null
+          if ($LASTEXITCODE -eq 0) {
+            if ((Get-Content draft-state.txt -Raw).Trim() -ne "true") {
+              throw "Refusing to overwrite an already published release. Increase the version."
+            }
+            $legacyAssets = gh release view $tag --json assets --jq '.assets[].name' |
+              Where-Object { $_ -eq 'latest.json' -or $_ -match '_x64-setup\.exe(\.sig)?$' }
+            if ($LASTEXITCODE -ne 0) { throw "Could not inspect draft release assets" }
+            if ($legacyAssets) {
+              throw "Draft contains legacy NSIS assets. Remove that obsolete draft or increase the version before releasing Velopack."
+            }
+            gh release upload $tag @assets --clobber
+          } else {
+            gh release create $tag @assets --draft --title "Nexa v$releaseVersion" --target $env:GITHUB_SHA --notes "Download Nexa-win-x64-Setup.exe. Existing NSIS users must close Nexa, uninstall the old application and install this setup once; preserve NexaNew settings/database and media folders. Future updates use Velopack packages."
+          }
+          if ($LASTEXITCODE -ne 0) { throw "Draft release creation/upload failed" }

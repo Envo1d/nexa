@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Temporary release workflow state
+/draft-state.txt
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -59,6 +59,7 @@ pub fn run() {
     );
 
     let result = builder
+        .manage(logging::ShutdownLogs(log_guard.clone()))
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
@@ -184,11 +185,9 @@ fn setup(app: &mut tauri::App, paths: config::AppPaths) -> Result<(), Box<dyn st
 
     #[cfg(desktop)]
     {
-        app.handle()
-            .plugin(tauri_plugin_updater::Builder::new().build())?;
         app.manage(updater::UpdateState::default());
 
-        tracing::info!("Signed updater initialized");
+        tracing::info!("Velopack updater initialized");
     }
 
     if startup.auto_scan {

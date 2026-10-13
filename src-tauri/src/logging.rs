@@ -1,7 +1,20 @@
-use std::path::Path;
+use std::{
+    path::Path,
+    sync::{Arc, Mutex},
+};
 
 use tracing_appender::{non_blocking::WorkerGuard, rolling::Rotation};
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
+
+pub(crate) struct ShutdownLogs(pub(crate) Arc<Mutex<Option<WorkerGuard>>>);
+
+impl ShutdownLogs {
+    pub(crate) fn flush(&self) {
+        if let Ok(mut guard) = self.0.lock() {
+            drop(guard.take());
+        }
+    }
+}
 
 pub fn file_writer(
     directory: &Path,
