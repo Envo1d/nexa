@@ -1,6 +1,5 @@
 import { ref } from "vue";
 import { Channel, invoke, isTauri } from "@tauri-apps/api/core";
-import { confirm } from "@tauri-apps/plugin-dialog";
 
 import type { ConfigSnapshot } from "../types/config";
 
@@ -17,10 +16,12 @@ const status = ref("Not checked");
 
 const percent = ref<number | null>(null);
 
+const confirmation = ref<UpdateInfo | null>(null);
+
 let startupChecked = false;
 
 async function check() {
-  if (busy.value) return;
+  if (busy.value || confirmation.value) return;
 
   if (!isTauri()) {
     status.value = "Updates are available in the desktop application.";
@@ -45,19 +46,28 @@ async function check() {
   }
 }
 
-async function install() {
+function install() {
   if (busy.value || !available.value || !isTauri()) return;
+
+  confirmation.value = { ...available.value };
+}
+
+function cancelInstall() {
+  confirmation.value = null;
+}
+
+async function confirmInstall() {
+  const requested = confirmation.value;
+
+  if (busy.value || !requested || !isTauri()) return;
+
+  confirmation.value = null;
+
+  if (available.value?.version !== requested.version) return;
 
   busy.value = true;
 
   try {
-    const accepted = await confirm(
-      `Install Nexa ${available.value.version}? Nexa will close and restart after installation. Save any unfinished edits first.`,
-      { title: "Install update", kind: "info" },
-    );
-
-    if (!accepted) return;
-
     percent.value = 0;
     status.value = "Downloading and verifying update…";
 
@@ -103,8 +113,11 @@ export function useUpdater() {
     busy,
     status,
     percent,
+    confirmation,
     check,
     install,
+    confirmInstall,
+    cancelInstall,
     checkOnStartup,
   };
 }
