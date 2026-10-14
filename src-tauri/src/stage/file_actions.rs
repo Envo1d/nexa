@@ -1,50 +1,109 @@
 //! stage: file actions responsibility.
 
-use std::path::{Path, PathBuf};
+use std::{
+    collections::HashSet,
+    path::{Path, PathBuf},
+};
 
 use serde::Serialize;
-use sqlx::Row;
+use sqlx::SqlitePool;
 
 use super::{StageState, inspect};
-use crate::{config::ConfigStore, database::Database};
+use crate::{config::ConfigStore, database::Database, media_paths::checked_action_path};
 
-pub(crate) fn checked_action_path(root: &Path, relative: &str) -> Result<PathBuf, String> {
-    use std::path::Component;
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum FileAction {
+    Open,
+    Reveal,
+    Delete,
+    Share,
+}
 
-    if !root.is_absolute() {
-        return Err("Source folder must be absolute".into());
+pub(super) fn validate_selection(
+    action: &str,
+    ids: &[String],
+) -> Result<(FileAction, Vec<(String, i64)>), String> {
+    let action = match action {
+        "open" => FileAction::Open,
+        "reveal" => FileAction::Reveal,
+        "delete" => FileAction::Delete,
+        "share" => FileAction::Share,
+        _ => return Err("Invalid file action or selection (maximum 500 files)".into()),
+    };
+
+    if ids.is_empty() || ids.len() > 500 || (action == FileAction::Share && ids.len() != 1) {
+        return Err("Invalid file action or selection (maximum 500 files)".into());
     }
 
-    let relative = Path::new(relative);
+    let mut seen = HashSet::new();
 
-    if relative.as_os_str().is_empty()
-        || relative
-            .components()
-            .any(|part| !matches!(part, Component::Normal(_)))
-    {
-        return Err("Invalid stored file path".into());
+    let mut selection = Vec::with_capacity(ids.len());
+
+    // Validate every ID before recovery or any Shell/filesystem side effects.
+    for raw_id in ids {
+        let id = raw_id
+            .parse::<i64>()
+            .ok()
+            .filter(|id| *id > 0)
+            .ok_or("Invalid media ID")?;
+
+        if seen.insert(id) {
+            selection.push((raw_id.clone(), id));
+        }
     }
 
-    let path = root.join(relative);
+    Ok((action, selection))
+}
 
-    let metadata = std::fs::symlink_metadata(&path).map_err(|_| "File is unavailable on disk")?;
+#[derive(sqlx::FromRow)]
+pub(super) struct ActionFile {
+    root_path: String,
+    kind: String,
+    relative_path: String,
+    file_revision: Option<String>,
+    needs_distribution: i64,
+    library_assignment: Option<String>,
+}
 
-    if !metadata.is_file() || metadata.file_type().is_symlink() {
-        return Err("Only regular files are supported".into());
+pub(super) async fn action_file(
+    pool: &SqlitePool,
+    configured_root: Option<&Path>,
+    library: bool,
+    id: i64,
+) -> Result<ActionFile, String> {
+    let file: ActionFile = sqlx::query_as(concat!(
+        "SELECT s.root_path,s.kind,m.relative_path,m.file_revision,m.needs_distribution,",
+        "m.library_assignment FROM media m JOIN sources s ON s.id=m.source_id ",
+        "WHERE m.id=? AND m.availability='present'",
+    ))
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|_| "Cannot read file record")?
+    .ok_or("File record is unavailable")?;
+
+    let matches_root = configured_root == Some(Path::new(&file.root_path));
+
+    let needs_distribution = file.needs_distribution != 0;
+
+    let eligible = if library {
+        let assigned = configured_root.is_some()
+            && file.library_assignment.as_deref() == configured_root.and_then(Path::to_str);
+
+        let physical_library = file.kind == "library" && matches_root;
+
+        (assigned || physical_library) && !needs_distribution
+    } else {
+        let physical_stage = file.kind == "stage" && matches_root;
+
+        needs_distribution || physical_stage && file.library_assignment.is_none()
+    };
+
+    if !eligible {
+        return Err("File is outside the current media selection".into());
     }
 
-    let canonical_root = root
-        .canonicalize()
-        .map_err(|_| "Source folder is unavailable")?;
-
-    let canonical = path
-        .canonicalize()
-        .map_err(|_| "File is unavailable on disk")?;
-
-    if !canonical.starts_with(canonical_root) {
-        return Err("File resolves outside its source folder".into());
-    }
-    Ok(path)
+    Ok(file)
 }
 
 #[cfg(windows)]
@@ -108,13 +167,7 @@ pub async fn stage_file_action(
     state: tauri::State<'_, StageState>,
     config: tauri::State<'_, ConfigStore>,
 ) -> Result<FileActionReport, String> {
-    if !matches!(action.as_str(), "open" | "reveal" | "delete" | "share")
-        || ids.is_empty()
-        || ids.len() > 500
-        || (action == "share" && ids.len() != 1)
-    {
-        return Err("Invalid file action or selection (maximum 500 files)".into());
-    }
+    let (action, selection) = validate_selection(&action, &ids)?;
 
     let _guard = state.operation().await;
     crate::disk_sync::recover(database.pool()).await?;
@@ -136,21 +189,13 @@ pub async fn stage_file_action(
 
     tracing::info!(library, "Media file action started");
 
-    let mut seen = std::collections::HashSet::new();
-
-    for raw_id in ids {
-        let id = raw_id.parse::<i64>().map_err(|_| "Invalid media ID")?;
-
-        if !seen.insert(id) {
-            continue;
-        }
-
+    for (raw_id, id) in selection {
         let result = perform_action(
             &app,
             database.pool(),
-            &configured_root,
+            configured_root.as_deref(),
             library,
-            &action,
+            action,
             id,
         )
         .await;
@@ -164,7 +209,7 @@ pub async fn stage_file_action(
         }
     }
 
-    if action == "delete" && !report.succeeded.is_empty() {
+    if action == FileAction::Delete && !report.succeeded.is_empty() {
         crate::disk_sync::request(&app);
     }
 
@@ -178,53 +223,26 @@ pub async fn stage_file_action(
 
 async fn perform_action(
     app: &tauri::AppHandle,
-    pool: &sqlx::SqlitePool,
-    configured_root: &Option<PathBuf>,
+    pool: &SqlitePool,
+    configured_root: Option<&Path>,
     library: bool,
-    action: &str,
+    action: FileAction,
     id: i64,
 ) -> Result<(), String> {
-    let row = sqlx::query(concat!(
-        "SELECT s.root_path,s.kind,m.relative_path,m.file_revision,m.needs_distribution,",
-        "m.library_assignment FROM media m JOIN sources s ON s.id=m.source_id WHERE m.id=?",
-    ))
-    .bind(id)
-    .fetch_optional(pool)
-    .await
-    .map_err(|_| "Cannot read file record")?
-    .ok_or("File record is unavailable")?;
+    let file = action_file(pool, configured_root, library, id).await?;
 
-    let root = PathBuf::from(row.get::<String, _>("root_path"));
-    let assignment = row.get::<Option<String>, _>("library_assignment");
-    let source_kind = row.get::<String, _>("kind");
-    let needs_distribution = row.get::<i64, _>("needs_distribution") != 0;
-    let matches_root = configured_root.as_ref() == Some(&root);
+    let root = PathBuf::from(file.root_path);
 
-    let eligible = if library {
-        let assigned = configured_root.is_some()
-            && assignment.as_deref() == configured_root.as_ref().and_then(|path| path.to_str());
-        (assigned || source_kind == "library" && matches_root) && !needs_distribution
-    } else {
-        needs_distribution || source_kind == "stage" && matches_root && assignment.is_none()
-    };
-
-    if !eligible {
-        return Err("File is outside the current media selection".into());
-    }
-
-    let relative: String = row.get("relative_path");
-    let revision: Option<String> = row.get("file_revision");
-    let worker_action = action.to_owned();
     let worker_app = app.clone();
 
     tauri::async_runtime::spawn_blocking(move || {
         use tauri_plugin_opener::OpenerExt;
 
-        let path = checked_action_path(&root, &relative)?;
+        let path = checked_action_path(&root, &file.relative_path)?;
 
-        match worker_action.as_str() {
-            "delete" => {
-                if let Some(expected) = revision {
+        match action {
+            FileAction::Delete => {
+                if let Some(expected) = file.file_revision {
                     let current = inspect(path.clone(), &root)?;
                     if current.is_none_or(|current| current.revision != expected) {
                         return Err("File changed; rescan its source before deleting".into());
@@ -232,15 +250,15 @@ async fn perform_action(
                 }
                 recycle_file(&path)
             }
-            "share" => crate::share::show(worker_app, &path),
-            "open" => worker_app
+            FileAction::Share => crate::share::show(worker_app, &path),
+            FileAction::Open => worker_app
                 .opener()
                 .open_path(
                     path.to_str().ok_or("File path is not valid Unicode")?,
                     None::<&str>,
                 )
                 .map_err(|_| "Windows could not open the file or folder".into()),
-            _ => worker_app
+            FileAction::Reveal => worker_app
                 .opener()
                 .reveal_item_in_dir(path)
                 .map_err(|_| "Windows could not open the file or folder".into()),
@@ -249,7 +267,7 @@ async fn perform_action(
     .await
     .map_err(|_| "File action worker failed")??;
 
-    if action == "delete" {
+    if action == FileAction::Delete {
         sqlx::query("DELETE FROM media WHERE id=?")
             .bind(id)
             .execute(pool)

@@ -1,5 +1,5 @@
-//! Unused synchronous preview cache. Future callers must use a blocking worker
-//! compatible with the Shell STA provider and share one instance per cache root.
+//! Synchronous preview cache used by bounded Stage/Main blocking workers.
+//! Callers must remain compatible with the Shell STA provider and share one instance per cache root.
 //! Construct with the isolated AppPaths.cache_path; construction performs no IO.
 
 use std::{

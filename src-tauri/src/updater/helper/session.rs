@@ -9,7 +9,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 use velopack::{VelopackAsset, locator::VelopackLocatorConfig};
 
-use crate::config::AppLocale;
+use crate::config::{AppLocale, AppTheme};
 
 #[derive(Deserialize, Serialize)]
 pub(super) struct Request {
@@ -19,6 +19,8 @@ pub(super) struct Request {
     pub parent_pid: u32,
     #[serde(default = "default_locale")]
     pub locale: AppLocale,
+    #[serde(default)]
+    pub theme: AppTheme,
 }
 
 fn default_locale() -> AppLocale {

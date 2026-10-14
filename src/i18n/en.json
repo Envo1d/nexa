@@ -70,7 +70,7 @@
   "installNotice": "Nexa will close and restart during installation. Save unfinished edits first.",
   "downloadProgress": "Update download progress",
   "theme": "Theme",
-  "themeDescription": "More themes will be available later.",
+  "themeDescription": "Choose a color theme. Applies after saving.",
   "themeName": "Midnight violet",
   "resetDefaults": "Reset to defaults",
   "cancel": "Cancel",
@@ -607,5 +607,11 @@
   "uiMissingBackupDirectory": "Missing backup directory",
   "uiInvalidDestination": "Invalid destination",
   "uiRootValidationWorkerFailed": "Root validation worker failed",
-  "uiInvalidUnicodeMediaRoot": "Invalid Unicode media root"
+  "uiInvalidUnicodeMediaRoot": "Invalid Unicode media root",
+  "theme-graphite": "Graphite",
+  "theme-arctic-blue": "Arctic Blue",
+  "theme-forest": "Forest",
+  "theme-warm-amber": "Warm Amber",
+  "theme-rosewood": "Rosewood",
+  "theme-paper": "Paper"
 }

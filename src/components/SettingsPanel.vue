@@ -16,6 +16,7 @@ import { useStageScan } from "../composables/useStageScan";
 import { useCacheUsage } from "../composables/useCacheUsage";
 import { useUpdater } from "../composables/useUpdater";
 import { applyLocale, localePreference, languageOptions } from "../i18n";
+import { applyTheme, themeIds, themePreference } from "../themes";
 
 import type { ConfigSnapshot } from "../types/config";
 
@@ -54,13 +55,18 @@ const emit = defineEmits<{ preview: [action: string]; close: []; saved: [] }>();
 
 const native = isTauri();
 
-const draft = ref({ ...defaultConfig(), locale: localePreference.value });
+const draft = ref({
+  ...defaultConfig(),
+  locale: localePreference.value,
+  theme: themePreference.value,
+});
 
-const theme = ref("midnight-violet");
-
-const themeOptions = computed(() => [
-  { value: "midnight-violet", label: t("themeName") },
-]);
+const themeOptions = computed(() =>
+  themeIds.map((value) => ({
+    value,
+    label: t(value === "midnight-violet" ? "themeName" : `theme-${value}`),
+  })),
+);
 
 const paths = ref<ConfigSnapshot["paths"] | null>(null);
 
@@ -181,7 +187,9 @@ async function browse(section: string) {
 
 async function saveChanges() {
   if (!native) {
-    emit("preview", t("saveChanges"));
+    applyTheme(draft.value.theme);
+    await applyLocale(draft.value.locale);
+    saved.value = true;
 
     return;
   }
@@ -192,6 +200,7 @@ async function saveChanges() {
 
   try {
     await invoke("save_config", { settings: { ...draft.value } });
+    applyTheme(draft.value.theme);
     await applyLocale(draft.value.locale);
     saved.value = true;
     emit("saved");
@@ -630,11 +639,11 @@ function resetDrafts() {
                   :description="t('themeDescription')"
                 >
                   <AppSelect
-                    v-model="theme"
-                    class="settings-select"
+                    v-model="draft.theme"
+                    class="settings-select settings-theme-select"
                     :options="themeOptions"
                     :label="t('theme')"
-                    disabled
+                    :disabled="loading || busy || !ready"
                   />
                 </SettingsRow>
               </template>

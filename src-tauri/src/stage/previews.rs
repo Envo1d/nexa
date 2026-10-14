@@ -1,14 +1,36 @@
 //! stage: previews responsibility.
 
-use std::{path::Path, sync::atomic::Ordering};
+use std::{
+    path::{Path, PathBuf},
+    sync::atomic::Ordering,
+};
 
 use sqlx::Row;
 use tauri::Emitter;
 
 use super::{CACHE_MAX_BYTES, CacheStatus, StageState, inspect};
-use crate::{database::Database, preview_cache::PreviewOrigin};
+use crate::{database::Database, media_paths::checked_action_path, preview_cache::PreviewOrigin};
+
+pub(super) fn checked_preview_path(
+    root: &Path,
+    relative: &str,
+    expected: Option<&str>,
+) -> Result<PathBuf, String> {
+    let path = checked_action_path(root, relative)?;
+
+    if let Some(expected) = expected {
+        let current = inspect(path.clone(), root)?;
+
+        if current.is_none_or(|current| current.revision != expected) {
+            return Err("File changed; rescan its source".into());
+        }
+    }
+
+    Ok(path)
+}
 
 #[tauri::command]
+#[tracing::instrument(level = "debug", skip_all)]
 pub async fn get_stage_preview(
     app: tauri::AppHandle,
     id: String,
@@ -34,8 +56,9 @@ pub async fn get_stage_preview(
     .map_err(|e| e.to_string())?
     .ok_or("Media unavailable")?;
 
-    let path =
-        Path::new(&row.get::<String, _>("root_path")).join(row.get::<String, _>("relative_path"));
+    let root = PathBuf::from(row.get::<String, _>("root_path"));
+
+    let relative: String = row.get("relative_path");
 
     let cache = state.cache.clone();
 
@@ -46,13 +69,12 @@ pub async fn get_stage_preview(
     let bytes = tauri::async_runtime::spawn_blocking(move || {
         let _permit = permit;
 
-        if let Some(expected) = expected {
-            let current = inspect(path.clone(), path.parent().ok_or("Invalid media path")?)?;
+        tracing::debug!(media_id = id, "Preview source validation started");
 
-            if current.is_none_or(|current| current.revision != expected) {
-                return Err("File changed; rescan its source".into());
-            }
-        }
+        let path = checked_preview_path(&root, &relative, expected.as_deref()).map_err(|error| {
+            tracing::warn!(media_id = id, reason = %error, "Preview source rejected; rescan may be required");
+            error
+        })?;
 
         let preview = cache
             .load_or_generate(&path, 512)
@@ -92,6 +114,16 @@ pub async fn get_stage_preview(
         Ok::<_, String>(bytes.to_vec())
     })
     .await
-    .map_err(|e| e.to_string())??;
+    .map_err(|error| {
+        tracing::error!(media_id = id, %error, "Preview worker failed");
+        error.to_string()
+    })??;
+
+    tracing::debug!(
+        media_id = id,
+        encoded_bytes = bytes.len(),
+        "Preview request completed"
+    );
+
     Ok(tauri::ipc::Response::new(bytes))
 }

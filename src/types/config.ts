@@ -1,3 +1,5 @@
+import type { AppTheme } from "../themes";
+
 export type InterfaceLocale = "en" | "ru";
 
 export type AppLocale = "system" | InterfaceLocale;
@@ -14,6 +16,7 @@ export interface AppConfig {
   autoScan: boolean;
   autoUpdateCheck: boolean;
   locale: AppLocale;
+  theme: AppTheme;
 }
 
 export interface ConfigSnapshot {
@@ -39,5 +42,6 @@ export function defaultConfig(): AppConfig {
     autoScan: false,
     autoUpdateCheck: false,
     locale: "system",
+    theme: "midnight-violet",
   };
 }

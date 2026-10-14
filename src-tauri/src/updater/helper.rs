@@ -17,7 +17,7 @@ use velopack::{
     locator::{VelopackLocator, create_config_from_root_dir},
 };
 
-use crate::config::AppLocale;
+use crate::config::{AppLocale, AppTheme};
 
 mod session;
 
@@ -31,6 +31,7 @@ struct Snapshot {
     version: String,
     message: String,
     locale: AppLocale,
+    theme: AppTheme,
 }
 
 struct HelperState {
@@ -57,6 +58,7 @@ pub(super) fn start(
     locator: &VelopackLocator,
     logs: &Path,
     locale: AppLocale,
+    theme: AppTheme,
 ) -> Result<(), String> {
     let root = logs.join("update-sessions");
 
@@ -80,6 +82,7 @@ pub(super) fn start(
         logs: logs.into(),
         parent_pid: std::process::id(),
         locale,
+        theme,
     };
 
     session::write(directory, "request.json", &request)?;
@@ -116,7 +119,7 @@ pub(super) fn start(
         return Err(error);
     }
 
-    tracing::info!(version = %asset.Version, ?locale, "Independent update window accepted handoff");
+    tracing::info!(version = %asset.Version, ?locale, ?theme, "Independent update window accepted handoff");
 
     Ok(())
 }
@@ -319,6 +322,7 @@ pub(crate) fn run(directory: PathBuf) {
             version: request.asset.Version,
             message: "Preparing your update…".into(),
             locale: request.locale,
+            theme: request.theme,
         }),
         started: AtomicBool::new(false),
         finished: AtomicBool::new(false),

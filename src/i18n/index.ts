@@ -6,6 +6,7 @@ import { locale as getSystemLocale } from "@tauri-apps/plugin-os";
 import en from "./en.json";
 import ru from "./ru.json";
 import { resolveInterfaceLocale } from "./locale";
+import { applyTheme } from "../themes";
 
 import type { AppLocale, ConfigSnapshot } from "../types/config";
 
@@ -49,7 +50,7 @@ watch(
   { immediate: true },
 );
 
-export async function initializeLocale() {
+export async function initializeInterface() {
   if (!isTauri()) {
     await applyLocale("system");
 
@@ -59,11 +60,12 @@ export async function initializeLocale() {
   try {
     const snapshot = await invoke<ConfigSnapshot>("get_config");
 
+    applyTheme(snapshot.settings.theme);
     await applyLocale(snapshot.settings.locale);
   } catch (cause) {
     // ConfigStore owns native error tracing; keep the UI usable for recovery.
     console.warn(
-      "Could not initialize interface language; using English.",
+      "Could not initialize interface preferences; using default appearance.",
       cause,
     );
   }

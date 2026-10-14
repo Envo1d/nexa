@@ -550,7 +550,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--surface);
-  box-shadow: 0 24px 80px #0008;
+  box-shadow: 0 24px 80px var(--shadow);
 }
 .replacement-body {
   overflow-y: auto;
@@ -590,7 +590,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
 }
 .candidate-button:hover {
-  background: #a786ff15;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
   border-color: var(--accent);
 }
 .replacement-confirm {
@@ -603,7 +603,7 @@ onBeforeUnmount(() => {
   accent-color: var(--accent);
 }
 .replacement-warning {
-  color: #efbc79;
+  color: var(--warning);
 }
 .replacement-footer {
   display: flex;

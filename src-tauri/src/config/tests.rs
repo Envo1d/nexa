@@ -83,6 +83,7 @@ fn missing_fields_use_current_defaults_and_unknown_fields_are_rejected() {
     assert_eq!(old.gif_subfolder, "Animations");
     assert_eq!(old.video_subfolder, "Clips");
     assert_eq!(old.locale, AppLocale::System);
+    assert_eq!(old.theme, AppTheme::MidnightViolet);
 
     let explicit: AppConfig = serde_json::from_str(r#"{"locale":"en"}"#).unwrap();
     assert_eq!(explicit.locale, AppLocale::English);
@@ -136,4 +137,39 @@ fn service_paths_are_isolated_from_legacy_application() {
     assert!(!new.database_path.starts_with(old.data_local_dir()));
     assert!(!new.cache_path.starts_with(old.cache_dir()));
     assert!(!new.logs_path.starts_with(old.data_local_dir()));
+}
+
+#[test]
+fn all_themes_survive_save_and_reload_and_invalid_themes_are_rejected() {
+    let directory = tempfile::tempdir().unwrap();
+
+    let paths = paths(directory.path());
+
+    let store = ConfigStore::load(paths.clone()).unwrap();
+
+    let themes = [
+        (AppTheme::MidnightViolet, "midnight-violet"),
+        (AppTheme::Graphite, "graphite"),
+        (AppTheme::ArcticBlue, "arctic-blue"),
+        (AppTheme::Forest, "forest"),
+        (AppTheme::WarmAmber, "warm-amber"),
+        (AppTheme::Rosewood, "rosewood"),
+        (AppTheme::Paper, "paper"),
+    ];
+
+    for (theme, name) in themes {
+        let draft = AppConfig {
+            theme,
+            ..AppConfig::default()
+        };
+
+        store.save(draft.clone()).unwrap();
+
+        let reloaded = ConfigStore::load(paths.clone()).unwrap();
+
+        assert_eq!(reloaded.snapshot().unwrap().settings, draft);
+        assert_eq!(serde_json::to_value(theme).unwrap(), name);
+    }
+
+    assert!(serde_json::from_str::<AppConfig>(r#"{"theme":"unknown"}"#).is_err());
 }
