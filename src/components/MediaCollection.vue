@@ -9,10 +9,11 @@ import {
 } from "vue";
 import { useI18n } from "vue-i18n";
 
-import type { MediaItem } from "../types/media";
-
+import { translateUi as ui } from "../i18n/presentation";
 import MediaCard from "./MediaCard.vue";
 import AppIcon from "./AppIcon.vue";
+
+import type { MediaItem } from "../types/media";
 
 const { t } = useI18n();
 
@@ -510,7 +511,7 @@ onBeforeUnmount(() => {
           </h2>
           <p>
             {{
-              error ||
+              ui(error ?? "") ||
               (loading
                 ? t("readingFiles")
                 : filtered

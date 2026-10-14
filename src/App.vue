@@ -3,6 +3,7 @@ import { useTemplateRef } from "vue";
 import { useI18n } from "vue-i18n";
 import { isTauri } from "@tauri-apps/api/core";
 
+import { translateUi as ui } from "./i18n/presentation";
 import AppIcon from "./components/AppIcon.vue";
 import ToggleSwitch from "./components/ToggleSwitch.vue";
 import SortSelect from "./components/SortSelect.vue";
@@ -15,9 +16,7 @@ import TagsPanel from "./components/TagsPanel.vue";
 import DuplicateOrderDialog from "./components/DuplicateOrderDialog.vue";
 import ReplacementDialog from "./components/ReplacementDialog.vue";
 import DeleteFilesDialog from "./components/DeleteFilesDialog.vue";
-
 import { useWorkspace } from "./app/useWorkspace";
-
 import "./styles.css";
 
 const { t } = useI18n();
@@ -320,7 +319,7 @@ const {
                     }}{{
                       suggestion.copyright ? ` (${suggestion.copyright})` : ""
                     }}</span
-                  ><small>{{ suggestion.category }}</small>
+                  ><small>{{ ui(suggestion.category) }}</small>
                 </button>
               </div>
             </div>
@@ -335,7 +334,7 @@ const {
                 @click="kind = option.value"
               >
                 <AppIcon :name="option.icon" :size="17" /><span>{{
-                  option.label
+                  ui(option.label)
                 }}</span
                 ><span class="type-count">{{ typeCounts[option.value] }}</span>
               </button>
@@ -558,7 +557,7 @@ const {
             <AppIcon name="info" :size="18" />
             <span>{{
               diskSync.error
-                ? t("syncStopped", { error: diskSync.error })
+                ? t("syncStopped", { error: ui(diskSync.error) })
                 : diskSync.total
                   ? t("syncCount", diskSync)
                   : t("preparingSync")
@@ -584,7 +583,7 @@ const {
       </Transition>
       <Transition name="toast"
         ><div v-if="toast" class="toast-message" role="status">
-          <AppIcon name="info" :size="18" /><span>{{ toast }}</span
+          <AppIcon name="info" :size="18" /><span>{{ ui(toast) }}</span
           ><button
             class="icon-button"
             :aria-label="t('dismissMessage')"
@@ -704,7 +703,7 @@ const {
             </button>
           </form>
           <p v-if="tagError" class="error-message" role="alert">
-            {{ tagError }}
+            {{ ui(tagError) }}
           </p>
           <p class="modal-note">{{ t("tagDemoNotice") }}</p>
           <div class="suggested-tags">

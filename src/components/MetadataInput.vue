@@ -7,7 +7,9 @@ import {
   ref,
   watch,
 } from "vue";
+import { I18nT } from "vue-i18n";
 
+import { translateUi as ui } from "../i18n/presentation";
 import AppIcon from "./AppIcon.vue";
 
 export interface MetadataValue {
@@ -337,18 +339,18 @@ function keydown(event: KeyboardEvent) {
 <template>
   <div class="metadata-input" :class="{ 'metadata-panel': panel }">
     <div class="metadata-label">
-      <label :for="`distribute-${label}`">{{ label }}</label>
+      <label :for="`distribute-${label}`">{{ ui(label) }}</label>
       <small v-if="!textInput && modelValue.length"
-        >{{ modelValue.length }} selected</small
+        >{{ modelValue.length }} {{ ui("selected") }}</small
       >
     </div>
     <div
       v-if="!textInput && (panel || modelValue.length)"
       class="metadata-selected"
-      :aria-label="`Selected ${label.toLowerCase()}`"
+      :aria-label="ui(`Selected ${label.toLowerCase()}`)"
     >
       <p v-if="panel && !modelValue.length" class="metadata-empty">
-        No {{ label.toLowerCase() }} selected yet.
+        {{ ui(`No ${label.toLowerCase()} selected yet.`) }}
       </p>
       <button
         v-for="value in modelValue"
@@ -356,7 +358,11 @@ function keydown(event: KeyboardEvent) {
         type="button"
         class="tag-chip"
         :title="`${value.name}${value.copyright ? ` (${value.copyright})` : ''}`"
-        :aria-label="`Remove ${value.name}${value.copyright ? ` (${value.copyright})` : ''}`"
+        :aria-label="
+          ui(
+            `Remove ${value.name}${value.copyright ? ` (${value.copyright})` : ''}`,
+          )
+        "
         @click="
           emit(
             'update:modelValue',
@@ -387,11 +393,13 @@ function keydown(event: KeyboardEvent) {
             : undefined
         "
         :placeholder="
-          disabled
-            ? 'Choose a copyright first'
-            : textInput
-              ? `Enter ${label.toLowerCase()}…`
-              : `Add ${label.toLowerCase()}…`
+          ui(
+            disabled
+              ? 'Choose a copyright first'
+              : textInput
+                ? `Enter ${label.toLowerCase()}…`
+                : `Add ${label.toLowerCase()}…`,
+          )
         "
         autocomplete="off"
         @focus="focused = true"
@@ -403,7 +411,7 @@ function keydown(event: KeyboardEvent) {
         v-if="panel && !textInput"
         class="metadata-add"
         type="button"
-        :aria-label="`Add ${label.toLowerCase()}`"
+        :aria-label="ui(`Add ${label.toLowerCase()}`)"
         :disabled="disabled || !query.trim()"
         @mousedown.prevent
         @click="addValue"
@@ -422,12 +430,14 @@ function keydown(event: KeyboardEvent) {
           v-if="assignment.length"
           class="character-assignment"
           role="group"
-          :aria-label="`Choose copyright for ${query.trim()}`"
+          :aria-label="ui(`Choose copyright for ${query.trim()}`)"
           @keydown.esc.stop="cancelAssignment"
         >
-          <p>
-            Which copyright does <strong>{{ query.trim() }}</strong> belong to?
-          </p>
+          <I18nT keypath="uiWhichCopyrightDoesValueBelongTo" tag="p">
+            <template #name
+              ><strong>{{ query.trim() }}</strong></template
+            >
+          </I18nT>
           <div>
             <button
               v-for="value in assignment"
@@ -439,7 +449,7 @@ function keydown(event: KeyboardEvent) {
               {{ value.copyright }}
             </button>
             <button type="button" class="text-button" @click="cancelAssignment">
-              Cancel
+              {{ ui("Cancel") }}
             </button>
           </div>
         </div>
@@ -448,7 +458,7 @@ function keydown(event: KeyboardEvent) {
           :id="`options-${label}`"
           class="distribution-metadata-options"
           role="listbox"
-          :aria-label="`${label} suggestions`"
+          :aria-label="ui(`${label} suggestions`)"
         >
           <button
             v-for="(value, index) in matches"
@@ -470,9 +480,11 @@ function keydown(event: KeyboardEvent) {
           </button>
           <p v-if="!matches.length">
             {{
-              canCreate
-                ? "Press Enter to add this value."
-                : "No matching values."
+              ui(
+                canCreate
+                  ? "Press Enter to add this value."
+                  : "No matching values.",
+              )
             }}
           </p>
         </div>

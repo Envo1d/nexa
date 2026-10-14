@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from "vue";
 
+import { translateUi as ui } from "../i18n/presentation";
 import { useModalFocus } from "../shared/composables/useModalFocus";
 import AppIcon from "./AppIcon.vue";
 
@@ -54,12 +55,12 @@ onBeforeUnmount(() => {
             <span class="update-confirm-icon">
               <AppIcon name="reset" :size="22" />
             </span>
-            <h2 id="update-confirm-title">Install update?</h2>
+            <h2 id="update-confirm-title">{{ ui("Install update?") }}</h2>
           </div>
           <button
             type="button"
             class="icon-button"
-            aria-label="Cancel update"
+            :aria-label="ui('Cancel update')"
             @click="emit('answer', false)"
           >
             <AppIcon name="close" />
@@ -69,18 +70,21 @@ onBeforeUnmount(() => {
         <div class="update-confirm-release">
           <img src="/icon.png" alt="" width="38" height="38" />
           <div>
-            <span>NEW VERSION</span>
+            <span>{{ ui("NEW VERSION") }}</span>
             <strong>Nexa {{ version }}</strong>
           </div>
         </div>
 
         <p id="update-confirm-description" class="update-confirm-description">
-          Nexa will download and verify the update, then close to install it.
-          The app will reopen automatically when the update is complete.
+          {{
+            ui(
+              "Nexa will download and verify the update, then close to install it. The app will reopen automatically when the update is complete.",
+            )
+          }}
         </p>
         <div id="update-confirm-warning" class="update-confirm-warning">
           <AppIcon name="info" :size="18" />
-          <p>Save any unfinished edits before continuing.</p>
+          <p>{{ ui("Save any unfinished edits before continuing.") }}</p>
         </div>
 
         <footer class="modal-footer">
@@ -90,14 +94,14 @@ onBeforeUnmount(() => {
             class="secondary-button"
             @click="emit('answer', false)"
           >
-            Cancel
+            {{ ui("Cancel") }}
           </button>
           <button
             type="button"
             class="primary-button"
             @click="emit('answer', true)"
           >
-            <AppIcon name="check" :size="15" />Install update
+            <AppIcon name="check" :size="15" />{{ ui("Install update") }}
           </button>
         </footer>
       </section>

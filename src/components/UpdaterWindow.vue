@@ -2,16 +2,23 @@
 import { invoke } from "@tauri-apps/api/core";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 
+import { translateUi as ui } from "../i18n/presentation";
+import { applyLocale, i18n } from "../i18n";
+
+import type { InterfaceLocale } from "../types/config";
+
 interface Snapshot {
   phase: "preparing" | "verifying" | "installing" | "restarting" | "error";
   version: string;
   message: string;
+  locale: InterfaceLocale;
 }
 
 const state = ref<Snapshot>({
   phase: "preparing",
   version: "",
   message: "Preparing your update…",
+  locale: "en",
 });
 
 const connectionLost = ref(false);
@@ -45,6 +52,10 @@ let disposed = false;
 async function refresh() {
   try {
     state.value = await invoke<Snapshot>("update_snapshot");
+    if (state.value.locale && i18n.global.locale.value !== state.value.locale) {
+      await applyLocale(state.value.locale);
+    }
+
     connectionLost.value = false;
   } catch {
     connectionLost.value = true;
@@ -80,7 +91,7 @@ onUnmounted(() => {
       <button
         v-if="state.phase === 'error'"
         type="button"
-        aria-label="Close updater"
+        :aria-label="ui('Close updater')"
         @click="close"
       >
         ×
@@ -96,19 +107,25 @@ onUnmounted(() => {
 
     <section aria-live="polite" aria-atomic="true">
       <p class="version">
-        {{ state.version ? `VERSION ${state.version}` : "UPDATING" }}
+        {{ ui(state.version ? `VERSION ${state.version}` : "UPDATING") }}
       </p>
-      <h1>{{ title }}</h1>
+      <h1>{{ ui(title) }}</h1>
       <p class="message">
-        {{ connectionLost ? "Reconnecting to the updater…" : state.message }}
+        {{
+          ui(connectionLost ? "Reconnecting to the updater…" : state.message)
+        }}
       </p>
     </section>
 
     <template v-if="state.phase !== 'error'">
-      <div class="activity" role="progressbar" aria-label="Update in progress">
+      <div
+        class="activity"
+        role="progressbar"
+        :aria-label="ui('Update in progress')"
+      >
         <span></span>
       </div>
-      <ol class="steps" aria-label="Update stages">
+      <ol class="steps" :aria-label="ui('Update stages')">
         <li
           v-for="(label, index) in steps"
           :key="label"
@@ -116,13 +133,13 @@ onUnmounted(() => {
           :aria-current="index === step ? 'step' : undefined"
         >
           <span>{{ index < step ? "✓" : index + 1 }}</span
-          >{{ label }}
+          >{{ ui(label) }}
         </li>
       </ol>
-      <p class="footnote">Nexa will reopen automatically.</p>
+      <p class="footnote">{{ ui("Nexa will reopen automatically.") }}</p>
     </template>
     <button v-else type="button" class="close-button" @click="close">
-      Close
+      {{ ui("Close") }}
     </button>
   </main>
 </template>

@@ -1,13 +1,12 @@
 <script setup lang="ts">
 import { computed, toRef } from "vue";
 
+import { translateUi as ui } from "../i18n/presentation";
 import { useNativePreview } from "../composables/useNativePreview";
+import { formatDuration } from "../types/media";
+import AppIcon from "./AppIcon.vue";
 
 import type { MediaItem } from "../types/media";
-
-import { formatDuration } from "../types/media";
-
-import AppIcon from "./AppIcon.vue";
 
 const props = defineProps<{
   item: MediaItem;
@@ -31,7 +30,7 @@ const preview = computed(() => props.item.preview || nativePreview.value);
     <img
       v-if="showPreviews && preview"
       :src="preview"
-      :alt="variant === 'wizard' ? 'Source media preview' : item.filename"
+      :alt="variant === 'wizard' ? ui('Source media preview') : item.filename"
       :loading="variant === 'card' ? 'lazy' : undefined"
       :decoding="variant === 'card' ? 'async' : undefined"
       :width="variant === 'card' ? 640 : undefined"
@@ -40,7 +39,7 @@ const preview = computed(() => props.item.preview || nativePreview.value);
     />
     <AppIcon v-else class="preview-placeholder" :name="item.kind" :size="56" />
     <span v-if="variant === 'detail'" class="preview-label">{{
-      item.kind === "video" ? "Video preview" : "Image preview"
+      ui(item.kind === "video" ? "Video preview" : "Image preview")
     }}</span>
     <span
       v-else

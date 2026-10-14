@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 
-import type { MediaItem } from "../types/media";
-
+import { translateUi as ui } from "../i18n/presentation";
 import { formatDuration, formatSize } from "../types/media";
-
 import MediaPreview from "./MediaPreview.vue";
 import AppIcon from "./AppIcon.vue";
+
+import type { MediaItem } from "../types/media";
 
 const props = withDefaults(
   defineProps<{
@@ -55,17 +55,21 @@ onBeforeUnmount(() => observer?.disconnect());
       </span>
       <span class="muted">
         {{
-          item.width && item.height
-            ? `${item.width} × ${item.height}`
-            : "Resolution unavailable"
+          ui(
+            item.width && item.height
+              ? `${item.width} × ${item.height}`
+              : "Resolution unavailable",
+          )
         }}
-        · {{ formatSize(item.size) }} · {{ item.extension.toUpperCase() }}
+        · {{ ui(formatSize(item.size)) }} · {{ item.extension.toUpperCase() }}
         <template v-if="item.kind === 'video'">
           ·
           {{
-            item.duration == null
-              ? "Duration unavailable"
-              : formatDuration(item.duration, true)
+            ui(
+              item.duration == null
+                ? "Duration unavailable"
+                : formatDuration(item.duration, true),
+            )
           }}
         </template>
       </span>
@@ -74,11 +78,11 @@ onBeforeUnmount(() => observer?.disconnect());
       v-if="openLabel"
       type="button"
       class="secondary-button replacement-open"
-      :aria-label="openLabel"
+      :aria-label="ui(openLabel)"
       :disabled="openDisabled"
       @click="emit('open')"
     >
-      <AppIcon name="arrow" :size="14" />Open file
+      <AppIcon name="arrow" :size="14" />{{ ui("Open file") }}
     </button>
   </div>
 </template>

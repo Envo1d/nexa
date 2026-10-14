@@ -111,7 +111,13 @@ pub async fn install_update(
     app: tauri::AppHandle,
     state: tauri::State<'_, UpdateState>,
     progress: Channel<DownloadProgress>,
+    locale: Option<crate::config::AppLocale>,
 ) -> Result<(), String> {
+    let locale = match locale {
+        Some(crate::config::AppLocale::Russian) => crate::config::AppLocale::Russian,
+        _ => crate::config::AppLocale::English,
+    };
+
     let pending = state
         .0
         .try_lock()
@@ -177,7 +183,7 @@ pub async fn install_update(
         .logs_path;
 
     tauri::async_runtime::spawn_blocking(move || {
-        launch::start(&pending_update.update.TargetFullRelease, &logs_path)
+        launch::start(&pending_update.update.TargetFullRelease, &logs_path, locale)
     })
     .await
     .map_err(|error| {

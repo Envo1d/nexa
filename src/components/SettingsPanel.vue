@@ -4,15 +4,14 @@ import { useI18n } from "vue-i18n";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 
+import { translateUi as ui } from "../i18n/presentation";
 import { defaultConfig } from "../types/config";
 import { version } from "../../package.json";
-
 import ToggleSwitch from "./ToggleSwitch.vue";
 import SettingsRow from "./SettingsRow.vue";
 import AppIcon from "./AppIcon.vue";
 import UpdateConfirmDialog from "./UpdateConfirmDialog.vue";
 import AppSelect from "./AppSelect.vue";
-
 import { useStageScan } from "../composables/useStageScan";
 import { useCacheUsage } from "../composables/useCacheUsage";
 import { useUpdater } from "../composables/useUpdater";
@@ -90,7 +89,7 @@ async function checkLegacyDatabase() {
     legacyFound.value = await invoke<boolean>("find_legacy_database");
   } catch (cause) {
     legacyFound.value = false;
-    importError.value = t("legacyCheckError", { error: String(cause) });
+    importError.value = t("legacyCheckError", { error: ui(String(cause)) });
   }
 }
 
@@ -110,7 +109,7 @@ async function importLegacyDatabase() {
     importMessage.value = t("importResult", result);
   } catch (cause) {
     importMessage.value = "";
-    importError.value = t("importError", { error: String(cause) });
+    importError.value = t("importError", { error: ui(String(cause)) });
     await checkLegacyDatabase();
   } finally {
     importing.value = false;
@@ -144,7 +143,7 @@ onMounted(async () => {
     paths.value = snapshot.paths;
     ready.value = true;
   } catch (cause) {
-    error.value = t("loadSettingsError", { error: String(cause) });
+    error.value = t("loadSettingsError", { error: ui(String(cause)) });
   } finally {
     loading.value = false;
   }
@@ -174,7 +173,7 @@ async function browse(section: string) {
       saved.value = false;
     }
   } catch (cause) {
-    error.value = t("chooseDirectoryError", { error: String(cause) });
+    error.value = t("chooseDirectoryError", { error: ui(String(cause)) });
   } finally {
     busy.value = false;
   }
@@ -197,7 +196,7 @@ async function saveChanges() {
     saved.value = true;
     emit("saved");
   } catch (cause) {
-    error.value = t("saveSettingsError", { error: String(cause) });
+    error.value = t("saveSettingsError", { error: ui(String(cause)) });
   } finally {
     busy.value = false;
   }
@@ -213,7 +212,7 @@ async function openLogs() {
   try {
     await invoke("open_logs");
   } catch (cause) {
-    error.value = t("openLogsError", { error: String(cause) });
+    error.value = t("openLogsError", { error: ui(String(cause)) });
   }
 }
 
@@ -340,7 +339,7 @@ function resetDrafts() {
       <div class="settings-content">
         <p class="settings-notice" role="status">
           {{
-            error ||
+            ui(error) ||
             (loading
               ? t("loadingSettings")
               : !native
@@ -482,7 +481,7 @@ function resetDrafts() {
                     }}</span>
                   </div>
                   <p role="status" aria-live="polite">
-                    {{ stageScan.status.value.message }} ·
+                    {{ ui(stageScan.status.value.message) }} ·
                     {{ t("scanCounts", stageScan.status.value) }}
                   </p>
                 </div>
@@ -506,9 +505,9 @@ function resetDrafts() {
                 >
                   <p v-if="legacyFound">{{ t("importNotice") }}</p>
                   <p v-if="importMessage" role="status" aria-live="polite">
-                    {{ importMessage }}
+                    {{ ui(importMessage) }}
                   </p>
-                  <p v-if="importError" role="alert">{{ importError }}</p>
+                  <p v-if="importError" role="alert">{{ ui(importError) }}</p>
                 </div>
               </template>
               <template v-else-if="section.id === 'cache'">
@@ -517,9 +516,9 @@ function resetDrafts() {
                     <span
                       ><strong>{{ t("thumbnailCache") }}</strong
                       ><small>{{
-                        cacheUsage.error.value || t("cacheLimit")
+                        ui(cacheUsage.error.value) || t("cacheLimit")
                       }}</small></span
-                    ><strong>{{ cacheUsage.label.value }}</strong>
+                    ><strong>{{ ui(cacheUsage.label.value) }}</strong>
                   </div>
                   <progress
                     class="settings-progress"
@@ -534,9 +533,9 @@ function resetDrafts() {
                     "
                     :max="cacheUsage.status.value?.maxBytes ?? 536870912"
                     :aria-label="t('cacheUsage')"
-                    :aria-valuetext="cacheUsage.label.value"
+                    :aria-valuetext="ui(cacheUsage.label.value)"
                   >
-                    {{ cacheUsage.label.value }}
+                    {{ ui(cacheUsage.label.value) }}
                   </progress>
                 </div>
                 <SettingsRow
@@ -561,9 +560,9 @@ function resetDrafts() {
               <template v-else-if="section.id === 'updates'">
                 <SettingsRow
                   :title="t('version')"
-                  :description="`Nexa ${version}`"
+                  :description="ui(`Nexa ${version}`)"
                   ><span class="settings-status" role="status">{{
-                    updater.status.value
+                    ui(updater.status.value)
                   }}</span>
                 </SettingsRow>
                 <ToggleSwitch

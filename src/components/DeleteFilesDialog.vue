@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 
+import { translateUi as ui } from "../i18n/presentation";
 import { useModalFocus } from "../shared/composables/useModalFocus";
-
-import type { MediaItem } from "../types/media";
-
 import AppIcon from "./AppIcon.vue";
 import MediaPreview from "./MediaPreview.vue";
+
+import type { MediaItem } from "../types/media";
 
 const props = defineProps<{
   items: MediaItem[];
@@ -69,22 +69,29 @@ onBeforeUnmount(() => {
         <header class="panel-heading">
           <div class="delete-heading">
             <span class="delete-icon"><AppIcon name="trash" :size="22" /></span>
-            <h2 id="delete-title">{{ title }}</h2>
+            <h2 id="delete-title">{{ ui(title) }}</h2>
           </div>
           <button
             type="button"
             class="icon-button"
-            aria-label="Cancel deletion"
+            :aria-label="ui('Cancel deletion')"
             @click="emit('answer', false)"
           >
             <AppIcon name="close" />
           </button>
         </header>
         <p id="delete-description" class="delete-description">
-          {{ items.length === 1 ? "This file" : "These files" }} will be deleted
-          from disk and removed from Nexa.
+          {{
+            ui(
+              `${items.length === 1 ? "This file" : "These files"} will be deleted from disk and removed from Nexa.`,
+            )
+          }}
         </p>
-        <ul class="delete-files" aria-label="Files to delete" tabindex="0">
+        <ul
+          class="delete-files"
+          :aria-label="ui('Files to delete')"
+          tabindex="0"
+        >
           <li v-for="item in visibleItems" :key="item.id" class="delete-file">
             <div class="delete-preview">
               <MediaPreview
@@ -97,11 +104,14 @@ onBeforeUnmount(() => {
           </li>
         </ul>
         <p v-if="items.length > visibleItems.length" class="delete-more">
-          And {{ items.length - visibleItems.length }} more files.
+          {{ ui(`And ${items.length - visibleItems.length} more files.`) }}
         </p>
         <p id="delete-warning" class="delete-warning">
-          Files will be moved to the Recycle Bin when available. Windows will
-          ask before permanently deleting files that cannot be recycled.
+          {{
+            ui(
+              "Files will be moved to the Recycle Bin when available. Windows will ask before permanently deleting files that cannot be recycled.",
+            )
+          }}
         </p>
         <footer class="modal-footer">
           <button
@@ -110,7 +120,7 @@ onBeforeUnmount(() => {
             class="secondary-button"
             @click="emit('answer', false)"
           >
-            Cancel
+            {{ ui("Cancel") }}
           </button>
           <button
             type="button"
@@ -119,9 +129,11 @@ onBeforeUnmount(() => {
           >
             <AppIcon name="trash" :size="15" />
             {{
-              items.length === 1
-                ? "Delete file"
-                : `Delete ${items.length} files`
+              ui(
+                items.length === 1
+                  ? "Delete file"
+                  : `Delete ${items.length} files`,
+              )
             }}
           </button>
         </footer>
