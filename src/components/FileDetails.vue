@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { computed } from "vue";
-
-import type { MediaItem } from "../types/media";
+import { useI18n } from "vue-i18n";
 
 import { formatDate, formatDuration, formatSize } from "../types/media";
 
 import MediaPreview from "./MediaPreview.vue";
 import MetadataRow from "./MetadataRow.vue";
 import AppIcon from "./AppIcon.vue";
+
+import type { MediaItem } from "../types/media";
+
+const { t, locale } = useI18n();
 
 const props = defineProps<{
   item: MediaItem;
@@ -24,90 +27,94 @@ defineEmits<{
 }>();
 
 const attribution = computed(() => [
-  { label: "Copyright", category: "copyright", values: props.item.copyrights },
   {
-    label: "Artist",
+    label: t("copyright"),
+    category: "copyright",
+    values: props.item.copyrights,
+  },
+  {
+    label: t("artist"),
     category: "artist",
     values:
       props.item.artists ?? (props.item.artist ? [props.item.artist] : []),
   },
   {
-    label: "Characters",
+    label: t("characters"),
     category: "characters",
     values: props.item.characters,
   },
-  { label: "Tags", category: "tags", values: props.item.tags },
+  { label: t("tags"), category: "tags", values: props.item.tags },
 ]);
 
 const metadata = computed(() => [
   {
     icon: "files",
-    label: "File type",
-    value: `${props.item.extension} (${props.item.kind === "video" ? "Video" : "Image"})`,
+    label: t("fileType"),
+    value: `${props.item.extension} (${props.item.kind === "video" ? t("video") : t("image")})`,
   },
   {
     icon: "files",
-    label: "Size",
-    value: props.item.size < 0 ? "Unavailable" : formatSize(props.item.size),
+    label: t("size"),
+    value: props.item.size < 0 ? t("unavailable") : formatSize(props.item.size),
   },
   {
     icon: "size",
-    label: "Resolution",
+    label: t("resolution"),
     value:
       props.item.width && props.item.height
         ? `${props.item.width} × ${props.item.height}`
-        : "Unavailable",
+        : t("unavailable"),
   },
   ...(props.item.kind === "video"
     ? [
         {
           icon: "clock",
-          label: "Duration",
+          label: t("duration"),
           value:
             props.item.duration !== undefined
               ? formatDuration(props.item.duration, true)
-              : "Unavailable",
+              : t("unavailable"),
         },
         {
           icon: "film",
           label: "FPS",
           value:
-            props.item.fps?.toLocaleString("en-US", {
+            props.item.fps?.toLocaleString(locale.value, {
               maximumFractionDigits: 3,
-            }) ?? "Unavailable",
+            }) ?? t("unavailable"),
         },
       ]
     : []),
   {
     icon: "calendar",
-    label: "Modified",
+    label: t("modified"),
     value:
       props.item.nativeId && !props.item.modifiedAt
-        ? "Unavailable"
+        ? t("unavailable")
         : formatDate(props.item.modifiedAt),
   },
   {
     icon: "calendar",
-    label: "Created",
+    label: t("created"),
     value:
       props.item.nativeId && !props.item.createdAt
-        ? "Unavailable"
+        ? t("unavailable")
         : formatDate(props.item.createdAt),
   },
   ...(props.item.kind === "video"
     ? [
         {
           icon: "film",
-          label: "Codec",
-          value: props.item.codec ?? "Unavailable",
+          label: t("codec"),
+          value: props.item.codec ?? t("unavailable"),
         },
         {
           icon: "film",
-          label: "Bitrate",
+          label: t("bitrate"),
           value:
             props.item.bitrate !== undefined
               ? `${props.item.bitrate.toFixed(2)} Mbit/s`
-              : "Unavailable",
+              : t("unavailable"),
         },
       ]
     : []),
@@ -115,12 +122,12 @@ const metadata = computed(() => [
 </script>
 
 <template>
-  <aside class="details-panel" aria-label="File information">
+  <aside class="details-panel" :aria-label="t('fileInformation')">
     <header class="panel-heading">
-      <h2>File information</h2>
+      <h2>{{ t("fileInformation") }}</h2>
       <button
         class="icon-button"
-        aria-label="Close file information"
+        :aria-label="t('closeFileInformation')"
         @click="$emit('close')"
       >
         <AppIcon name="close" :size="18" />
@@ -157,7 +164,7 @@ const metadata = computed(() => [
               {{ value }}
             </button>
             <span v-if="!group.values.length" class="muted">{{
-              group.category === "tags" ? "No tags yet" : "Unavailable"
+              group.category === "tags" ? t("noTagsYet") : t("unavailable")
             }}</span>
           </div>
         </section>
@@ -173,51 +180,49 @@ const metadata = computed(() => [
       </dl>
       <div class="detail-actions">
         <button class="primary-button" @click="$emit('action', 'Open file')">
-          <AppIcon name="arrow" :size="17" />Open file</button
+          <AppIcon name="arrow" :size="17" />{{ t("openFile") }}</button
         ><button
           class="secondary-button"
           @click="$emit('action', 'Open folder')"
         >
-          <AppIcon name="gallery" :size="17" />Open folder</button
+          <AppIcon name="gallery" :size="17" />{{ t("openFolder") }}</button
         ><button
           v-if="stage"
           class="secondary-button"
           @click="$emit('action', 'Distribute')"
         >
-          <AppIcon name="share" :size="17" />Distribute</button
+          <AppIcon name="share" :size="17" />{{ t("distribute") }}</button
         ><button
           v-else
           class="secondary-button"
           @click="$emit('action', 'Copy path')"
         >
-          <AppIcon name="copy" :size="16" />Copy path
+          <AppIcon name="copy" :size="16" />{{ t("copyPath") }}
         </button>
         <div v-if="!stage" class="action-row">
           <button
             class="secondary-button"
             :class="{ 'is-favorite': item.favorite }"
-            :aria-label="
-              item.favorite ? 'Remove from favorites' : 'Add to favorites'
-            "
+            :aria-label="item.favorite ? t('removeFavorite') : t('addFavorite')"
             :aria-pressed="item.favorite"
             @click="$emit('favorite')"
           >
             <AppIcon name="heart" :size="18" /></button
           ><button
             class="secondary-button"
-            aria-label="Share file"
+            :aria-label="t('shareFile')"
             @click="$emit('action', 'Share')"
           >
             <AppIcon name="share" :size="18" /></button
           ><button
             class="secondary-button"
-            aria-label="Edit tags"
+            :aria-label="t('editTags')"
             @click="$emit('tags')"
           >
             <AppIcon name="tag" :size="18" /></button
           ><button
             class="secondary-button"
-            aria-label="More file options"
+            :aria-label="t('moreOptions')"
             @click="$emit('action', 'File options')"
           >
             <AppIcon name="more" :size="18" />

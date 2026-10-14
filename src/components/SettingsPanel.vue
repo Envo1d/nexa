@@ -1,19 +1,26 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 
-import { defaultConfig, type ConfigSnapshot } from "../types/config";
+import { defaultConfig } from "../types/config";
 import { version } from "../../package.json";
 
 import ToggleSwitch from "./ToggleSwitch.vue";
 import SettingsRow from "./SettingsRow.vue";
 import AppIcon from "./AppIcon.vue";
 import UpdateConfirmDialog from "./UpdateConfirmDialog.vue";
+import AppSelect from "./AppSelect.vue";
 
 import { useStageScan } from "../composables/useStageScan";
 import { useCacheUsage } from "../composables/useCacheUsage";
 import { useUpdater } from "../composables/useUpdater";
+import { applyLocale, localePreference, languageOptions } from "../i18n";
+
+import type { ConfigSnapshot } from "../types/config";
+
+const { t } = useI18n();
 
 const updater = useUpdater();
 
@@ -30,7 +37,7 @@ const stageScan = useStageScan();
 
 async function scanStage(library = false) {
   if (!native) {
-    emit("preview", library ? "Scan library" : "Scan Stage folder");
+    emit("preview", library ? t("scanLibrary") : t("scanStage"));
 
     return;
   }
@@ -48,7 +55,13 @@ const emit = defineEmits<{ preview: [action: string]; close: []; saved: [] }>();
 
 const native = isTauri();
 
-const draft = ref(defaultConfig());
+const draft = ref({ ...defaultConfig(), locale: localePreference.value });
+
+const theme = ref("midnight-violet");
+
+const themeOptions = computed(() => [
+  { value: "midnight-violet", label: t("themeName") },
+]);
 
 const paths = ref<ConfigSnapshot["paths"] | null>(null);
 
@@ -77,7 +90,7 @@ async function checkLegacyDatabase() {
     legacyFound.value = await invoke<boolean>("find_legacy_database");
   } catch (cause) {
     legacyFound.value = false;
-    importError.value = `Could not check for old Nexa data: ${String(cause)}`;
+    importError.value = t("legacyCheckError", { error: String(cause) });
   }
 }
 
@@ -85,7 +98,7 @@ async function importLegacyDatabase() {
   importing.value = true;
   busy.value = true;
   importError.value = "";
-  importMessage.value = "Importing old Nexa data…";
+  importMessage.value = t("importingLegacy");
 
   try {
     const result = await invoke<{
@@ -94,10 +107,10 @@ async function importLegacyDatabase() {
       skipped: number;
     }>("import_legacy_database");
 
-    importMessage.value = `Import complete: ${result.libraryAdded} Library files and ${result.stageAdded} Stage files added. ${result.skipped} existing files skipped.`;
+    importMessage.value = t("importResult", result);
   } catch (cause) {
     importMessage.value = "";
-    importError.value = `Import failed: ${String(cause)}`;
+    importError.value = t("importError", { error: String(cause) });
     await checkLegacyDatabase();
   } finally {
     importing.value = false;
@@ -131,7 +144,7 @@ onMounted(async () => {
     paths.value = snapshot.paths;
     ready.value = true;
   } catch (cause) {
-    error.value = `Could not load settings: ${String(cause)}`;
+    error.value = t("loadSettingsError", { error: String(cause) });
   } finally {
     loading.value = false;
   }
@@ -161,7 +174,7 @@ async function browse(section: string) {
       saved.value = false;
     }
   } catch (cause) {
-    error.value = `Could not choose directory: ${String(cause)}`;
+    error.value = t("chooseDirectoryError", { error: String(cause) });
   } finally {
     busy.value = false;
   }
@@ -169,7 +182,7 @@ async function browse(section: string) {
 
 async function saveChanges() {
   if (!native) {
-    emit("preview", "Save changes");
+    emit("preview", t("saveChanges"));
 
     return;
   }
@@ -180,10 +193,11 @@ async function saveChanges() {
 
   try {
     await invoke("save_config", { settings: { ...draft.value } });
+    await applyLocale(draft.value.locale);
     saved.value = true;
     emit("saved");
   } catch (cause) {
-    error.value = `Could not save settings: ${String(cause)}`;
+    error.value = t("saveSettingsError", { error: String(cause) });
   } finally {
     busy.value = false;
   }
@@ -199,7 +213,7 @@ async function openLogs() {
   try {
     await invoke("open_logs");
   } catch (cause) {
-    error.value = `Could not open logs: ${String(cause)}`;
+    error.value = t("openLogsError", { error: String(cause) });
   }
 }
 
@@ -207,56 +221,56 @@ const scrollArea = ref<HTMLElement | null>(null);
 
 const activeSection = ref("library");
 
-const sections = [
+const sections = computed(() => [
   {
     id: "library",
-    label: "Library",
+    label: t("library"),
     icon: "gallery",
-    description: "Choose the directory for your sorted media library.",
+    description: t("libraryDescription"),
   },
   {
     id: "staging",
-    label: "Staging",
+    label: t("staging"),
     icon: "staging",
-    description: "Choose the staging directory for incoming media.",
+    description: t("stagingDescription"),
   },
   {
     id: "structure",
-    label: "Structure",
+    label: t("structure"),
     icon: "structure",
-    description: "Configure how your library is organized on disk.",
+    description: t("structureDescription"),
   },
   {
     id: "indexing",
-    label: "Indexing",
+    label: t("indexing"),
     icon: "size",
-    description: "Scan your library and staging directories.",
+    description: t("indexingDescription"),
   },
   {
     id: "cache",
-    label: "Cache",
+    label: t("cache"),
     icon: "cache",
-    description: "Manage cached thumbnails and disk usage.",
+    description: t("cacheDescription"),
   },
   {
     id: "logs",
-    label: "Logs",
+    label: t("logs"),
     icon: "logs",
-    description: "Access application logs.",
+    description: t("logsDescription"),
   },
   {
     id: "updates",
-    label: "Updates",
+    label: t("updates"),
     icon: "reset",
-    description: "Keep track of the current application version.",
+    description: t("updatesDescription"),
   },
   {
     id: "appearance",
-    label: "Appearance",
+    label: t("appearance"),
     icon: "settings",
-    description: "Personalize your workspace.",
+    description: t("appearanceDescription"),
   },
-];
+]);
 
 function goToSection(id: string) {
   if (id === "indexing" && !importing.value) void checkLegacyDatabase();
@@ -285,7 +299,7 @@ function trackSection() {
     return;
   }
 
-  for (const section of sections) {
+  for (const section of sections.value) {
     const element = area.querySelector<HTMLElement>(`#settings-${section.id}`);
 
     if (element && element.offsetTop <= area.scrollTop + 80)
@@ -301,9 +315,9 @@ function resetDrafts() {
 
 <template>
   <div class="settings-workspace">
-    <aside class="settings-sidebar" aria-label="Settings sections">
+    <aside class="settings-sidebar" :aria-label="t('sections')">
       <div class="settings-sidebar-heading">
-        Settings <span v-if="!native">UI preview</span>
+        {{ t("settings") }}<span v-if="!native">{{ t("preview") }}</span>
       </div>
       <nav class="settings-section-nav">
         <button
@@ -328,12 +342,12 @@ function resetDrafts() {
           {{
             error ||
             (loading
-              ? "Loading settings…"
+              ? t("loadingSettings")
               : !native
-                ? "UI preview · Changes are not applied or saved."
+                ? t("previewNotice")
                 : saved
-                  ? "Settings saved."
-                  : "Changes apply after Save changes. Scanning uses saved directories. Disk synchronization runs in the background when enabled.")
+                  ? t("saved")
+                  : t("saveNotice"))
           }}
         </p>
         <fieldset
@@ -357,18 +371,16 @@ function resetDrafts() {
               <SettingsRow
                 v-if="section.id === 'library' || section.id === 'staging'"
                 :title="
-                  section.id === 'library'
-                    ? 'Sorted library path'
-                    : 'Staging folder'
+                  section.id === 'library' ? t('libraryPath') : t('stagingPath')
                 "
                 :description="
                   (section.id === 'library'
                     ? draft.libraryPath
-                    : draft.stagingPath) || 'Not selected'
+                    : draft.stagingPath) || t('notSelected')
                 "
               >
                 <button class="secondary-button" @click="browse(section.id)">
-                  <AppIcon name="gallery" :size="16" />Browse
+                  <AppIcon name="gallery" :size="16" />{{ t("browse") }}
                 </button>
               </SettingsRow>
               <template v-else-if="section.id === 'structure'">
@@ -377,12 +389,8 @@ function resetDrafts() {
                   trailing
                   class="settings-card-row settings-switch-row"
                   ><span
-                    ><strong>Copyright directory</strong
-                    ><small
-                      >Use the first alphabetically sorted copyright as a
-                      folder. Saved changes reorganize existing distributed
-                      files when sync is enabled.</small
-                    ></span
+                    ><strong>{{ t("copyrightDirectory") }}</strong
+                    ><small>{{ t("copyrightDescription") }}</small></span
                   ></ToggleSwitch
                 >
                 <ToggleSwitch
@@ -390,19 +398,15 @@ function resetDrafts() {
                   trailing
                   class="settings-card-row settings-switch-row"
                   ><span
-                    ><strong>Artist directory</strong
-                    ><small
-                      >Use the file’s single artist as a folder. Saved changes
-                      reorganize existing distributed files when sync is
-                      enabled.</small
-                    ></span
+                    ><strong>{{ t("artistDirectory") }}</strong
+                    ><small>{{ t("artistDescription") }}</small></span
                   ></ToggleSwitch
                 >
                 <SettingsRow
                   for="character-separator"
                   as="label"
-                  title="Character separator"
-                  description="Separator between character names in filenames."
+                  :title="t('characterSeparator')"
+                  :description="t('separatorDescription')"
                   ><input
                     id="character-separator"
                     v-model="draft.characterSeparator"
@@ -412,8 +416,8 @@ function resetDrafts() {
                 <SettingsRow
                   for="video-subfolder"
                   as="label"
-                  title="Video subfolder name"
-                  description="Name of the subfolder for video files."
+                  :title="t('videoFolder')"
+                  :description="t('videoFolderDescription')"
                   ><input
                     id="video-subfolder"
                     v-model="draft.videoSubfolder"
@@ -423,8 +427,8 @@ function resetDrafts() {
                 <SettingsRow
                   for="gif-subfolder"
                   as="label"
-                  title="GIF subfolder name"
-                  description="Subfolder for GIF files when disk sync is enabled. Leave empty to omit this level. Saved changes reorganize existing distributed GIFs."
+                  :title="t('gifFolder')"
+                  :description="t('gifDescription')"
                   ><input
                     id="gif-subfolder"
                     v-model="draft.gifSubfolder"
@@ -436,13 +440,8 @@ function resetDrafts() {
                   trailing
                   class="settings-card-row settings-switch-row"
                   ><span
-                    ><strong>Sync structure with disk</strong
-                    ><small
-                      >When on, existing distributed files gradually move into
-                      the configured structure. When off, distribution saves
-                      metadata and leaves files in place; pending moves pause
-                      after the current operation.</small
-                    ></span
+                    ><strong>{{ t("sync") }}</strong
+                    ><small>{{ t("syncDescription") }}</small></span
                   ></ToggleSwitch
                 >
               </template>
@@ -453,13 +452,15 @@ function resetDrafts() {
                     :disabled="stageScan.status.value.running"
                     @click="scanStage(true)"
                   >
-                    <AppIcon name="size" :size="16" />Scan library</button
+                    <AppIcon name="size" :size="16" />{{
+                      t("scanLibrary")
+                    }}</button
                   ><button
                     class="secondary-button"
                     :disabled="stageScan.status.value.running"
                     @click="scanStage(false)"
                   >
-                    <AppIcon name="search" :size="16" />Scan Stage folder
+                    <AppIcon name="search" :size="16" />{{ t("scanStage") }}
                   </button>
                 </div>
                 <ToggleSwitch
@@ -467,30 +468,28 @@ function resetDrafts() {
                   trailing
                   class="settings-card-row settings-switch-row"
                   ><span
-                    ><strong>Auto scan on startup</strong
-                    ><small
-                      >Scan Library and Stage each time Nexa opens.</small
-                    ></span
+                    ><strong>{{ t("autoScan") }}</strong
+                    ><small>{{ t("autoScanDescription") }}</small></span
                   ></ToggleSwitch
                 >
                 <div class="settings-scan-summary">
                   <div>
-                    <AppIcon name="info" :size="16" /><strong>Last scan</strong
+                    <AppIcon name="info" :size="16" /><strong>{{
+                      t("lastScan")
+                    }}</strong
                     ><span class="settings-status">{{
-                      stageScan.status.value.running ? "Scanning" : "Idle"
+                      stageScan.status.value.running ? t("scanning") : t("idle")
                     }}</span>
                   </div>
                   <p role="status" aria-live="polite">
                     {{ stageScan.status.value.message }} ·
-                    {{ stageScan.status.value.scanned }} files ·
-                    {{ stageScan.status.value.extracted }} extracted ·
-                    {{ stageScan.status.value.errors }} issues
+                    {{ t("scanCounts", stageScan.status.value) }}
                   </p>
                 </div>
                 <SettingsRow
                   v-if="legacyFound"
-                  title="Import from old Nexa"
-                  description="Copy Library, Stage and metadata into the new database. Old data and media files stay unchanged. Existing files are skipped."
+                  :title="t('importTitle')"
+                  :description="t('importDescription')"
                 >
                   <button
                     class="secondary-button"
@@ -498,20 +497,14 @@ function resetDrafts() {
                     @click="importLegacyDatabase"
                   >
                     <AppIcon name="size" :size="16" />
-                    {{ importing ? "Importing…" : "Import old database" }}
+                    {{ importing ? t("importing") : t("importButton") }}
                   </button>
                 </SettingsRow>
                 <div
                   v-if="legacyFound || importMessage || importError"
                   class="settings-scan-summary"
                 >
-                  <p v-if="legacyFound">
-                    Characters keep their copyright; tags are shared without
-                    duplicates. Imported roots are retained without changing
-                    your settings. Stage shows files from its saved directory
-                    and redistribution queue. Main shows files from the saved
-                    Library directory.
-                  </p>
+                  <p v-if="legacyFound">{{ t("importNotice") }}</p>
                   <p v-if="importMessage" role="status" aria-live="polite">
                     {{ importMessage }}
                   </p>
@@ -522,10 +515,9 @@ function resetDrafts() {
                 <div class="settings-card-row settings-cache-row">
                   <div class="settings-summary">
                     <span
-                      ><strong>Thumbnail cache</strong
+                      ><strong>{{ t("thumbnailCache") }}</strong
                       ><small>{{
-                        cacheUsage.error.value ||
-                        "Current disk usage · 512 MB limit"
+                        cacheUsage.error.value || t("cacheLimit")
                       }}</small></span
                     ><strong>{{ cacheUsage.label.value }}</strong>
                   </div>
@@ -541,34 +533,34 @@ function resetDrafts() {
                         : undefined
                     "
                     :max="cacheUsage.status.value?.maxBytes ?? 536870912"
-                    aria-label="Thumbnail cache usage"
+                    :aria-label="t('cacheUsage')"
                     :aria-valuetext="cacheUsage.label.value"
                   >
                     {{ cacheUsage.label.value }}
                   </progress>
                 </div>
                 <SettingsRow
-                  title="Clear cache"
-                  description="Remove cached thumbnails and temporary files."
+                  :title="t('clearCache')"
+                  :description="t('clearDescription')"
                   ><button
                     class="secondary-button"
                     @click="$emit('preview', 'Clear thumbnail cache')"
                   >
-                    <AppIcon name="reset" :size="16" />Clear cache
+                    <AppIcon name="reset" :size="16" />{{ t("clearCache") }}
                   </button>
                 </SettingsRow>
               </template>
               <SettingsRow
                 v-else-if="section.id === 'logs'"
-                title="Application logs"
-                :description="paths?.logsPath || 'Logs folder: Not configured'"
+                :title="t('applicationLogs')"
+                :description="paths?.logsPath || t('logsMissing')"
                 ><button class="secondary-button" @click="openLogs">
-                  <AppIcon name="gallery" :size="16" />Open logs
+                  <AppIcon name="gallery" :size="16" />{{ t("openLogs") }}
                 </button>
               </SettingsRow>
               <template v-else-if="section.id === 'updates'">
                 <SettingsRow
-                  title="Current version"
+                  :title="t('version')"
                   :description="`Nexa ${version}`"
                   ><span class="settings-status" role="status">{{
                     updater.status.value
@@ -579,29 +571,26 @@ function resetDrafts() {
                   trailing
                   class="settings-card-row settings-switch-row"
                   ><span
-                    ><strong>Auto check on startup</strong
-                    ><small
-                      >Check for updates each time Nexa opens.</small
-                    ></span
+                    ><strong>{{ t("autoUpdate") }}</strong
+                    ><small>{{ t("autoUpdateDescription") }}</small></span
                   ></ToggleSwitch
                 >
                 <SettingsRow
-                  title="Check now"
-                  description="Manually check for a newer version."
+                  :title="t('checkNow')"
+                  :description="t('checkDescription')"
                   ><button
                     class="secondary-button"
                     :disabled="updater.busy.value"
                     @click="updater.check"
                   >
-                    <AppIcon name="reset" :size="16" />Check now
+                    <AppIcon name="reset" :size="16" />{{ t("checkNow") }}
                   </button>
                 </SettingsRow>
                 <SettingsRow
                   v-if="updater.available.value"
-                  title="Install update"
+                  :title="t('installUpdate')"
                   :description="
-                    updater.available.value.notes ||
-                    'Nexa will close and restart during installation. Save unfinished edits first.'
+                    updater.available.value.notes || t('installNotice')
                   "
                 >
                   <button
@@ -609,7 +598,11 @@ function resetDrafts() {
                     :disabled="updater.busy.value"
                     @click="updater.install"
                   >
-                    Install {{ updater.available.value.version }}
+                    {{
+                      t("installVersion", {
+                        version: updater.available.value.version,
+                      })
+                    }}
                   </button>
                 </SettingsRow>
                 <progress
@@ -617,30 +610,46 @@ function resetDrafts() {
                   class="settings-progress"
                   :value="updater.percent.value ?? undefined"
                   max="100"
-                  aria-label="Update download progress"
+                  :aria-label="t('downloadProgress')"
                 />
               </template>
-              <SettingsRow
-                v-else
-                for="settings-theme"
-                as="label"
-                title="Theme"
-                description="More themes will be available later."
-                ><select id="settings-theme" disabled>
-                  <option>Midnight violet</option>
-                </select></SettingsRow
-              >
+              <template v-else>
+                <SettingsRow
+                  :title="t('language')"
+                  :description="t('languageDescription')"
+                >
+                  <AppSelect
+                    v-model="draft.locale"
+                    class="settings-select"
+                    :options="languageOptions"
+                    :label="t('language')"
+                    :disabled="loading || busy || !ready"
+                  />
+                </SettingsRow>
+                <SettingsRow
+                  :title="t('theme')"
+                  :description="t('themeDescription')"
+                >
+                  <AppSelect
+                    v-model="theme"
+                    class="settings-select"
+                    :options="themeOptions"
+                    :label="t('theme')"
+                    disabled
+                  />
+                </SettingsRow>
+              </template>
             </div>
           </section>
           <footer class="settings-footer">
             <button class="text-button" @click="resetDrafts">
-              <AppIcon name="reset" :size="15" />Reset to defaults
+              <AppIcon name="reset" :size="15" />{{ t("resetDefaults") }}
             </button>
             <div>
               <button class="secondary-button" @click="$emit('close')">
-                Cancel</button
+                {{ t("cancel") }}</button
               ><button class="primary-button" @click="saveChanges">
-                <AppIcon name="check" :size="15" />Save changes
+                <AppIcon name="check" :size="15" />{{ t("saveChanges") }}
               </button>
             </div>
           </footer>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useTemplateRef } from "vue";
+import { useI18n } from "vue-i18n";
 import { isTauri } from "@tauri-apps/api/core";
 
 import AppIcon from "./components/AppIcon.vue";
@@ -18,6 +19,8 @@ import DeleteFilesDialog from "./components/DeleteFilesDialog.vue";
 import { useWorkspace } from "./app/useWorkspace";
 
 import "./styles.css";
+
+const { t } = useI18n();
 
 const searchInput = useTemplateRef<HTMLInputElement>("searchInput");
 
@@ -116,19 +119,19 @@ const {
         @pointerdown="startDrag"
         @dblclick="windowAction('maximize')"
       ></div>
-      <nav class="view-tabs" aria-label="Workspace">
+      <nav class="view-tabs" :aria-label="t('workspace')">
         <button
           :class="{ active: view === 'main' }"
           :aria-pressed="view === 'main'"
           @click="view = 'main'"
         >
-          Main <span>View</span></button
+          {{ t("mainView") }}</button
         ><button
           :class="{ active: view === 'stage' }"
           :aria-pressed="view === 'stage'"
           @click="view = 'stage'"
         >
-          Stage <span>View</span>
+          {{ t("stageView") }}
         </button>
       </nav>
       <div
@@ -136,11 +139,11 @@ const {
         @pointerdown="startDrag"
         @dblclick="windowAction('maximize')"
       ></div>
-      <div class="layout-toggle" aria-label="Collection layout">
+      <div class="layout-toggle" :aria-label="t('layout')">
         <button
           :class="{ active: mode === 'grid' }"
           :aria-pressed="mode === 'grid'"
-          aria-label="Grid view"
+          :aria-label="t('grid')"
           :disabled="view === 'settings' || view === 'tags'"
           @click="mode = 'grid'"
         >
@@ -148,7 +151,7 @@ const {
         ><button
           :class="{ active: mode === 'list' }"
           :aria-pressed="mode === 'list'"
-          aria-label="List view"
+          :aria-label="t('list')"
           :disabled="view === 'settings' || view === 'tags'"
           @click="mode = 'list'"
         >
@@ -156,10 +159,10 @@ const {
         </button>
       </div>
       <div class="window-controls">
-        <button aria-label="Minimize window" @click="windowAction('minimize')">
+        <button :aria-label="t('minimize')" @click="windowAction('minimize')">
           <AppIcon name="minimize" :size="17" /></button
         ><button
-          :aria-label="maximized ? 'Restore window' : 'Maximize window'"
+          :aria-label="maximized ? t('restore') : t('maximize')"
           @click="windowAction('maximize')"
         >
           <AppIcon
@@ -168,7 +171,7 @@ const {
           /></button
         ><button
           class="window-close"
-          aria-label="Close window"
+          :aria-label="t('closeWindow')"
           @click="windowAction('close')"
         >
           <AppIcon name="close" :size="18" />
@@ -179,69 +182,81 @@ const {
       <nav
         class="navigation"
         :class="{ expanded: sidebarExpanded }"
-        aria-label="Library navigation"
+        :aria-label="t('navigation')"
       >
         <button
           class="nav-item collapse-button"
-          :aria-label="sidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'"
+          :aria-label="
+            sidebarExpanded ? t('collapseSidebar') : t('expandSidebar')
+          "
           :aria-expanded="sidebarExpanded"
           @click="sidebarExpanded = !sidebarExpanded"
         >
-          <AppIcon name="menu" /><span v-if="sidebarExpanded">Library</span>
+          <AppIcon name="menu" /><span v-if="sidebarExpanded">{{
+            t("library")
+          }}</span>
         </button>
         <div class="nav-main">
           <button
             class="nav-item"
             :class="{ active: scope === 'gallery' && view === 'main' }"
-            title="Gallery"
+            :title="t('gallery')"
             :aria-current="
               scope === 'gallery' && view === 'main' ? 'page' : undefined
             "
             @click="navigate('gallery')"
           >
-            <AppIcon name="gallery" /><span v-if="sidebarExpanded">Gallery</span
-            ><span v-else class="sr-only">Gallery</span></button
+            <AppIcon name="gallery" /><span v-if="sidebarExpanded">{{
+              t("gallery")
+            }}</span
+            ><span v-else class="sr-only">{{ t("gallery") }}</span></button
           ><button
             class="nav-item"
             :class="{ active: scope === 'favorites' && view === 'main' }"
-            title="Favorites"
+            :title="t('favorites')"
             :aria-current="
               scope === 'favorites' && view === 'main' ? 'page' : undefined
             "
             @click="navigate('favorites')"
           >
-            <AppIcon name="star" /><span v-if="sidebarExpanded">Favorites</span
-            ><span v-else class="sr-only">Favorites</span>
+            <AppIcon name="star" /><span v-if="sidebarExpanded">{{
+              t("favorites")
+            }}</span
+            ><span v-else class="sr-only">{{ t("favorites") }}</span>
           </button>
           <button
             class="nav-item"
-            title="Tags"
+            :title="t('tags')"
             :class="{ active: view === 'tags' }"
             :aria-current="view === 'tags' ? 'page' : undefined"
             @click="view = 'tags'"
           >
-            <AppIcon name="tag" /><span v-if="sidebarExpanded">Tags</span
-            ><span v-else class="sr-only">Tags</span>
+            <AppIcon name="tag" /><span v-if="sidebarExpanded">{{
+              t("tags")
+            }}</span
+            ><span v-else class="sr-only">{{ t("tags") }}</span>
           </button>
         </div>
         <button
           class="nav-item settings-button"
-          title="Settings"
+          :title="t('settings')"
           :class="{ active: view === 'settings' }"
           :aria-current="view === 'settings' ? 'page' : undefined"
           @click="view = 'settings'"
         >
-          <AppIcon name="settings" /><span v-if="sidebarExpanded">Settings</span
-          ><span v-else class="sr-only">Settings</span>
+          <AppIcon name="settings" /><span v-if="sidebarExpanded">{{
+            t("settings")
+          }}</span
+          ><span v-else class="sr-only">{{ t("settings") }}</span>
         </button>
       </nav>
       <template v-if="view === 'main'">
         <aside
           class="filters-panel main-filters-panel"
-          aria-label="Library filters"
+          :aria-label="t('libraryFilters')"
         >
           <header class="panel-heading">
-            <h2>Filters</h2>
+            <h2>{{ t("filters") }}</h2>
             <span v-if="activeFilterCount" class="filter-count">{{
               activeFilterCount
             }}</span>
@@ -252,8 +267,8 @@ const {
                 <AppIcon name="search" :size="17" /><input
                   ref="searchInput"
                   v-model="search"
-                  aria-label="Search metadata"
-                  placeholder="Metadata, separated by semicolons"
+                  :aria-label="t('metadataSearch')"
+                  :placeholder="t('metadataPlaceholder')"
                   role="combobox"
                   aria-autocomplete="list"
                   :aria-expanded="searchFocused && suggestions.length > 0"
@@ -270,7 +285,7 @@ const {
                 /><button
                   v-if="search"
                   class="icon-button"
-                  aria-label="Clear search"
+                  :aria-label="t('clearSearch')"
                   @click="library.clearSearch()"
                 >
                   <AppIcon name="close" :size="14" /></button
@@ -281,7 +296,7 @@ const {
                 id="metadata-suggestions"
                 class="metadata-suggestions"
                 role="listbox"
-                aria-label="Matching metadata"
+                :aria-label="t('matches')"
               >
                 <button
                   v-for="(suggestion, index) in suggestions"
@@ -310,7 +325,7 @@ const {
               </div>
             </div>
             <section class="filter-section type-section">
-              <h3>File type</h3>
+              <h3>{{ t("fileType") }}</h3>
               <button
                 v-for="option in typeOptions"
                 :key="option.value"
@@ -326,12 +341,16 @@ const {
               </button>
             </section>
             <section class="filter-section">
-              <h3>Sorting</h3>
+              <h3>{{ t("sorting") }}</h3>
               <SortSelect v-model="sortMode" />
             </section>
             <section class="filter-section tag-filter-section">
-              <h3>Tags</h3>
-              <div class="filter-tags" tabindex="0" aria-label="Filter tags">
+              <h3>{{ t("tags") }}</h3>
+              <div
+                class="filter-tags"
+                tabindex="0"
+                :aria-label="t('filterTags')"
+              >
                 <button
                   v-for="tag in displayedTags"
                   :key="tag.name"
@@ -348,7 +367,7 @@ const {
                 :aria-expanded="showAllTags"
                 @click="showAllTags = !showAllTags"
               >
-                {{ showAllTags ? "Show fewer" : "Show all tags"
+                {{ showAllTags ? t("showFewer") : t("showAllTags")
                 }}<AppIcon
                   name="down"
                   :size="13"
@@ -358,15 +377,21 @@ const {
               </button>
             </section>
             <section class="filter-section additional-section">
-              <h3>Additional</h3>
-              <ToggleSwitch v-model="taggedOnly">Tagged only</ToggleSwitch
-              ><ToggleSwitch v-model="hideUntagged">Hide untagged</ToggleSwitch>
-              <ToggleSwitch v-model="showPreviews">Show previews</ToggleSwitch>
+              <h3>{{ t("additional") }}</h3>
+              <ToggleSwitch v-model="taggedOnly">{{
+                t("taggedOnly")
+              }}</ToggleSwitch
+              ><ToggleSwitch v-model="hideUntagged">{{
+                t("hideUntagged")
+              }}</ToggleSwitch>
+              <ToggleSwitch v-model="showPreviews">{{
+                t("showPreviews")
+              }}</ToggleSwitch>
             </section>
           </div>
           <div class="filter-reset">
             <button class="secondary-button" @click="library.reset()">
-              <AppIcon name="reset" :size="16" />Reset filters
+              <AppIcon name="reset" :size="16" />{{ t("resetFilters") }}
             </button>
           </div>
         </aside>
@@ -409,28 +434,30 @@ const {
         @close="view = 'main'"
         @saved="
           refreshAll();
-          notify('Settings saved.');
+          notify(t('saved'));
         "
         @preview="
           notify(`${$event} is a UI preview. No settings or files are changed.`)
         "
       />
       <template v-else>
-        <aside class="filters-panel" aria-label="Stage filters">
-          <header class="panel-heading"><h2>Filters</h2></header>
+        <aside class="filters-panel" :aria-label="t('stageFilters')">
+          <header class="panel-heading">
+            <h2>{{ t("filters") }}</h2>
+          </header>
           <div class="filters-scroll">
             <div class="search-box">
               <AppIcon name="search" :size="17" />
               <input
                 ref="searchInput"
                 v-model="stage.search.value"
-                aria-label="Search files by name or path"
-                placeholder="File name or path"
+                :aria-label="t('searchFiles')"
+                :placeholder="t('filePlaceholder')"
               />
               <button
                 v-if="stage.search.value"
                 class="icon-button"
-                aria-label="Clear search"
+                :aria-label="t('clearSearch')"
                 @click="stage.clearSearch()"
               >
                 <AppIcon name="close" :size="14" />
@@ -438,8 +465,10 @@ const {
               <kbd v-else>Ctrl F</kbd>
             </div>
             <section class="filter-section additional-section">
-              <h3>Additional</h3>
-              <ToggleSwitch v-model="showPreviews">Show previews</ToggleSwitch>
+              <h3>{{ t("additional") }}</h3>
+              <ToggleSwitch v-model="showPreviews">{{
+                t("showPreviews")
+              }}</ToggleSwitch>
             </section>
           </div>
         </aside>
@@ -455,7 +484,7 @@ const {
           :selected-id="stage.selectedId.value"
           :selected-ids="stage.selectedIds.value"
           :details-open="detailsOpen"
-          heading="Stage"
+          :heading="t('stage')"
           :filtered="Boolean(stage.search.value.trim())"
           stage
           @load-more="stage.loadMore"
@@ -488,12 +517,16 @@ const {
             @search="library.addSearch"
             @action="previewAction($event, detailsItem)"
           />
-          <aside v-else class="details-panel" aria-label="File information">
+          <aside
+            v-else
+            class="details-panel"
+            :aria-label="t('fileInformation')"
+          >
             <header class="panel-heading">
-              <h2>File information</h2>
+              <h2>{{ t("fileInformation") }}</h2>
               <button
                 class="icon-button"
-                aria-label="Close file information"
+                :aria-label="t('closeFileInformation')"
                 @click="closeDetails"
               >
                 <AppIcon name="close" :size="18" />
@@ -504,11 +537,11 @@ const {
               <h3>
                 {{
                   detailsCount
-                    ? `${detailsCount} files selected`
-                    : "No file selected"
+                    ? t("selectedCount", { count: detailsCount })
+                    : t("noSelection")
                 }}
               </h3>
-              <p>Select one file to view its information.</p>
+              <p>{{ t("selectOne") }}</p>
             </div>
           </aside>
         </div>
@@ -525,21 +558,21 @@ const {
             <AppIcon name="info" :size="18" />
             <span>{{
               diskSync.error
-                ? `Disk synchronization stopped: ${diskSync.error}`
+                ? t("syncStopped", { error: diskSync.error })
                 : diskSync.total
-                  ? `Synchronizing disk: ${diskSync.completed} / ${diskSync.total}`
-                  : "Preparing disk synchronization…"
+                  ? t("syncCount", diskSync)
+                  : t("preparingSync")
             }}</span>
             <button
               v-if="diskSync.error"
               class="secondary-button"
               @click="retryDiskSync"
             >
-              Retry
+              {{ t("retry") }}
             </button>
           </div>
           <progress
-            aria-label="Disk synchronization progress"
+            :aria-label="t('syncProgress')"
             :max="Math.max(1, diskSync.total)"
             :value="
               diskSync.total || diskSync.error
@@ -554,7 +587,7 @@ const {
           <AppIcon name="info" :size="18" /><span>{{ toast }}</span
           ><button
             class="icon-button"
-            aria-label="Dismiss message"
+            :aria-label="t('dismissMessage')"
             @click="toast = ''"
           >
             <AppIcon name="close" :size="16" />
@@ -635,10 +668,10 @@ const {
       >
         <template v-if="tagTarget"
           ><header class="panel-heading">
-            <h2 id="modal-title">Edit tags</h2>
+            <h2 id="modal-title">{{ t("editTags") }}</h2>
             <button
               class="icon-button"
-              aria-label="Close tag editor"
+              :aria-label="t('closeTagEditor')"
               :disabled="tagSaving"
               @click="tagTarget = null"
             >
@@ -651,30 +684,29 @@ const {
               v-for="tag in draftTags"
               :key="tag"
               class="tag-chip"
-              :aria-label="`Remove ${tag} tag`"
+              :aria-label="t('removeTag', { tag })"
               @click="draftTags = draftTags.filter((name) => name !== tag)"
             >
               {{ tag }}<AppIcon name="close" :size="12" /></button
-            ><span v-if="!draftTags.length" class="muted"
-              >Add a little context to this file.</span
-            >
+            ><span v-if="!draftTags.length" class="muted">{{
+              t("tagContext")
+            }}</span>
           </div>
           <form class="tag-form" @submit.prevent="addDraftTag">
             <input
               ref="tagInput"
               v-model="newTag"
-              aria-label="New tag"
-              placeholder="Add a tag..."
+              :aria-label="t('newTag')"
+              :placeholder="t('addTagPlaceholder')"
               maxlength="25"
-            /><button class="secondary-button" type="submit">Add</button>
+            /><button class="secondary-button" type="submit">
+              {{ t("add") }}
+            </button>
           </form>
           <p v-if="tagError" class="error-message" role="alert">
             {{ tagError }}
           </p>
-          <p class="modal-note">
-            Choose an existing tag or create your own. Changes are stored for
-            this demo session.
-          </p>
+          <p class="modal-note">{{ t("tagDemoNotice") }}</p>
           <div class="suggested-tags">
             <button
               v-for="tag in tags
@@ -693,13 +725,13 @@ const {
               :disabled="tagSaving"
               @click="tagTarget = null"
             >
-              Cancel</button
+              {{ t("cancel") }}</button
             ><button
               class="primary-button"
               :disabled="tagSaving"
               @click="saveTags"
             >
-              Save tags
+              {{ t("saveTags") }}
             </button>
           </footer></template
         >

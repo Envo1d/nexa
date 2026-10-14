@@ -5,6 +5,17 @@ use serde::{Deserialize, Serialize};
 
 type ConfigResult<T> = Result<T, String>;
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+pub enum AppLocale {
+    #[default]
+    #[serde(rename = "system")]
+    System,
+    #[serde(rename = "en")]
+    English,
+    #[serde(rename = "ru")]
+    Russian,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase", deny_unknown_fields)]
 pub struct AppConfig {
@@ -18,6 +29,7 @@ pub struct AppConfig {
     pub sync_structure: bool,
     pub auto_scan: bool,
     pub auto_update_check: bool,
+    pub locale: AppLocale,
 }
 
 impl Default for AppConfig {
@@ -33,6 +45,7 @@ impl Default for AppConfig {
             sync_structure: false,
             auto_scan: false,
             auto_update_check: false,
+            locale: AppLocale::default(),
         }
     }
 }
@@ -145,10 +158,15 @@ impl ConfigStore {
             .settings
             .lock()
             .map_err(|_| "Configuration lock poisoned")?;
+        let locale_changed = settings.locale != draft.locale;
+
         Self::write(&self.paths, &draft, true)?;
         *settings = draft;
 
         tracing::info!("Configuration saved");
+        if locale_changed {
+            tracing::info!(locale = ?settings.locale, "Interface language changed");
+        }
         Ok(())
     }
 }

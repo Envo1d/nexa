@@ -1,12 +1,9 @@
 import { computed, ref, watch, onScopeDispose } from "vue";
-
-import { useMediaSelection } from "./useMediaSelection";
-
+import { useI18n } from "vue-i18n";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 
+import { useMediaSelection } from "./useMediaSelection";
 import { createMockMedia } from "../data/mockMedia";
-
-import type { MediaItem, MediaKind } from "../types/media";
 
 import {
   chooseMetadataSuggestion,
@@ -15,7 +12,11 @@ import {
   type MetadataSuggestion,
 } from "../utils/metadataSearch";
 
+import type { MediaItem, MediaKind } from "../types/media";
+
 export function useLibrary() {
+  const { t } = useI18n();
+
   const native = isTauri();
 
   const media = ref<MediaItem[]>(native ? [] : createMockMedia());
@@ -228,8 +229,8 @@ export function useLibrary() {
     appliedSearch.value
       ? appliedSearch.value
       : scope.value === "favorites"
-        ? "Favorites"
-        : "All files",
+        ? t("favorites")
+        : t("allFiles"),
   );
 
   const activeFilterCount = computed(

@@ -373,6 +373,11 @@ svg {
 .sort-select {
   position: relative;
 }
+.settings-select {
+  width: 210px;
+  max-width: 100%;
+  flex-shrink: 0;
+}
 .sort-select-trigger {
   display: flex;
   align-items: center;

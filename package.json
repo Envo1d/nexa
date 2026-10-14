@@ -1,7 +1,7 @@
 {
   "name": "nexa",
   "private": true,
-  "version": "2.3.1",
+  "version": "2.4.0",
   "type": "module",
   "scripts": {
     "build:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-windows.ps1",
@@ -9,8 +9,8 @@
     "build": "vue-tsc --noEmit && vite build",
     "lint": "eslint src vite.config.ts eslint.config.js --max-warnings 0",
     "lint:fix": "npm run lint -- --fix",
-    "format": "prettier --write \"src/**/*.{vue,ts,js,css,scss,less}\" index.html update.html vite.config.ts eslint.config.js package.json .prettierrc.json tsconfig.json tsconfig.node.json",
-    "format:check": "prettier --check \"src/**/*.{vue,ts,js,css,scss,less}\" index.html update.html vite.config.ts eslint.config.js package.json .prettierrc.json tsconfig.json tsconfig.node.json",
+    "format": "prettier --write \"src/**/*.{vue,ts,js,json,css,scss,less}\" index.html update.html vite.config.ts eslint.config.js package.json .prettierrc.json tsconfig.json tsconfig.node.json",
+    "format:check": "prettier --check \"src/**/*.{vue,ts,js,json,css,scss,less}\" index.html update.html vite.config.ts eslint.config.js package.json .prettierrc.json tsconfig.json tsconfig.node.json",
     "check:ui": "npm run format && npm run lint && npm run format:check && npm run build",
     "preview": "vite preview",
     "tauri": "tauri"
@@ -23,7 +23,8 @@
     "@tauri-apps/plugin-notification": "^2.5.1",
     "@tauri-apps/plugin-opener": "^2",
     "@tauri-apps/plugin-os": "^2.4.0",
-    "vue": "^3.5.13"
+    "vue": "^3.5.13",
+    "vue-i18n": "^11.4.14"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

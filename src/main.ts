@@ -1,5 +1,8 @@
 import { createApp } from "vue";
 
 import App from "./App.vue";
+import { i18n, initializeLocale } from "./i18n";
 
-createApp(App).mount("#app");
+await initializeLocale();
+
+createApp(App).use(i18n).mount("#app");
