@@ -1,3 +1,7 @@
+export type InterfaceLocale = "en" | "ru";
+
+export type AppLocale = "system" | InterfaceLocale;
+
 export interface AppConfig {
   libraryPath: string | null;
   stagingPath: string | null;
@@ -9,6 +13,7 @@ export interface AppConfig {
   syncStructure: boolean;
   autoScan: boolean;
   autoUpdateCheck: boolean;
+  locale: AppLocale;
 }
 
 export interface ConfigSnapshot {
@@ -33,5 +38,6 @@ export function defaultConfig(): AppConfig {
     syncStructure: false,
     autoScan: false,
     autoUpdateCheck: false,
+    locale: "system",
   };
 }

@@ -23,6 +23,7 @@ fn creates_defaults_and_round_trips_replacement() {
         artist_directory: false,
         auto_scan: true,
         gif_subfolder: "GIFs".into(),
+        locale: AppLocale::Russian,
         ..AppConfig::default()
     };
     store.save(draft.clone()).unwrap();
@@ -81,6 +82,49 @@ fn missing_fields_use_current_defaults_and_unknown_fields_are_rejected() {
     let old: AppConfig = serde_json::from_str(r#"{"videoSubfolder":"Clips"}"#).unwrap();
     assert_eq!(old.gif_subfolder, "Animations");
     assert_eq!(old.video_subfolder, "Clips");
+    assert_eq!(old.locale, AppLocale::System);
+
+    let explicit: AppConfig = serde_json::from_str(r#"{"locale":"en"}"#).unwrap();
+    assert_eq!(explicit.locale, AppLocale::English);
+}
+
+#[test]
+fn rejects_unsupported_locales_and_serializes_supported_language_codes() {
+    assert!(serde_json::from_str::<AppConfig>(r#"{"locale":"invalid"}"#).is_err());
+    assert_eq!(
+        serde_json::to_string(&AppLocale::System).unwrap(),
+        "\"system\""
+    );
+    assert_eq!(
+        serde_json::to_string(&AppLocale::English).unwrap(),
+        "\"en\""
+    );
+    assert_eq!(
+        serde_json::to_string(&AppLocale::Russian).unwrap(),
+        "\"ru\""
+    );
+}
+
+#[test]
+fn system_language_preference_survives_save_and_reload() {
+    let dir = tempfile::tempdir().unwrap();
+
+    let paths = paths(dir.path());
+
+    let store = ConfigStore::load(paths.clone()).unwrap();
+    store
+        .save(AppConfig {
+            locale: AppLocale::Russian,
+            ..AppConfig::default()
+        })
+        .unwrap();
+    store.save(AppConfig::default()).unwrap();
+
+    let reopened = ConfigStore::load(paths).unwrap();
+    assert_eq!(
+        reopened.snapshot().unwrap().settings.locale,
+        AppLocale::System
+    );
 }
 
 #[test]

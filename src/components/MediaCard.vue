@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { computed } from "vue";
-
-import type { MediaItem } from "../types/media";
+import { useI18n } from "vue-i18n";
 
 import { formatDate } from "../types/media";
 
 import MediaPreview from "./MediaPreview.vue";
 import AppIcon from "./AppIcon.vue";
+
+import type { MediaItem } from "../types/media";
+
+const { t } = useI18n();
 
 const props = defineProps<{
   item: MediaItem;
@@ -28,7 +31,7 @@ const displayName = computed(() =>
 
 const modifiedDate = computed(() =>
   props.item.nativeId && !props.item.modifiedAt
-    ? "Date unavailable"
+    ? t("dateUnavailable")
     : formatDate(props.item.modifiedAt),
 );
 
@@ -64,7 +67,7 @@ defineEmits<{
   >
     <button
       class="card-select"
-      :aria-label="`Select ${item.filename}`"
+      :aria-label="t('selectFile', { filename: item.filename })"
       :aria-pressed="selected"
       @click="$emit('select', $event)"
       @dblclick="$emit('open')"
@@ -85,7 +88,9 @@ defineEmits<{
             :key="index"
             class="tag-chip"
             >{{ label }}</span
-          ><span v-if="!metadataChips.length" class="no-tags">No tags</span>
+          ><span v-if="!metadataChips.length" class="no-tags">{{
+            t("noTags")
+          }}</span>
         </div>
       </div>
     </button>
@@ -93,7 +98,11 @@ defineEmits<{
       v-if="!stage"
       class="card-favorite icon-button"
       :class="{ 'is-favorite': item.favorite }"
-      :aria-label="`${item.favorite ? 'Remove' : 'Add'} ${item.filename} ${item.favorite ? 'from' : 'to'} favorites`"
+      :aria-label="
+        t(item.favorite ? 'favoriteFileRemove' : 'favoriteFileAdd', {
+          filename: item.filename,
+        })
+      "
       :aria-pressed="item.favorite"
       @click="$emit('favorite')"
     >

@@ -9,6 +9,7 @@ import {
 } from "vue";
 import { isTauri } from "@tauri-apps/api/core";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
+import { useI18n } from "vue-i18n";
 
 import { useDemoTaxonomy } from "../composables/useDemoTaxonomy";
 import { useLibrary } from "../composables/useLibrary";
@@ -32,6 +33,8 @@ interface WorkspaceElements {
 }
 
 export function useWorkspace(elements: WorkspaceElements) {
+  const { t } = useI18n();
+
   const { toast, notify } = useToast();
 
   const library = useLibrary();
@@ -279,15 +282,17 @@ export function useWorkspace(elements: WorkspaceElements) {
     showAllTags.value ? tags.value : tags.value.slice(0, 8),
   );
 
-  const typeOptions: {
-    value: "all" | MediaKind;
-    label: string;
-    icon: string;
-  }[] = [
-    { value: "all", label: "All files", icon: "files" },
-    { value: "video", label: "Videos", icon: "video" },
-    { value: "image", label: "Images", icon: "image" },
-  ];
+  const typeOptions = computed<
+    {
+      value: "all" | MediaKind;
+      label: string;
+      icon: string;
+    }[]
+  >(() => [
+    { value: "all", label: t("allFiles"), icon: "files" },
+    { value: "video", label: t("videos"), icon: "video" },
+    { value: "image", label: t("images"), icon: "image" },
+  ]);
 
   function navigate(nextScope: "gallery" | "favorites") {
     scope.value = nextScope;

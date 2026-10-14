@@ -7,11 +7,14 @@ import {
   ref,
   watch,
 } from "vue";
+import { useI18n } from "vue-i18n";
 
 import type { MediaItem } from "../types/media";
 
 import MediaCard from "./MediaCard.vue";
 import AppIcon from "./AppIcon.vue";
+
+const { t } = useI18n();
 
 const props = defineProps<{
   items: MediaItem[];
@@ -396,29 +399,29 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="collection-panel" aria-label="Media collection">
+  <section class="collection-panel" :aria-label="t('collection')">
     <header class="collection-heading">
       <div>
         <h1>{{ heading }}</h1>
-        <span>{{ totalCount.toLocaleString() }} files</span>
+        <span>{{ t("filesCount", { count: totalCount }) }}</span>
       </div>
       <button
         v-if="stage && selectedIds?.length"
         class="secondary-button"
         @click="emit('distribute')"
       >
-        Distribute {{ selectedIds.length }} files
+        {{ t("distributeCount", { count: selectedIds.length }) }}
       </button>
       <span v-else class="demo-badge"
         ><span></span>
         {{
           native
             ? stage
-              ? "Stage library"
-              : "Library"
+              ? t("stageLibrary")
+              : t("library")
             : stage
-              ? "Demo staging"
-              : "Demo library"
+              ? t("demoStage")
+              : t("demoLibrary")
         }}</span
       >
       <button
@@ -426,10 +429,10 @@ onBeforeUnmount(() => {
         class="icon-button details-toggle"
         :class="{ active: detailsOpen }"
         :aria-label="
-          detailsOpen ? 'Close file information' : 'Open file information'
+          detailsOpen ? t('closeFileInformation') : t('openFileInformation')
         "
         :title="
-          detailsOpen ? 'Close file information' : 'Open file information'
+          detailsOpen ? t('closeFileInformation') : t('openFileInformation')
         "
         :aria-expanded="detailsOpen"
         aria-controls="file-details-drawer"
@@ -443,7 +446,7 @@ onBeforeUnmount(() => {
         ref="viewport"
         class="collection-scroll"
         tabindex="0"
-        aria-label="Loaded media"
+        :aria-label="t('loadedMedia')"
         @scroll.passive="onScroll"
         @pointerdown="startSelection"
         @pointermove="moveSelection"
@@ -495,37 +498,37 @@ onBeforeUnmount(() => {
           <h2>
             {{
               loading
-                ? "Loading Stage…"
+                ? t("loadingStage")
                 : error
-                  ? "Could not load Stage"
+                  ? t("stageFailed")
                   : filtered
-                    ? "No matching files"
+                    ? t("noMatches")
                     : stage
-                      ? "No staged files"
-                      : "No favorites yet"
+                      ? t("noStage")
+                      : t("noFavorites")
             }}
           </h2>
           <p>
             {{
               error ||
               (loading
-                ? "Reading saved file information…"
+                ? t("readingFiles")
                 : filtered
-                  ? "Try another search or adjust your filters."
+                  ? t("adjustFilters")
                   : stage
-                    ? "Your staging files will appear here."
-                    : "Tap the heart on a file to keep it here.")
+                    ? t("stageEmpty")
+                    : t("favoritesEmpty"))
             }}
           </p>
           <button v-if="error" class="secondary-button" @click="emit('retry')">
-            Retry
+            {{ t("retry") }}
           </button>
           <button
             v-if="filtered"
             class="secondary-button"
             @click="$emit('reset')"
           >
-            Reset filters
+            {{ t("resetFilters") }}
           </button>
         </div>
       </div>
@@ -533,18 +536,17 @@ onBeforeUnmount(() => {
         v-if="showBackToTop"
         type="button"
         class="back-to-top"
-        title="Back to top"
-        aria-label="Back to top"
+        :title="t('backToTop')"
+        :aria-label="t('backToTop')"
         @click="scrollToTop"
       >
         <AppIcon name="up" :size="20" />
       </button>
     </div>
     <footer class="collection-footer">
-      <span
-        >{{ loadedCount.toLocaleString() }} of
-        {{ totalCount.toLocaleString() }} files loaded</span
-      >
+      <span>{{
+        t("loadedCount", { loaded: loadedCount, total: totalCount })
+      }}</span>
       <div class="load-track">
         <span
           :style="{
@@ -552,16 +554,8 @@ onBeforeUnmount(() => {
           }"
         ></span>
       </div>
-      <button
-        v-if="hasMore"
-        class="secondary-button"
-        :disabled="loading"
-        @click="emit('loadMore')"
-      >
-        {{ loading ? "Loading…" : error ? "Retry loading" : "Load more" }}
-      </button>
       <span v-if="loadedCount && loadedCount === totalCount" class="load-done"
-        ><AppIcon name="check" :size="14" /> All loaded</span
+        ><AppIcon name="check" :size="14" />{{ t("allLoaded") }}</span
       >
     </footer>
   </section>
