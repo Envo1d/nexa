@@ -3,7 +3,7 @@ use std::{thread, time::Duration};
 use super::session;
 
 #[test]
-fn progress_updates_preserve_the_parent_interface_language() {
+fn progress_updates_preserve_the_parent_interface_language_and_theme() {
     let directory = tempfile::tempdir().unwrap();
 
     let state = super::HelperState {
@@ -13,6 +13,7 @@ fn progress_updates_preserve_the_parent_interface_language() {
             version: "2.4.0".into(),
             message: "Preparing your update…".into(),
             locale: crate::config::AppLocale::Russian,
+            theme: crate::config::AppTheme::Paper,
         }),
         started: std::sync::atomic::AtomicBool::new(false),
         finished: std::sync::atomic::AtomicBool::new(false),
@@ -22,6 +23,7 @@ fn progress_updates_preserve_the_parent_interface_language() {
 
     let snapshot = state.snapshot.lock().unwrap();
     assert_eq!(snapshot.locale, crate::config::AppLocale::Russian);
+    assert_eq!(snapshot.theme, crate::config::AppTheme::Paper);
     assert_eq!(snapshot.phase, "installing");
 }
 

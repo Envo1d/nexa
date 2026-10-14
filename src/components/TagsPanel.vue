@@ -457,13 +457,13 @@ onMounted(load);
   color: var(--muted);
 }
 .taxonomy-categories button.active {
-  background: #272039;
-  border-color: #69518e;
-  color: #d3bfff;
+  background: var(--surface-hover);
+  border-color: var(--accent-line);
+  color: var(--text-accent);
 }
 .taxonomy-categories span {
   font-size: 11px;
-  background: #ffffff0b;
+  background: var(--hover-overlay);
   border-radius: 5px;
   padding: 2px 6px;
 }
@@ -491,14 +491,14 @@ onMounted(load);
 }
 .taxonomy-repeat-filter:hover:not(:disabled):not(.active),
 .taxonomy-link-filters button:hover:not(:disabled):not(.active) {
-  background: #ffffff08;
-  color: #eeedf6;
+  background: var(--hover-overlay);
+  color: var(--text);
 }
 .taxonomy-repeat-filter.active,
 .taxonomy-link-filters button.active {
-  background: #272039;
-  border-color: #69518e;
-  color: #d3bfff;
+  background: var(--surface-hover);
+  border-color: var(--accent-line);
+  color: var(--text-accent);
 }
 .taxonomy-filter-check {
   display: flex;
@@ -511,14 +511,14 @@ onMounted(load);
   border-radius: 4px;
 }
 .taxonomy-repeat-filter.active .taxonomy-filter-check {
-  background: var(--accent);
+  background: var(--accent-strong);
   border-color: var(--accent);
-  color: #171321;
+  color: var(--on-accent);
 }
 .taxonomy-filter-count {
   border-radius: 5px;
   padding: 2px 6px;
-  background: #ffffff0b;
+  background: var(--hover-overlay);
   font-size: 11px;
 }
 .taxonomy-link-filters {
@@ -568,12 +568,12 @@ onMounted(load);
   overflow-wrap: anywhere;
 }
 .taxonomy-delete {
-  color: #dc929d;
+  color: var(--danger);
 }
 .taxonomy-editor {
   margin: 0 18px 16px 50px;
   padding: 16px;
-  background: #1c1a2a;
+  background: var(--surface-raised);
   border-radius: 8px;
   display: flex;
   flex-direction: column;
@@ -581,7 +581,7 @@ onMounted(load);
 }
 .taxonomy-editor input {
   border: 1px solid var(--line);
-  background: #11111b;
+  background: var(--surface-alt);
   color: inherit;
   padding: 9px 12px;
   border-radius: 7px;

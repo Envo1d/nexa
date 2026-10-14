@@ -12,7 +12,6 @@ pub use scanning::{
     start_library_scan, start_stage_scan,
 };
 
-pub(crate) use file_actions::checked_action_path;
 pub use file_actions::{
     __cmd__stage_file_action, __tauri_command_name_stage_file_action, stage_file_action,
 };

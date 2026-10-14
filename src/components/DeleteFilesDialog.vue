@@ -157,14 +157,14 @@ onBeforeUnmount(() => {
   place-items: center;
   width: 40px;
   height: 40px;
-  border: 1px solid #824254;
+  border: 1px solid var(--danger-line);
   border-radius: 10px;
-  background: #58263555;
-  color: #f1a7b9;
+  background: color-mix(in srgb, var(--danger-bg) 33%, transparent);
+  color: var(--danger);
 }
 .delete-description,
 .delete-more {
-  color: #b8abc8;
+  color: var(--muted);
   font-size: 12px;
   line-height: 1.6;
   margin: 8px 0 16px;
@@ -183,9 +183,9 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 12px;
   padding: 9px;
-  border: 1px solid #392c46;
+  border: 1px solid var(--line);
   border-radius: 8px;
-  background: #100d1955;
+  background: var(--surface-alt);
 }
 .delete-preview {
   flex: 0 0 96px;
@@ -205,30 +205,34 @@ onBeforeUnmount(() => {
 .delete-filename {
   min-width: 0;
   overflow-wrap: anywhere;
-  color: #e6ddef;
+  color: var(--text);
   font-size: 12px;
   line-height: 1.5;
 }
 .delete-warning {
   padding: 12px;
   margin: 16px 0 0;
-  border: 1px solid #704354;
+  border: 1px solid var(--danger-line);
   border-radius: 8px;
-  background: #50223233;
-  color: #dbb0bc;
+  background: color-mix(in srgb, var(--danger-bg) 20%, transparent);
+  color: var(--danger);
   font-size: 12px;
   line-height: 1.7;
 }
 .delete-confirm {
-  border-color: #c15c77;
-  background: linear-gradient(120deg, #a53d5a, #85324b);
+  border-color: var(--danger-line);
+  background: linear-gradient(
+    120deg,
+    var(--danger-button),
+    var(--danger-button-end)
+  );
 }
 .delete-confirm:hover {
-  background: #b74766;
+  background: var(--danger-button-hover);
 }
 .delete-dialog button:focus-visible,
 .delete-files:focus-visible {
-  outline: 2px solid #c29be8;
+  outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
 </style>

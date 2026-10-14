@@ -4,14 +4,17 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 
 import { translateUi as ui } from "../i18n/presentation";
 import { applyLocale, i18n } from "../i18n";
+import { applyTheme, themePreference } from "../themes";
 
 import type { InterfaceLocale } from "../types/config";
+import type { AppTheme } from "../themes";
 
 interface Snapshot {
   phase: "preparing" | "verifying" | "installing" | "restarting" | "error";
   version: string;
   message: string;
   locale: InterfaceLocale;
+  theme: AppTheme;
 }
 
 const state = ref<Snapshot>({
@@ -19,6 +22,7 @@ const state = ref<Snapshot>({
   version: "",
   message: "Preparing your update…",
   locale: "en",
+  theme: "midnight-violet",
 });
 
 const connectionLost = ref(false);
@@ -52,6 +56,11 @@ let disposed = false;
 async function refresh() {
   try {
     state.value = await invoke<Snapshot>("update_snapshot");
+
+    if (themePreference.value !== state.value.theme) {
+      applyTheme(state.value.theme);
+    }
+
     if (state.value.locale && i18n.global.locale.value !== state.value.locale) {
       await applyLocale(state.value.locale);
     }
@@ -147,9 +156,8 @@ onUnmounted(() => {
 <style>
 :root {
   font-family: "Segoe UI", Inter, sans-serif;
-  color: #eeedf6;
-  background: #10101b;
-  color-scheme: dark;
+  color: var(--text);
+  background: var(--shell);
   font-synthesis: none;
   -webkit-font-smoothing: antialiased;
 }
@@ -171,7 +179,7 @@ button {
 }
 
 button:focus-visible {
-  outline: 2px solid #bda7ff;
+  outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
 
@@ -179,8 +187,12 @@ button:focus-visible {
   min-height: 440px;
   padding: 0 32px 24px;
   text-align: center;
-  background: radial-gradient(ellipse at 50% 36%, #26203980, transparent 62%);
-  border: 1px solid #302a40;
+  background: radial-gradient(
+    ellipse at 50% 36%,
+    color-mix(in srgb, var(--accent-soft) 50%, transparent),
+    transparent 62%
+  );
+  border: 1px solid var(--line);
 }
 
 .update-window header {
@@ -192,7 +204,7 @@ button:focus-visible {
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 3px;
-  color: #92899e;
+  color: var(--muted);
 }
 
 .update-window header button {
@@ -200,7 +212,7 @@ button:focus-visible {
   height: 28px;
   border: 0;
   border-radius: 6px;
-  background: #ffffff08;
+  background: var(--hover-overlay);
   font-size: 22px;
 }
 
@@ -217,30 +229,32 @@ button:focus-visible {
   width: 68px;
   height: 68px;
   object-fit: contain;
-  filter: drop-shadow(0 8px 24px #9c72ff40);
+  filter: drop-shadow(
+    0 8px 24px color-mix(in srgb, var(--accent) 25%, transparent)
+  );
   animation: breathe 3s ease-in-out infinite;
 }
 
 .orbit {
   position: absolute;
   inset: 0;
-  border: 1px solid #a786ff25;
-  border-top-color: #a786ff;
+  border: 1px solid color-mix(in srgb, var(--accent) 15%, transparent);
+  border-top-color: var(--accent);
   border-radius: 50%;
   animation: orbit 3s linear infinite;
 }
 
 .orbit-two {
   inset: 10px;
-  border-top-color: #a786ff25;
-  border-bottom-color: #d4bfff;
+  border-top-color: color-mix(in srgb, var(--accent) 15%, transparent);
+  border-bottom-color: var(--text-accent);
   animation-direction: reverse;
   animation-duration: 4s;
 }
 
 .version {
   margin: 0 0 10px;
-  color: #a786ff;
+  color: var(--accent);
   font-size: 10px;
   letter-spacing: 2px;
 }
@@ -255,7 +269,7 @@ h1 {
 .message {
   min-height: 38px;
   margin: 0;
-  color: #aaa3ba;
+  color: var(--muted);
   font-size: 12px;
   line-height: 1.6;
 }
@@ -265,7 +279,7 @@ h1 {
   margin: 22px 0 18px;
   overflow: hidden;
   border-radius: 4px;
-  background: #292235;
+  background: var(--surface-pressed);
 }
 
 .activity span {
@@ -273,7 +287,7 @@ h1 {
   width: 38%;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, transparent, #bda7ff, transparent);
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
   animation: sweep 2s ease-in-out infinite;
 }
 
@@ -283,7 +297,7 @@ h1 {
   padding: 0;
   margin: 0;
   list-style: none;
-  color: #716b82;
+  color: var(--subtle);
   font-size: 10px;
 }
 
@@ -305,12 +319,12 @@ h1 {
 
 .steps .active,
 .steps .complete {
-  color: #c5b2f6;
+  color: var(--text-accent);
 }
 
 .footnote {
   margin: 20px 0 0;
-  color: #777084;
+  color: var(--subtle);
   font-size: 10px;
 }
 
@@ -326,8 +340,8 @@ h1 {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: #f3b89d;
-  color: #341e14;
+  background: var(--warning);
+  color: var(--warning-bg);
   font-weight: 700;
 }
 
@@ -335,9 +349,9 @@ h1 {
   min-width: 110px;
   margin-top: 22px;
   padding: 9px 18px;
-  border: 1px solid #66547e;
+  border: 1px solid var(--line-strong);
   border-radius: 7px;
-  background: #a786ff20;
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
   font-size: 12px;
 }
 

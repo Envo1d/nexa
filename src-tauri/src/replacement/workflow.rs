@@ -13,7 +13,7 @@ use crate::naming::name_key;
 use crate::{
     config::{AppConfig, ConfigStore},
     database::Database,
-    stage::{self, StageState},
+    stage::StageState,
 };
 
 #[derive(Clone, sqlx::FromRow)]
@@ -49,7 +49,7 @@ pub(super) fn backup(op: &Operation) -> Option<PathBuf> {
 }
 
 pub(super) fn verified(root: &str, relative: &str, expected: &str) -> Result<PathBuf, String> {
-    let path = stage::checked_action_path(Path::new(root), relative)?;
+    let path = crate::media_paths::checked_action_path(Path::new(root), relative)?;
 
     if crate::disk_sync::revision(&path)? != expected {
         return Err("File changed; rescan and select both versions again".into());

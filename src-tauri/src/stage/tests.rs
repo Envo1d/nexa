@@ -7,6 +7,7 @@ use super::scanning::{
 };
 use super::*;
 use crate::media_metadata::FrameRate;
+use crate::media_paths::checked_action_path;
 use crate::{database::Database, media_metadata::MediaMetadata};
 
 #[test]
@@ -43,6 +44,142 @@ fn file_action_guard_releases_scan_gate_on_failure() {
         assert!(gate.load(Ordering::Acquire));
     }
     assert!(!gate.load(Ordering::Acquire));
+}
+
+#[test]
+fn file_action_selection_validates_the_entire_batch_and_preserves_first_ids() {
+    use super::file_actions::{FileAction, validate_selection};
+
+    let ids = ["2", "01", "1", "2", "3"].map(String::from);
+
+    let (action, selection) = validate_selection("delete", &ids).unwrap();
+    assert_eq!(action, FileAction::Delete);
+    assert_eq!(
+        selection,
+        vec![("2".into(), 2), ("01".into(), 1), ("3".into(), 3)]
+    );
+
+    for invalid in ["invalid", "0", "-1", "9223372036854775808", ""] {
+        let ids = ["1".into(), invalid.into()];
+        assert_eq!(
+            validate_selection("delete", &ids).unwrap_err(),
+            "Invalid media ID"
+        );
+    }
+
+    assert!(validate_selection("open", &[]).is_err());
+    assert!(validate_selection("open", &vec!["1".into(); 501]).is_err());
+    assert!(validate_selection("share", &["1".into(), "1".into()]).is_err());
+    assert!(validate_selection("unknown", &["1".into()]).is_err());
+
+    for action in ["open", "reveal", "delete", "share"] {
+        assert!(validate_selection(action, &["1".into()]).is_ok());
+    }
+}
+
+#[test]
+fn previews_reject_escaping_paths_without_a_saved_revision() {
+    use super::previews::checked_preview_path;
+
+    let temp = tempfile::tempdir().unwrap();
+
+    let root = temp.path().join("Stage");
+    std::fs::create_dir(&root).unwrap();
+    std::fs::write(temp.path().join("outside.bmp"), b"preserve").unwrap();
+    std::fs::create_dir(root.join("folder.bmp")).unwrap();
+
+    for relative in ["../outside.bmp", "", "missing.bmp", "folder.bmp"] {
+        assert!(checked_preview_path(&root, relative, None).is_err());
+    }
+
+    let absolute = temp.path().join("outside.bmp");
+    assert!(checked_preview_path(&root, absolute.to_str().unwrap(), None).is_err());
+    assert_eq!(std::fs::read(absolute).unwrap(), b"preserve");
+}
+
+#[test]
+fn previews_accept_nested_files_and_reject_stale_revisions() {
+    use super::previews::checked_preview_path;
+
+    let temp = tempfile::tempdir().unwrap();
+
+    let root = temp.path();
+    std::fs::create_dir(root.join("nested")).unwrap();
+
+    let relative = "nested/日本.bmp";
+
+    let path = root.join(relative);
+    write_bmp(&path, 2);
+
+    let revision = inspect(path.clone(), root).unwrap().unwrap().revision;
+    assert_eq!(
+        checked_preview_path(root, relative, Some(&revision)).unwrap(),
+        path
+    );
+    assert_eq!(checked_preview_path(root, relative, None).unwrap(), path);
+
+    write_bmp(&path, 5);
+    assert_eq!(
+        checked_preview_path(root, relative, Some(&revision)).unwrap_err(),
+        "File changed; rescan its source"
+    );
+}
+
+#[tokio::test]
+async fn file_actions_require_present_records_and_current_selection_membership() {
+    use super::file_actions::action_file;
+
+    let (_temp, db, root) = fixture().await;
+
+    let source = activate_source(db.pool(), &root, 1).await.unwrap();
+    save_batch(db.pool(), source, 1, vec![prepared(&root, "image.bmp", 2)])
+        .await
+        .unwrap();
+
+    let id: i64 = sqlx::query_scalar("SELECT id FROM media")
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+
+    assert!(action_file(db.pool(), Some(&root), false, id).await.is_ok());
+    assert!(action_file(db.pool(), None, false, id).await.is_err());
+    assert!(action_file(db.pool(), Some(&root), true, id).await.is_err());
+
+    sqlx::query("UPDATE media SET library_assignment=? WHERE id=?")
+        .bind(root.to_str().unwrap())
+        .bind(id)
+        .execute(db.pool())
+        .await
+        .unwrap();
+    assert!(action_file(db.pool(), Some(&root), true, id).await.is_ok());
+    assert!(
+        action_file(db.pool(), Some(&root), false, id)
+            .await
+            .is_err()
+    );
+
+    sqlx::query("UPDATE media SET needs_distribution=1 WHERE id=?")
+        .bind(id)
+        .execute(db.pool())
+        .await
+        .unwrap();
+    assert!(action_file(db.pool(), None, false, id).await.is_ok());
+    assert!(action_file(db.pool(), Some(&root), true, id).await.is_err());
+
+    sqlx::query("UPDATE media SET availability='missing' WHERE id=?")
+        .bind(id)
+        .execute(db.pool())
+        .await
+        .unwrap();
+    assert!(action_file(db.pool(), None, false, id).await.is_err());
+
+    sqlx::query("UPDATE media SET needs_distribution=0 WHERE id=?")
+        .bind(id)
+        .execute(db.pool())
+        .await
+        .unwrap();
+    assert!(action_file(db.pool(), Some(&root), true, id).await.is_err());
+    db.close().await;
 }
 
 async fn fixture() -> (tempfile::TempDir, Database, PathBuf) {

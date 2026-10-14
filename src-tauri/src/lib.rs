@@ -6,6 +6,7 @@ mod legacy_import;
 mod library;
 mod logging;
 pub mod media_metadata;
+mod media_paths;
 pub mod media_thumbnail;
 mod naming;
 pub mod preview_cache;

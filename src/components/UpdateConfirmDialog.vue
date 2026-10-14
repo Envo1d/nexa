@@ -126,10 +126,10 @@ onBeforeUnmount(() => {
   place-items: center;
   width: 40px;
   height: 40px;
-  border: 1px solid #69448d;
+  border: 1px solid var(--accent-line);
   border-radius: 10px;
-  background: #a786ff15;
-  color: #c5a5f7;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--text-accent);
 }
 
 .update-confirm-release {
@@ -138,9 +138,9 @@ onBeforeUnmount(() => {
   gap: 14px;
   margin: 12px 0 18px;
   padding: 16px;
-  border: 1px solid #483359;
+  border: 1px solid var(--line);
   border-radius: 9px;
-  background: #a786ff08;
+  background: color-mix(in srgb, var(--accent) 3%, transparent);
 }
 
 .update-confirm-release div {
@@ -150,7 +150,7 @@ onBeforeUnmount(() => {
 }
 
 .update-confirm-release span {
-  color: #a89bb9;
+  color: var(--muted);
   font-size: 9px;
   letter-spacing: 1.5px;
 }
@@ -162,7 +162,7 @@ onBeforeUnmount(() => {
 }
 
 .update-confirm-description {
-  color: #b8abc8;
+  color: var(--muted);
   font-size: 12px;
   line-height: 1.7;
 }
@@ -174,8 +174,8 @@ onBeforeUnmount(() => {
   margin-top: 16px;
   padding: 12px;
   border-radius: 7px;
-  background: #a786ff10;
-  color: #c5b2dc;
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  color: var(--text);
   font-size: 11px;
   line-height: 1.6;
 }

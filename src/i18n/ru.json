@@ -70,7 +70,7 @@
   "installNotice": "Nexa закроется и перезапустится во время установки. Сначала сохраните незавершённые изменения.",
   "downloadProgress": "Прогресс загрузки обновления",
   "theme": "Тема",
-  "themeDescription": "Другие темы появятся позже.",
+  "themeDescription": "Выберите цветовую тему. Применяется после сохранения.",
   "themeName": "Полночный фиолетовый",
   "resetDefaults": "Восстановить по умолчанию",
   "cancel": "Отмена",
@@ -607,5 +607,11 @@
   "uiMissingBackupDirectory": "Папка резервной копии отсутствует",
   "uiInvalidDestination": "Некорректное назначение",
   "uiRootValidationWorkerFailed": "Не удалось проверить корневую папку",
-  "uiInvalidUnicodeMediaRoot": "Путь корневой папки содержит некорректные символы Unicode"
+  "uiInvalidUnicodeMediaRoot": "Путь корневой папки содержит некорректные символы Unicode",
+  "theme-graphite": "Графит",
+  "theme-arctic-blue": "Арктический синий",
+  "theme-forest": "Лес",
+  "theme-warm-amber": "Тёплый янтарь",
+  "theme-rosewood": "Розовое дерево",
+  "theme-paper": "Бумага"
 }

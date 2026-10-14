@@ -30,6 +30,20 @@ pub struct AppConfig {
     pub auto_scan: bool,
     pub auto_update_check: bool,
     pub locale: AppLocale,
+    pub theme: AppTheme,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AppTheme {
+    #[default]
+    MidnightViolet,
+    Graphite,
+    ArcticBlue,
+    Forest,
+    WarmAmber,
+    Rosewood,
+    Paper,
 }
 
 impl Default for AppConfig {
@@ -46,6 +60,7 @@ impl Default for AppConfig {
             auto_scan: false,
             auto_update_check: false,
             locale: AppLocale::default(),
+            theme: AppTheme::default(),
         }
     }
 }
@@ -160,12 +175,18 @@ impl ConfigStore {
             .map_err(|_| "Configuration lock poisoned")?;
         let locale_changed = settings.locale != draft.locale;
 
+        let theme_changed = settings.theme != draft.theme;
+
         Self::write(&self.paths, &draft, true)?;
         *settings = draft;
 
         tracing::info!("Configuration saved");
         if locale_changed {
             tracing::info!(locale = ?settings.locale, "Interface language changed");
+        }
+
+        if theme_changed {
+            tracing::info!(theme = ?settings.theme, "Interface theme changed");
         }
         Ok(())
     }

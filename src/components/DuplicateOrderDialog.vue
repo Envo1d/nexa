@@ -302,7 +302,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--surface);
-  box-shadow: 0 24px 80px #0008;
+  box-shadow: 0 24px 80px var(--shadow);
 }
 .order-hint {
   padding: 0 18px 14px;
@@ -337,7 +337,7 @@ onBeforeUnmount(() => {
 }
 .order-list li.drop-target {
   border-color: var(--accent);
-  background: #a786ff15;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 .order-list li:focus-visible {
   outline: 2px solid var(--accent);

@@ -176,14 +176,15 @@ pub async fn install_update(
 
     // Launch before cleanup so a launch failure leaves the database usable.
     // Velopack waits for our PID to exit before replacing application files.
-    let logs_path = app
-        .state::<crate::config::ConfigStore>()
-        .snapshot()?
-        .paths
-        .logs_path;
+    let config = app.state::<crate::config::ConfigStore>().snapshot()?;
 
     tauri::async_runtime::spawn_blocking(move || {
-        launch::start(&pending_update.update.TargetFullRelease, &logs_path, locale)
+        launch::start(
+            &pending_update.update.TargetFullRelease,
+            &config.paths.logs_path,
+            locale,
+            config.settings.theme,
+        )
     })
     .await
     .map_err(|error| {
