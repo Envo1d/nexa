@@ -45,6 +45,7 @@ onBeforeUnmount(() => {
         ref="dialog"
         class="modal update-confirm-dialog"
         role="alertdialog"
+        tabindex="-1"
         aria-modal="true"
         aria-labelledby="update-confirm-title"
         aria-describedby="update-confirm-description update-confirm-warning"

@@ -15,8 +15,6 @@ import { useDemoTaxonomy } from "../composables/useDemoTaxonomy";
 import { useLibrary } from "../composables/useLibrary";
 import { useStage } from "../composables/useStage";
 
-import type { MediaItem, MediaKind } from "../types/media";
-
 import { useToast } from "../shared/composables/useToast";
 import { useSearchSuggestions } from "../shared/composables/useSearchSuggestions";
 import { useModalFocus } from "../shared/composables/useModalFocus";
@@ -25,6 +23,8 @@ import { useMetadataEditing } from "../features/media/useMetadataEditing";
 import { useTagEditor } from "../features/media/useTagEditor";
 import { useDesktopServices } from "./useDesktopServices";
 import { useWindowChrome } from "./useWindowChrome";
+
+import type { MediaItem, MediaKind } from "../types/media";
 
 interface WorkspaceElements {
   searchInput: Readonly<Ref<HTMLInputElement | null>>;
@@ -356,7 +356,12 @@ export function useWorkspace(elements: WorkspaceElements) {
   }
 
   function keyboard(event: KeyboardEvent) {
-    if (deletionRequest.value) return;
+    if (
+      event.defaultPrevented ||
+      deletionRequest.value ||
+      replacementTarget.value
+    )
+      return;
 
     if (
       (event.ctrlKey || event.metaKey) &&
@@ -375,8 +380,13 @@ export function useWorkspace(elements: WorkspaceElements) {
     if (event.key === "Escape") {
       if (orderTarget.value) return;
 
+      if (tagTarget.value) {
+        if (!tagSaving.value) tagTarget.value = null;
+
+        return;
+      }
+
       if (distributionQueue.value.length) distributionQueue.value = [];
-      else if (tagTarget.value && !tagSaving.value) tagTarget.value = null;
       else if (view.value === "settings" || view.value === "tags")
         view.value = "main";
       else if (context.value) context.value = null;
