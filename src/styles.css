@@ -1539,7 +1539,7 @@ svg {
   justify-content: space-between;
   gap: 16px;
 }
-.settings-cache-progress {
+.settings-progress {
   display: block;
   appearance: none;
   width: 100%;
@@ -1550,27 +1550,30 @@ svg {
   background: #35263f;
   margin-top: 16px;
 }
-.settings-cache-progress::-webkit-progress-bar {
+.settings-card > .settings-progress {
+  margin-bottom: 20px;
+}
+.settings-progress::-webkit-progress-bar {
   background: #35263f;
 }
-.settings-cache-progress::-webkit-progress-value {
+.settings-progress::-webkit-progress-value {
   background: #a46be2;
   border-radius: 999px;
 }
-.settings-cache-progress::-moz-progress-bar {
+.settings-progress::-moz-progress-bar {
   background: #a46be2;
   border-radius: 999px;
 }
-.settings-cache-progress.cache-warning::-webkit-progress-value {
+.settings-progress.cache-warning::-webkit-progress-value {
   background: #e6b45b;
 }
-.settings-cache-progress.cache-warning::-moz-progress-bar {
+.settings-progress.cache-warning::-moz-progress-bar {
   background: #e6b45b;
 }
-.settings-cache-progress.cache-full::-webkit-progress-value {
+.settings-progress.cache-full::-webkit-progress-value {
   background: #ef7186;
 }
-.settings-cache-progress.cache-full::-moz-progress-bar {
+.settings-progress.cache-full::-moz-progress-bar {
   background: #ef7186;
 }
 .settings-status {

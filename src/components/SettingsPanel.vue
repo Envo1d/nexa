@@ -530,7 +530,7 @@ function resetDrafts() {
                     ><strong>{{ cacheUsage.label.value }}</strong>
                   </div>
                   <progress
-                    class="settings-cache-progress"
+                    class="settings-progress"
                     :class="`cache-${cacheUsage.pressure.value}`"
                     :value="
                       cacheUsage.status.value
@@ -614,6 +614,7 @@ function resetDrafts() {
                 </SettingsRow>
                 <progress
                   v-if="updater.busy.value && updater.percent.value !== null"
+                  class="settings-progress"
                   :value="updater.percent.value ?? undefined"
                   max="100"
                   aria-label="Update download progress"
