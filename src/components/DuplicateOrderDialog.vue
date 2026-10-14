@@ -2,10 +2,11 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 
-import type { MediaItem, MediaKind } from "../types/media";
-
+import { translateUi as ui } from "../i18n/presentation";
 import AppIcon from "./AppIcon.vue";
 import DuplicateOrderRow from "./DuplicateOrderRow.vue";
+
+import type { MediaItem, MediaKind } from "../types/media";
 
 const props = defineProps<{ item: MediaItem; showPreviews: boolean }>();
 
@@ -204,11 +205,11 @@ onBeforeUnmount(() => {
         @keydown.stop="keyboard"
       >
         <header class="panel-heading">
-          <h2 id="order-title">Change file order</h2>
+          <h2 id="order-title">{{ ui("Change file order") }}</h2>
           <button
             type="button"
             class="icon-button"
-            aria-label="Close order editor"
+            :aria-label="ui('Close order editor')"
             :disabled="saving"
             @click="emit('close')"
           >
@@ -216,33 +217,36 @@ onBeforeUnmount(() => {
           </button>
         </header>
         <p class="order-hint muted">
-          Drag files or use the arrows to change their filename indices.
-          Renaming runs when Sync with disk is enabled.
+          {{
+            ui(
+              "Drag files or use the arrows to change their filename indices. Renaming runs when Sync with disk is enabled.",
+            )
+          }}
         </p>
         <p v-if="loading" class="order-hint" role="status">
-          Loading the full group…
+          {{ ui("Loading the full group…") }}
         </p>
         <div v-if="error" class="order-error">
-          <p class="error-message" role="alert">{{ error }}</p>
+          <p class="error-message" role="alert">{{ ui(error) }}</p>
           <button
             type="button"
             class="secondary-button"
             :disabled="busy"
             @click="load"
           >
-            Reload group
+            {{ ui("Reload group") }}
           </button>
         </div>
         <p
           v-if="!loading && !error && files.length < 2"
           class="order-hint muted"
         >
-          This file has no matching files to reorder.
+          {{ ui("This file has no matching files to reorder.") }}
         </p>
         <ol
           v-if="files.length"
           class="order-list"
-          aria-label="File index order"
+          :aria-label="ui('File index order')"
         >
           <li
             v-for="(file, index) in files"
@@ -276,9 +280,8 @@ onBeforeUnmount(() => {
         </ol>
         <footer class="order-footer">
           <span class="muted" aria-live="polite"
-            >{{ files.length }} files{{
-              changed ? " · Order changed" : ""
-            }}</span
+            >{{ files.length }} {{ ui("files")
+            }}{{ changed ? " · Order changed" : "" }}</span
           >
           <button
             type="button"
@@ -286,7 +289,7 @@ onBeforeUnmount(() => {
             :disabled="saving"
             @click="emit('close')"
           >
-            Cancel
+            {{ ui("Cancel") }}
           </button>
           <button
             type="button"
@@ -294,7 +297,7 @@ onBeforeUnmount(() => {
             :disabled="busy || !changed || Boolean(error)"
             @click="save"
           >
-            {{ saving ? "Saving…" : "Save order" }}
+            {{ ui(saving ? "Saving…" : "Save order") }}
           </button>
         </footer>
       </section>

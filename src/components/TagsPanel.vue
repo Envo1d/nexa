@@ -2,8 +2,8 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 
+import { translateUi as ui } from "../i18n/presentation";
 import AppIcon from "./AppIcon.vue";
-
 import {
   categoryKey,
   type TaxonomyCatalog,
@@ -203,14 +203,18 @@ onMounted(load);
 <template>
   <section
     class="taxonomy-workspace"
-    aria-label="Tags management"
+    :aria-label="ui('Tags management')"
     :aria-busy="loading || busy"
   >
     <header class="taxonomy-header">
       <div>
-        <h1>Tags</h1>
+        <h1>{{ ui("Tags") }}</h1>
         <p class="muted">
-          Manage copyrights, artists, characters and tags across your library.
+          {{
+            ui(
+              "Manage copyrights, artists, characters and tags across your library.",
+            )
+          }}
         </p>
       </div>
       <button
@@ -219,11 +223,11 @@ onMounted(load);
         :disabled="loading || busy"
         @click="load"
       >
-        Refresh
+        {{ ui("Refresh") }}
       </button>
     </header>
     <div class="taxonomy-tools">
-      <nav class="taxonomy-categories" aria-label="Metadata categories">
+      <nav class="taxonomy-categories" :aria-label="ui('Metadata categories')">
         <button
           v-for="tab in categories"
           :key="tab.id"
@@ -232,7 +236,7 @@ onMounted(load);
           :disabled="busy"
           @click="category = tab.id"
         >
-          {{ tab.label }} <span>{{ data[tab.key].length }}</span>
+          {{ ui(tab.label) }} <span>{{ data[tab.key].length }}</span>
         </button>
       </nav>
       <div class="search-box">
@@ -240,16 +244,16 @@ onMounted(load);
           ref="searchInput"
           v-model="search"
           :disabled="busy"
-          aria-label="Search dictionary"
-          placeholder="Search names…"
+          :aria-label="ui('Search dictionary')"
+          :placeholder="ui('Search names…')"
         />
         <button
           v-if="search"
           type="button"
           class="icon-button"
           :disabled="busy"
-          aria-label="Clear search"
-          title="Clear search"
+          :aria-label="ui('Clear search')"
+          :title="ui('Clear search')"
           @click="clearSearch"
         >
           <AppIcon name="close" :size="16" />
@@ -263,19 +267,19 @@ onMounted(load);
         :class="{ active: repeatedOnly }"
         :aria-pressed="repeatedOnly"
         :disabled="busy"
-        title="Show only the same character name in different copyrights"
+        :title="ui('Show only the same character name in different copyrights')"
         @click="repeatedOnly = !repeatedOnly"
       >
         <span class="taxonomy-filter-check">
           <AppIcon v-if="repeatedOnly" name="check" :size="12" />
         </span>
-        Same name in different copyrights
+        {{ ui("Same name in different copyrights") }}
         <span class="taxonomy-filter-count">{{ repeatedNames.size }}</span>
       </button>
       <div
         class="taxonomy-link-filters"
         role="group"
-        aria-label="Filter characters by linked-file count"
+        :aria-label="ui('Filter characters by linked-file count')"
       >
         <button
           v-for="option in linkedCountOptions"
@@ -286,33 +290,39 @@ onMounted(load);
           :disabled="busy"
           @click="linkedCount = option.value"
         >
-          {{ option.label }}
+          {{ ui(option.label) }}
         </button>
       </div>
     </div>
     <p class="taxonomy-note muted">
-      Deleting a copyright or artist sends linked files to Stage for
-      redistribution. Files stay at their current paths, including when disk
-      synchronization is enabled. Deleting a tag or character only removes that
-      entry and its links.
+      {{
+        ui(
+          "Deleting a copyright or artist sends linked files to Stage for redistribution. Files stay at their current paths, including when disk synchronization is enabled. Deleting a tag or character only removes that entry and its links.",
+        )
+      }}
     </p>
     <p v-if="!native" class="muted">
-      Demo library · changes last for this session.
+      {{ ui("Demo library · changes last for this session.") }}
     </p>
     <p v-else class="muted">
-      Saved database dictionaries · Main still uses demo records. Queued
-      database files appear in Stage; distribution currently remains a preview.
+      {{
+        ui(
+          "Saved database dictionaries · Main still uses demo records. Queued database files appear in Stage; distribution currently remains a preview.",
+        )
+      }}
     </p>
-    <p v-if="error" class="error-message" role="alert">{{ error }}</p>
+    <p v-if="error" class="error-message" role="alert">{{ ui(error) }}</p>
     <div class="taxonomy-list">
       <p v-if="loading" class="taxonomy-empty" role="status">
-        Loading dictionaries…
+        {{ ui("Loading dictionaries…") }}
       </p>
       <p v-else-if="!entries.length" class="taxonomy-empty muted">
         {{
-          search || characterFiltersActive
-            ? "No matching names."
-            : "No entries in this category yet."
+          ui(
+            search || characterFiltersActive
+              ? "No matching names."
+              : "No entries in this category yet.",
+          )
         }}
       </p>
       <template v-else>
@@ -327,24 +337,22 @@ onMounted(load);
               <strong
                 >{{ entry.name
                 }}{{ entry.copyright ? ` (${entry.copyright})` : "" }}</strong
-              ><span class="muted"
-                >{{ entry.count }} linked file{{
-                  entry.count === 1 ? "" : "s"
-                }}</span
-              >
+              ><span class="muted">{{
+                ui(`${entry.count} linked file${entry.count === 1 ? "" : "s"}`)
+              }}</span>
             </div>
             <button
               class="secondary-button"
               :disabled="busy || loading"
-              :aria-label="`Edit ${entry.name}`"
+              :aria-label="ui(`Edit ${entry.name}`)"
               @click="begin(entry, 'edit')"
             >
-              Edit
+              {{ ui("Edit") }}
             </button>
             <button
               class="icon-button taxonomy-delete"
               :disabled="busy || loading"
-              :aria-label="`Delete ${entry.name}`"
+              :aria-label="ui(`Delete ${entry.name}`)"
               @click="begin(entry, 'delete')"
             >
               <AppIcon name="trash" :size="17" />
@@ -357,7 +365,7 @@ onMounted(load);
             @keydown.esc.stop="!busy && (pending = null)"
           >
             <template v-if="pending.action === 'edit'"
-              ><label :for="`name-${entry.id}`">Name</label
+              ><label :for="`name-${entry.id}`">{{ ui("Name") }}</label
               ><input
                 :id="`name-${entry.id}`"
                 v-model="name"
@@ -365,13 +373,15 @@ onMounted(load);
                 required
             /></template>
             <p v-else>
-              Delete “{{ entry.name }}”?
+              {{ ui(`Delete “${entry.name}”?`) }}
               {{
-                category === "tag" || category === "character"
-                  ? `This ${category} will be removed from all linked files.`
-                  : `All ${entry.count} linked file(s) will need redistribution. ${category === "copyright" ? "Characters belonging to this copyright will also be removed." : ""}`
+                ui(
+                  category === "tag" || category === "character"
+                    ? `This ${category} will be removed from all linked files.`
+                    : `All ${entry.count} linked file(s) will need redistribution. ${category === "copyright" ? "Characters belonging to this copyright will also be removed." : ""}`,
+                )
               }}
-              Files on disk stay unchanged.
+              {{ ui("Files on disk stay unchanged.") }}
             </p>
             <div class="taxonomy-editor-actions">
               <button
@@ -380,18 +390,20 @@ onMounted(load);
                 :disabled="busy"
                 @click="pending = null"
               >
-                Cancel</button
+                {{ ui("Cancel") }}</button
               ><button
                 type="submit"
                 class="primary-button"
                 :disabled="busy || (pending.action === 'edit' && !name.trim())"
               >
                 {{
-                  busy
-                    ? "Saving…"
-                    : pending.action === "edit"
-                      ? "Save name"
-                      : "Delete entry"
+                  ui(
+                    busy
+                      ? "Saving…"
+                      : pending.action === "edit"
+                        ? "Save name"
+                        : "Delete entry",
+                  )
                 }}
               </button>
             </div>

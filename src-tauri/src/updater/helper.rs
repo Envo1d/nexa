@@ -17,6 +17,8 @@ use velopack::{
     locator::{VelopackLocator, create_config_from_root_dir},
 };
 
+use crate::config::AppLocale;
+
 mod session;
 
 #[cfg(test)]
@@ -28,6 +30,7 @@ struct Snapshot {
     phase: &'static str,
     version: String,
     message: String,
+    locale: AppLocale,
 }
 
 struct HelperState {
@@ -53,6 +56,7 @@ pub(super) fn start(
     asset: &VelopackAsset,
     locator: &VelopackLocator,
     logs: &Path,
+    locale: AppLocale,
 ) -> Result<(), String> {
     let root = logs.join("update-sessions");
 
@@ -75,6 +79,7 @@ pub(super) fn start(
         installation,
         logs: logs.into(),
         parent_pid: std::process::id(),
+        locale,
     };
 
     session::write(directory, "request.json", &request)?;
@@ -111,7 +116,7 @@ pub(super) fn start(
         return Err(error);
     }
 
-    tracing::info!(version = %asset.Version, "Independent update window accepted handoff");
+    tracing::info!(version = %asset.Version, ?locale, "Independent update window accepted handoff");
 
     Ok(())
 }
@@ -313,6 +318,7 @@ pub(crate) fn run(directory: PathBuf) {
             phase: "preparing",
             version: request.asset.Version,
             message: "Preparing your update…".into(),
+            locale: request.locale,
         }),
         started: AtomicBool::new(false),
         finished: AtomicBool::new(false),
@@ -348,7 +354,11 @@ pub(crate) fn run(directory: PathBuf) {
         ])
         .setup(move |app| {
             WebviewWindowBuilder::new(app, "updater", WebviewUrl::App("update.html".into()))
-                .title("Nexa Update")
+                .title(if request.locale == AppLocale::Russian {
+                    "Обновление Nexa"
+                } else {
+                    "Nexa Update"
+                })
                 .inner_size(420.0, 440.0)
                 .resizable(false)
                 .decorations(false)

@@ -2,8 +2,8 @@
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 
+import { translateUi as ui } from "../i18n/presentation";
 import { formatDate, formatDuration, formatSize } from "../types/media";
-
 import MediaPreview from "./MediaPreview.vue";
 import MetadataRow from "./MetadataRow.vue";
 import AppIcon from "./AppIcon.vue";
@@ -136,8 +136,8 @@ const metadata = computed(() => [
     <div class="details-scroll">
       <h3 class="detail-filename">{{ item.filename }}</h3>
       <p v-if="item.nativeRedistribution" class="muted">
-        Needs redistribution · file remains at {{ item.path }}. Distribution is
-        currently a preview.
+        {{ ui("Needs redistribution · file remains at") }} {{ item.path
+        }}{{ ui(". Distribution is currently a preview.") }}
       </p>
       <MediaPreview
         v-if="showPreviews"
@@ -152,7 +152,7 @@ const metadata = computed(() => [
           class="detail-tag-group"
           :class="`detail-${group.category}`"
         >
-          <h3>{{ group.label }}</h3>
+          <h3>{{ ui(group.label) }}</h3>
           <div>
             <button
               v-for="value in group.values"
@@ -173,9 +173,9 @@ const metadata = computed(() => [
         <MetadataRow
           v-for="field in metadata"
           :key="field.label"
-          :label="field.label"
+          :label="ui(field.label)"
           :icon="field.icon"
-          :value="field.value"
+          :value="ui(field.value)"
         />
       </dl>
       <div class="detail-actions">

@@ -3,6 +3,29 @@ use std::{thread, time::Duration};
 use super::session;
 
 #[test]
+fn progress_updates_preserve_the_parent_interface_language() {
+    let directory = tempfile::tempdir().unwrap();
+
+    let state = super::HelperState {
+        directory: directory.path().into(),
+        snapshot: std::sync::Mutex::new(super::Snapshot {
+            phase: "preparing",
+            version: "2.4.0".into(),
+            message: "Preparing your update…".into(),
+            locale: crate::config::AppLocale::Russian,
+        }),
+        started: std::sync::atomic::AtomicBool::new(false),
+        finished: std::sync::atomic::AtomicBool::new(false),
+    };
+
+    state.status("installing", "Closing Nexa and installing the new version…");
+
+    let snapshot = state.snapshot.lock().unwrap();
+    assert_eq!(snapshot.locale, crate::config::AppLocale::Russian);
+    assert_eq!(snapshot.phase, "installing");
+}
+
+#[test]
 fn parent_rejects_helper_launch_failure() {
     let directory = tempfile::tempdir().unwrap();
 

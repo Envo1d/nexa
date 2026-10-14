@@ -8,9 +8,10 @@ import {
   watch,
 } from "vue";
 
-import type { MediaItem } from "../types/media";
-
+import { translateUi as ui } from "../i18n/presentation";
 import AppIcon from "./AppIcon.vue";
+
+import type { MediaItem } from "../types/media";
 
 const props = defineProps<{
   item: MediaItem;
@@ -146,7 +147,7 @@ onBeforeUnmount(() => {
       ref="menu"
       class="card-context-menu"
       role="menu"
-      :aria-label="`Actions for ${item.filename}`"
+      :aria-label="ui(`Actions for ${item.filename}`)"
       :style="{ left: `${left}px`, top: `${top}px` }"
       @keydown="keyboard"
       @contextmenu.prevent
@@ -159,7 +160,7 @@ onBeforeUnmount(() => {
         :class="{ destructive: action.action === 'Delete file' }"
         @click="$emit('action', action.action ?? action.label)"
       >
-        <AppIcon :name="action.icon" :size="16" />{{ action.label }}
+        <AppIcon :name="action.icon" :size="16" />{{ ui(action.label) }}
       </button>
     </div>
   </Teleport>

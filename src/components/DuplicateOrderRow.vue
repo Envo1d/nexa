@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 
-import type { MediaItem } from "../types/media";
-
+import { translateUi as ui } from "../i18n/presentation";
 import MediaPreview from "./MediaPreview.vue";
 import AppIcon from "./AppIcon.vue";
+
+import type { MediaItem } from "../types/media";
 
 const props = defineProps<{
   item: MediaItem;
@@ -56,8 +57,8 @@ onBeforeUnmount(() => observer?.disconnect());
         type="button"
         class="icon-button"
         :disabled="busy || index === 0"
-        :aria-label="`Move ${item.filename} up`"
-        title="Move up"
+        :aria-label="ui(`Move ${item.filename} up`)"
+        :title="ui('Move up')"
         @click="emit('move', -1)"
       >
         <AppIcon name="up" :size="17" />
@@ -66,8 +67,8 @@ onBeforeUnmount(() => observer?.disconnect());
         type="button"
         class="icon-button"
         :disabled="busy || index === total - 1"
-        :aria-label="`Move ${item.filename} down`"
-        title="Move down"
+        :aria-label="ui(`Move ${item.filename} down`)"
+        :title="ui('Move down')"
         @click="emit('move', 1)"
       >
         <AppIcon name="down" :size="17" />

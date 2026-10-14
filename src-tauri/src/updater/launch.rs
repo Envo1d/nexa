@@ -5,12 +5,18 @@ use velopack::{
     locator::{LocationContext, auto_locate_app_manifest},
 };
 
-pub(super) fn start(asset: &VelopackAsset, logs_path: &Path) -> Result<(), Error> {
+use crate::config::AppLocale;
+
+pub(super) fn start(
+    asset: &VelopackAsset,
+    logs_path: &Path,
+    locale: AppLocale,
+) -> Result<(), Error> {
     super::source::validate_asset(asset)?;
 
     let locator = auto_locate_app_manifest(LocationContext::FromCurrentExe)?;
 
-    super::helper::start(asset, &locator, logs_path).map_err(Error::Other)
+    super::helper::start(asset, &locator, logs_path, locale).map_err(Error::Other)
 }
 
 pub(super) fn arguments(

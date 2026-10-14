@@ -8,15 +8,15 @@ import {
   watch,
 } from "vue";
 
-import type { MediaItem, MediaMetadataDraft } from "../types/media";
-
+import { translateUi as ui } from "../i18n/presentation";
 import { formatDate, formatDuration, formatSize } from "../types/media";
-
 import MetadataInput, { type MetadataValue } from "./MetadataInput.vue";
 import ToggleSwitch from "./ToggleSwitch.vue";
 import MediaPreview from "./MediaPreview.vue";
 import MetadataRow from "./MetadataRow.vue";
 import AppIcon from "./AppIcon.vue";
+
+import type { MediaItem, MediaMetadataDraft } from "../types/media";
 
 const props = defineProps<{
   items: MediaItem[];
@@ -83,6 +83,21 @@ const allFiles = ref(false);
 const completedCount = ref(0);
 
 const done = ref(false);
+
+const completionMessage = computed(() => {
+  const subject =
+    completedCount.value === 1 ? "The file" : `${completedCount.value} files`;
+
+  const result = current.value.nativeId
+    ? props.editing
+      ? "updated in Nexa."
+      : "distributed to the library."
+    : props.editing
+      ? "updated for this demo session."
+      : "distributed for this demo session.";
+
+  return `${subject} ${result}`;
+});
 
 const targets = computed(() =>
   allFiles.value ? props.items.slice(position.value) : [current.value],
@@ -426,7 +441,7 @@ onBeforeUnmount(() => trigger?.focus());
             /></span>
             <div>
               <h2 id="distribution-title">
-                {{ editing ? "Edit metadata" : "Distribute to Library" }}
+                {{ ui(editing ? "Edit metadata" : "Distribute to Library") }}
               </h2>
               <p class="muted">
                 {{
@@ -442,7 +457,7 @@ onBeforeUnmount(() => trigger?.focus());
           <button
             class="icon-button"
             :aria-label="
-              editing ? 'Close metadata editor' : 'Close distribution'
+              ui(editing ? 'Close metadata editor' : 'Close distribution')
             "
             :disabled="saving"
             @click="emit('close')"
@@ -452,7 +467,7 @@ onBeforeUnmount(() => trigger?.focus());
         </header>
         <nav
           class="wizard-steps"
-          :aria-label="editing ? 'Metadata steps' : 'Distribution steps'"
+          :aria-label="ui(editing ? 'Metadata steps' : 'Distribution steps')"
         >
           <button
             v-for="(label, index) in steps"
@@ -471,7 +486,7 @@ onBeforeUnmount(() => trigger?.focus());
                 name="check"
                 :size="14"
               /><template v-else>{{ index + 1 }}</template></span
-            ><span>{{ label }}</span>
+            ><span>{{ ui(label) }}</span>
           </button>
         </nav>
         <div
@@ -487,28 +502,18 @@ onBeforeUnmount(() => trigger?.focus());
                 ><AppIcon name="check" :size="28"
               /></span>
             </div>
-            <h2 class="wizard-page-heading" tabindex="-1">Done!</h2>
+            <h2 class="wizard-page-heading" tabindex="-1">{{ ui("Done!") }}</h2>
             <p class="muted">
-              {{
-                completedCount === 1 ? "The file" : `${completedCount} files`
-              }}
-              {{
-                current.nativeId
-                  ? editing
-                    ? "updated in Nexa."
-                    : "distributed to the library."
-                  : editing
-                    ? "updated for this demo session."
-                    : "distributed for this demo session."
-              }}
+              {{ ui(completionMessage) }}
             </p>
             <dl class="wizard-summary">
               <MetadataRow label="Action">{{
-                editing ? "Metadata updated" : "Distribution completed"
+                ui(editing ? "Metadata updated" : "Distribution completed")
               }}</MetadataRow>
               <MetadataRow label="Files">{{ completedCount }}</MetadataRow>
               <MetadataRow label="Queue"
-                >{{ remaining - completedCount }} remaining</MetadataRow
+                >{{ remaining - completedCount }}
+                {{ ui("remaining") }}</MetadataRow
               >
               <MetadataRow
                 v-if="remaining > completedCount"
@@ -520,11 +525,13 @@ onBeforeUnmount(() => trigger?.focus());
                 label="Entered details"
               >
                 {{
-                  editing
-                    ? "Load the next file's metadata"
-                    : retain
-                      ? "Keep for the next file"
-                      : "Clear for the next file"
+                  ui(
+                    editing
+                      ? "Load the next file's metadata"
+                      : retain
+                        ? "Keep for the next file"
+                        : "Clear for the next file",
+                  )
                 }}
               </MetadataRow>
             </dl>
@@ -532,13 +539,15 @@ onBeforeUnmount(() => trigger?.focus());
           <template v-else>
             <template v-if="step === 0">
               <h3 class="wizard-page-heading" tabindex="-1">
-                File information
+                {{ ui("File information") }}
               </h3>
               <p class="wizard-description">
                 {{
-                  editing
-                    ? "Review the file before editing its library details."
-                    : "Review the source file before adding its library details."
+                  ui(
+                    editing
+                      ? "Review the file before editing its library details."
+                      : "Review the source file before adding its library details.",
+                  )
                 }}
               </p>
               <div class="wizard-information">
@@ -552,7 +561,7 @@ onBeforeUnmount(() => trigger?.focus());
                     class="secondary-button"
                     @click="emit('open', current)"
                   >
-                    <AppIcon name="arrow" :size="14" />Open file
+                    <AppIcon name="arrow" :size="14" />{{ ui("Open file") }}
                   </button>
                 </div>
                 <dl class="wizard-technical">
@@ -560,25 +569,27 @@ onBeforeUnmount(() => trigger?.focus());
                     current.filename
                   }}</MetadataRow>
                   <MetadataRow
-                    :label="editing ? 'Library path' : 'Staging path'"
+                    :label="ui(editing ? 'Library path' : 'Staging path')"
                     >{{ current.path }}</MetadataRow
                   >
                   <MetadataRow label="File type">
-                    {{ current.kind === "video" ? "Video" : "Image" }} ({{
+                    {{ ui(current.kind === "video" ? "Video" : "Image") }} ({{
                       current.extension
                     }})
                   </MetadataRow>
                   <MetadataRow label="Modified">{{
-                    current.nativeRedistribution && !current.modifiedAt
-                      ? "Unavailable"
-                      : formatDate(current.modifiedAt)
+                    ui(
+                      current.nativeRedistribution && !current.modifiedAt
+                        ? "Unavailable"
+                        : formatDate(current.modifiedAt),
+                    )
                   }}</MetadataRow>
                   <div class="wizard-technical-pair">
                     <MetadataRow label="Size">{{
-                      formatSize(current.size)
+                      ui(formatSize(current.size))
                     }}</MetadataRow>
                     <MetadataRow label="Resolution">{{
-                      resolution
+                      ui(resolution)
                     }}</MetadataRow>
                   </div>
                   <div
@@ -586,9 +597,11 @@ onBeforeUnmount(() => trigger?.focus());
                     class="wizard-technical-pair"
                   >
                     <MetadataRow label="Duration">{{
-                      current.duration === undefined
-                        ? "Unavailable"
-                        : formatDuration(current.duration, true)
+                      ui(
+                        current.duration === undefined
+                          ? "Unavailable"
+                          : formatDuration(current.duration, true),
+                      )
                     }}</MetadataRow>
                     <MetadataRow label="FPS">{{
                       current.fps ?? "—"
@@ -598,9 +611,11 @@ onBeforeUnmount(() => trigger?.focus());
               </div>
             </template>
             <template v-else-if="step === 1">
-              <h3 class="wizard-page-heading" tabindex="-1">Copyrights</h3>
+              <h3 class="wizard-page-heading" tabindex="-1">
+                {{ ui("Copyrights") }}
+              </h3>
               <p class="wizard-description">
-                Choose the copyrights that the characters belong to.
+                {{ ui("Choose the copyrights that the characters belong to.") }}
               </p>
               <MetadataInput
                 v-model="copyrights"
@@ -611,9 +626,11 @@ onBeforeUnmount(() => trigger?.focus());
               />
             </template>
             <template v-else-if="step === 2">
-              <h3 class="wizard-page-heading" tabindex="-1">Tags</h3>
+              <h3 class="wizard-page-heading" tabindex="-1">
+                {{ ui("Tags") }}
+              </h3>
               <p class="wizard-description">
-                Add tags to help find this media in your library.
+                {{ ui("Add tags to help find this media in your library.") }}
               </p>
               <MetadataInput
                 v-model="tags"
@@ -624,9 +641,15 @@ onBeforeUnmount(() => trigger?.focus());
               />
             </template>
             <template v-else-if="step === 3">
-              <h3 class="wizard-page-heading" tabindex="-1">Characters</h3>
+              <h3 class="wizard-page-heading" tabindex="-1">
+                {{ ui("Characters") }}
+              </h3>
               <p class="wizard-description">
-                Add characters and assign each one to a selected copyright.
+                {{
+                  ui(
+                    "Add characters and assign each one to a selected copyright.",
+                  )
+                }}
               </p>
               <MetadataInput
                 v-model="characters"
@@ -639,11 +662,14 @@ onBeforeUnmount(() => trigger?.focus());
             </template>
             <template v-else-if="step === 4">
               <h3 class="wizard-page-heading" tabindex="-1">
-                Additional details
+                {{ ui("Additional details") }}
               </h3>
               <p class="wizard-description">
-                Set the artist attribution and the title used for video
-                filenames.
+                {{
+                  ui(
+                    "Set the artist attribution and the title used for video filenames.",
+                  )
+                }}
               </p>
               <div class="wizard-fields">
                 <MetadataInput
@@ -654,33 +680,40 @@ onBeforeUnmount(() => trigger?.focus());
                 />
                 <label v-if="needsTitle" class="distribution-title-input"
                   >{{
-                    current.kind === "video"
-                      ? "Video title"
-                      : "Title for queued videos"
-                  }}<input v-model="title" placeholder="Enter a video title"
+                    ui(
+                      current.kind === "video"
+                        ? "Video title"
+                        : "Title for queued videos",
+                    )
+                  }}<input
+                    v-model="title"
+                    :placeholder="ui('Enter a video title')"
                 /></label>
               </div>
             </template>
             <template v-else>
               <h3 class="wizard-page-heading" tabindex="-1">
                 {{
-                  editing ? "Confirm metadata changes" : "Confirm distribution"
+                  ui(
+                    editing
+                      ? "Confirm metadata changes"
+                      : "Confirm distribution",
+                  )
                 }}
               </h3>
               <p class="wizard-description">
-                Review the details before confirming.
+                {{ ui("Review the details before confirming.") }}
               </p>
               <fieldset v-if="remaining > 1" class="wizard-scope">
-                <legend>Apply these details to</legend>
+                <legend>{{ ui("Apply these details to") }}</legend>
                 <label
-                  ><input
-                    v-model="allFiles"
-                    type="radio"
-                    :value="false"
-                  />Current file</label
+                  ><input v-model="allFiles" type="radio" :value="false" />{{
+                    ui("Current file")
+                  }}</label
                 ><label
-                  ><input v-model="allFiles" type="radio" :value="true" />All
-                  remaining files ({{ remaining }})</label
+                  ><input v-model="allFiles" type="radio" :value="true" />{{
+                    ui("All remaining files (")
+                  }}{{ remaining }})</label
                 >
               </fieldset>
               <div class="wizard-confirm-file">
@@ -699,9 +732,11 @@ onBeforeUnmount(() => trigger?.focus());
                   </h3>
                   <p class="muted">
                     {{
-                      allFiles
-                        ? "The same metadata and video title will be applied to every file below."
-                        : `${formatSize(current.size)} · ${resolution}`
+                      ui(
+                        allFiles
+                          ? "The same metadata and video title will be applied to every file below."
+                          : `${ui(formatSize(current.size))} · ${ui(resolution)}`,
+                      )
                     }}
                   </p>
                 </div>
@@ -710,15 +745,14 @@ onBeforeUnmount(() => trigger?.focus());
                 <MetadataRow
                   v-for="[label, value] in summary"
                   :key="label"
-                  :label="label"
+                  :label="ui(label)"
                   :value="value || '—'"
                 />
               </dl>
               <details v-if="allFiles" class="wizard-batch-files" open>
                 <summary>
-                  {{ editing ? "Files to update" : "Files to distribute" }} ({{
-                    targets.length
-                  }})
+                  {{ ui(editing ? "Files to update" : "Files to distribute") }}
+                  ({{ targets.length }})
                 </summary>
                 <ul>
                   <li v-for="item in targets" :key="item.id">
@@ -728,15 +762,17 @@ onBeforeUnmount(() => trigger?.focus());
                 </ul>
               </details>
               <p v-if="error" class="error-message" role="alert" tabindex="-1">
-                {{ error }}
+                {{ ui(error) }}
               </p>
             </template>
           </template>
           <p class="modal-note wizard-demo-note">
             {{
-              current.nativeId
-                ? "Metadata is saved in Nexa. Files move and rename in the background when Sync with disk is enabled."
-                : "Demo session · Changes are not persisted to disk."
+              ui(
+                current.nativeId
+                  ? "Metadata is saved in Nexa. Files move and rename in the background when Sync with disk is enabled."
+                  : "Demo session · Changes are not persisted to disk.",
+              )
             }}
           </p>
         </div>
@@ -746,9 +782,10 @@ onBeforeUnmount(() => trigger?.focus());
           trailing
           class="settings-switch-row distribution-retain"
           ><span
-            >Keep entered details between files<small
-              >Copyrights, artist, characters, tags and video title</small
-            ></span
+            >{{ ui("Keep entered details between files")
+            }}<small>{{
+              ui("Copyrights, artist, characters, tags and video title")
+            }}</small></span
           ></ToggleSwitch
         >
         <footer class="modal-footer">
@@ -759,13 +796,13 @@ onBeforeUnmount(() => trigger?.focus());
               :disabled="saving"
               @click="emit('close')"
             >
-              Close</button
+              {{ ui("Close") }}</button
             ><span v-else class="wizard-footer-spacer"></span
             ><button
               class="primary-button"
               @click="remaining > completedCount ? nextFile() : emit('close')"
             >
-              {{ remaining > completedCount ? "Next file" : "Done"
+              {{ ui(remaining > completedCount ? "Next file" : "Done")
               }}<AppIcon
                 v-if="remaining > completedCount"
                 name="arrow"
@@ -778,24 +815,22 @@ onBeforeUnmount(() => trigger?.focus());
               class="secondary-button"
               @click="navigate(step - 1)"
             >
-              <AppIcon
-                class="wizard-back-icon"
-                name="arrow"
-                :size="15"
-              />Back</button
+              <AppIcon class="wizard-back-icon" name="arrow" :size="15" />{{
+                ui("Back")
+              }}</button
             ><span v-else class="wizard-footer-spacer"></span
             ><button
               class="secondary-button"
               :disabled="saving"
               @click="emit('close')"
             >
-              Cancel</button
+              {{ ui("Cancel") }}</button
             ><button
               v-if="step < steps.length - 1"
               class="primary-button"
               @click="navigate(step + 1)"
             >
-              Next<AppIcon name="arrow" :size="16" /></button
+              {{ ui("Next") }}<AppIcon name="arrow" :size="16" /></button
             ><button
               v-else
               class="primary-button"
@@ -803,13 +838,15 @@ onBeforeUnmount(() => trigger?.focus());
               @click="process()"
             >
               {{
-                editing
-                  ? allFiles
-                    ? `Save all (${remaining})`
-                    : "Save changes"
-                  : allFiles
-                    ? `Distribute all (${remaining})`
-                    : "Distribute file"
+                ui(
+                  editing
+                    ? allFiles
+                      ? `Save all (${remaining})`
+                      : "Save changes"
+                    : allFiles
+                      ? `Distribute all (${remaining})`
+                      : "Distribute file",
+                )
               }}<AppIcon name="check" :size="16" /></button
           ></template>
         </footer>

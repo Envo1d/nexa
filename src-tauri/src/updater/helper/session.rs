@@ -9,12 +9,20 @@ use std::{
 use serde::{Deserialize, Serialize};
 use velopack::{VelopackAsset, locator::VelopackLocatorConfig};
 
+use crate::config::AppLocale;
+
 #[derive(Deserialize, Serialize)]
 pub(super) struct Request {
     pub asset: VelopackAsset,
     pub installation: VelopackLocatorConfig,
     pub logs: PathBuf,
     pub parent_pid: u32,
+    #[serde(default = "default_locale")]
+    pub locale: AppLocale,
+}
+
+fn default_locale() -> AppLocale {
+    AppLocale::English
 }
 
 // Publish complete files, so neither process can observe partially written JSON.

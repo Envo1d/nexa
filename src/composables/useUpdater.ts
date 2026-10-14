@@ -1,6 +1,8 @@
 import { ref } from "vue";
 import { Channel, invoke, isTauri } from "@tauri-apps/api/core";
 
+import { i18n } from "../i18n";
+
 import type { ConfigSnapshot } from "../types/config";
 
 interface UpdateInfo {
@@ -79,7 +81,10 @@ async function confirmInstall() {
       percent.value = Math.max(0, Math.min(100, value.percent));
     };
 
-    await invoke("install_update", { progress });
+    await invoke("install_update", {
+      progress,
+      locale: i18n.global.locale.value,
+    });
     status.value = "Restarting Nexa to apply the update…";
   } catch (error) {
     status.value = String(error);

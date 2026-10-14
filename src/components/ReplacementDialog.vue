@@ -9,11 +9,9 @@ import {
 } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 
-import type { MediaItem } from "../types/media";
-
+import { translateUi as ui } from "../i18n/presentation";
 import ReplacementFile from "./ReplacementFile.vue";
 import AppIcon from "./AppIcon.vue";
-
 import {
   catalogSuggestions,
   chooseMetadataSuggestion,
@@ -21,6 +19,8 @@ import {
   normalizeMetadataSearch,
   type MetadataCatalog,
 } from "../utils/metadataSearch";
+
+import type { MediaItem } from "../types/media";
 
 const props = defineProps<{
   item: MediaItem;
@@ -322,11 +322,11 @@ onBeforeUnmount(() => {
         @keydown.stop="keyboard"
       >
         <header class="panel-heading">
-          <h2 id="replacement-title">Replace in Main Library</h2>
+          <h2 id="replacement-title">{{ ui("Replace in Main Library") }}</h2>
           <button
             type="button"
             class="icon-button"
-            aria-label="Close replacement"
+            :aria-label="ui('Close replacement')"
             :disabled="saving"
             @click="emit('close')"
           >
@@ -335,19 +335,19 @@ onBeforeUnmount(() => {
         </header>
         <div class="replacement-body">
           <div v-if="source" class="version-panel">
-            <h3>New version · Stage</h3>
+            <h3>{{ ui("New version · Stage") }}</h3>
             <ReplacementFile
               :item="source.item"
               :show-previews="showPreviews"
-              open-label="Open new Stage version"
+              :open-label="ui('Open new Stage version')"
               :open-disabled="saving || opening"
               @open="emit('open', source.item, false)"
             />
           </div>
           <template v-if="source && !selected">
-            <label class="search-label" for="replacement-search"
-              >Choose the file to replace in Main</label
-            >
+            <label class="search-label" for="replacement-search">{{
+              ui("Choose the file to replace in Main")
+            }}</label>
             <div class="metadata-search">
               <div class="search-box">
                 <AppIcon name="search" :size="17" />
@@ -356,7 +356,7 @@ onBeforeUnmount(() => {
                   ref="searchInput"
                   v-model="query"
                   type="text"
-                  placeholder="Metadata, separated by semicolons"
+                  :placeholder="ui('Metadata, separated by semicolons')"
                   :disabled="saving"
                   maxlength="128"
                   role="combobox"
@@ -377,7 +377,7 @@ onBeforeUnmount(() => {
                   v-if="query"
                   type="button"
                   class="icon-button"
-                  aria-label="Clear replacement search"
+                  :aria-label="ui('Clear replacement search')"
                   :disabled="saving"
                   @click="
                     query = '';
@@ -393,7 +393,7 @@ onBeforeUnmount(() => {
                 id="replacement-suggestions"
                 class="metadata-suggestions"
                 role="listbox"
-                aria-label="Matching metadata"
+                :aria-label="ui('Matching metadata')"
               >
                 <button
                   v-for="(suggestion, index) in suggestions"
@@ -417,16 +417,18 @@ onBeforeUnmount(() => {
                     }}{{
                       suggestion.copyright ? ` (${suggestion.copyright})` : ""
                     }}</span
-                  ><small>{{ suggestion.category }}</small>
+                  ><small>{{ ui(suggestion.category) }}</small>
                 </button>
               </div>
             </div>
             <p class="muted">
-              Enter artist, character, copyright or tag names separated by
-              semicolons. Every value must match, just like Main. Press Enter or
-              choose a suggestion to search the entire Main Library.
+              {{
+                ui(
+                  "Enter artist, character, copyright or tag names separated by semicolons. Every value must match, just like Main. Press Enter or choose a suggestion to search the entire Main Library.",
+                )
+              }}
             </p>
-            <div class="candidate-list" aria-label="Main Library files">
+            <div class="candidate-list" :aria-label="ui('Main Library files')">
               <button
                 v-for="file in files"
                 :key="file.item.id"
@@ -442,7 +444,7 @@ onBeforeUnmount(() => {
               </button>
             </div>
             <p v-if="!loading && !files.length && !error" class="muted">
-              No matching files in Main.
+              {{ ui("No matching files in Main.") }}
             </p>
             <button
               v-if="cursor"
@@ -451,16 +453,16 @@ onBeforeUnmount(() => {
               :disabled="busy"
               @click="load(true)"
             >
-              Load more files
+              {{ ui("Load more files") }}
             </button>
           </template>
           <template v-if="selected && source">
             <div class="version-panel">
-              <h3>Current version · Main</h3>
+              <h3>{{ ui("Current version · Main") }}</h3>
               <ReplacementFile
                 :item="selected.item"
                 :show-previews="showPreviews"
-                open-label="Open current Main version"
+                :open-label="ui('Open current Main version')"
                 :open-disabled="saving || opening"
                 @open="emit('open', selected.item, true)"
               />
@@ -475,29 +477,42 @@ onBeforeUnmount(() => {
                 nextTick(() => searchInput?.focus());
               "
             >
-              Choose another file
+              {{ ui("Choose another file") }}
             </button>
             <p>
-              Main keeps its artist, copyrights, characters, tags, favorite,
-              video title and file order. The new content, format and technical
-              details replace the current version.
+              {{
+                ui(
+                  "Main keeps its artist, copyrights, characters, tags, favorite, video title and file order. The new content, format and technical details replace the current version.",
+                )
+              }}
             </p>
             <p v-if="hasAnnotations" class="replacement-warning">
-              The Stage file's existing annotations will be discarded. Main's
-              annotations take precedence.
+              {{
+                ui(
+                  "The Stage file's existing annotations will be discarded. Main's annotations take precedence.",
+                )
+              }}
             </p>
             <p v-if="syncWithDisk" class="muted">
-              The new version will move into the managed Library structure
-              through disk synchronization.
+              {{
+                ui(
+                  "The new version will move into the managed Library structure through disk synchronization.",
+                )
+              }}
             </p>
             <p v-else class="muted">
-              Sync with disk is off. The new version stays at its current
-              location and becomes the Main file.
+              {{
+                ui(
+                  "Sync with disk is off. The new version stays at its current location and becomes the Main file.",
+                )
+              }}
             </p>
             <p class="replacement-warning">
-              After the replacement is saved successfully, the old file is
-              permanently deleted. Temporary recovery backups are removed after
-              cleanup.
+              {{
+                ui(
+                  "After the replacement is saved successfully, the old file is permanently deleted. Temporary recovery backups are removed after cleanup.",
+                )
+              }}
             </p>
             <label class="replacement-confirm"
               ><input
@@ -505,11 +520,13 @@ onBeforeUnmount(() => {
                 type="checkbox"
                 :disabled="saving"
               />
-              Replace this Main file with the selected Stage version.</label
+              {{
+                ui("Replace this Main file with the selected Stage version.")
+              }}</label
             >
           </template>
-          <p v-if="loading" role="status" class="muted">Loading…</p>
-          <p v-if="error" class="error-message" role="alert">{{ error }}</p>
+          <p v-if="loading" role="status" class="muted">{{ ui("Loading…") }}</p>
+          <p v-if="error" class="error-message" role="alert">{{ ui(error) }}</p>
           <button
             v-if="error"
             type="button"
@@ -517,7 +534,7 @@ onBeforeUnmount(() => {
             :disabled="busy"
             @click="reload"
           >
-            Reload files
+            {{ ui("Reload files") }}
           </button>
         </div>
         <footer class="replacement-footer">
@@ -527,7 +544,7 @@ onBeforeUnmount(() => {
             :disabled="saving"
             @click="emit('close')"
           >
-            Cancel
+            {{ ui("Cancel") }}
           </button>
           <button
             type="button"
@@ -535,7 +552,7 @@ onBeforeUnmount(() => {
             :disabled="busy || !selected || !acknowledged || Boolean(error)"
             @click="save"
           >
-            {{ saving ? "Replacing…" : "Replace file" }}
+            {{ ui(saving ? "Replacing…" : "Replace file") }}
           </button>
         </footer>
       </section>
