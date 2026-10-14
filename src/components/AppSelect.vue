@@ -41,6 +41,9 @@ async function show(
   active.value = Math.max(0, index);
   open.value = true;
   await nextTick();
+
+  if (!open.value || props.disabled) return;
+
   root.value?.querySelector<HTMLElement>('[role="listbox"]')?.focus();
 }
 
@@ -59,6 +62,8 @@ function choose(index: number) {
 }
 
 function onKey(event: KeyboardEvent) {
+  if (event.isComposing || props.disabled || !props.options.length) return;
+
   switch (event.key) {
     case "ArrowDown":
     case "ArrowUp":
@@ -121,6 +126,15 @@ watch(
   () => props.disabled,
   (disabled) => {
     if (disabled) open.value = false;
+  },
+);
+
+watch(
+  () => props.options,
+  (options) => {
+    if (!options.length) open.value = false;
+
+    active.value = Math.max(0, Math.min(active.value, options.length - 1));
   },
 );
 </script>

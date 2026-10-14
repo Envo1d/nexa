@@ -218,6 +218,8 @@ watch(
 );
 
 function choose(value: MetadataValue) {
+  if (props.disabled) return;
+
   if (props.textInput) {
     query.value = value.name;
     focused.value = false;
@@ -308,6 +310,8 @@ function chooseAssignment(value: MetadataValue) {
 }
 
 function keydown(event: KeyboardEvent) {
+  if (event.isComposing || props.disabled) return;
+
   if (event.key === "ArrowDown" || event.key === "ArrowUp") {
     event.preventDefault();
     focused.value = true;

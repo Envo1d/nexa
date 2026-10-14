@@ -661,6 +661,7 @@ const {
         ref="modalElement"
         class="modal"
         role="dialog"
+        tabindex="-1"
         aria-modal="true"
         aria-labelledby="modal-title"
         @keydown="trapFocus"

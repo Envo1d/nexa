@@ -61,6 +61,7 @@ onBeforeUnmount(() => {
         ref="dialog"
         class="modal delete-dialog"
         role="alertdialog"
+        tabindex="-1"
         aria-modal="true"
         aria-labelledby="delete-title"
         aria-describedby="delete-description delete-warning"

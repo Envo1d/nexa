@@ -9,6 +9,7 @@ import {
 } from "vue";
 
 import { translateUi as ui } from "../i18n/presentation";
+import { useFocusTrap } from "../shared/composables/useFocusTrap";
 import { formatDate, formatDuration, formatSize } from "../types/media";
 import MetadataInput, { type MetadataValue } from "./MetadataInput.vue";
 import ToggleSwitch from "./ToggleSwitch.vue";
@@ -66,6 +67,8 @@ const title = ref("");
 const error = ref("");
 
 const dialog = ref<HTMLElement | null>(null);
+
+const { trapFocus } = useFocusTrap(dialog);
 
 const steps = [
   "Information",
@@ -387,25 +390,7 @@ function keyboard(event: KeyboardEvent) {
     return;
   }
 
-  if (event.key !== "Tab") return;
-
-  const elements = [
-    ...(dialog.value?.querySelectorAll<HTMLElement>(
-      "button:not([disabled]):not([tabindex='-1']), input:not([disabled]), select:not([disabled]), textarea:not([disabled])",
-    ) ?? []),
-  ];
-
-  const first = elements[0];
-
-  const last = elements[elements.length - 1];
-
-  if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault();
-    last?.focus();
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault();
-    first?.focus();
-  }
+  trapFocus(event);
 }
 
 let trigger: HTMLElement | null = null;
@@ -420,7 +405,9 @@ onMounted(() => {
   focusStep();
 });
 
-onBeforeUnmount(() => trigger?.focus());
+onBeforeUnmount(() => {
+  if (trigger?.isConnected) trigger.focus();
+});
 </script>
 
 <template>
@@ -430,6 +417,7 @@ onBeforeUnmount(() => trigger?.focus());
         ref="dialog"
         class="distribution-dialog"
         role="dialog"
+        tabindex="-1"
         aria-modal="true"
         aria-labelledby="distribution-title"
         @keydown="keyboard"

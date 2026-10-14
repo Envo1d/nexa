@@ -15,26 +15,40 @@ export function useSearchSuggestions(
     suggestionIndex.value = -1;
   });
 
+  watch(suggestions, () => {
+    suggestionIndex.value = -1;
+  });
+
   function chooseSearchSuggestion(name: string) {
     chooseSuggestion(name);
     searchFocused.value = false;
   }
 
   function searchKeydown(event: KeyboardEvent) {
+    if (event.isComposing) return;
+
     if (event.key === "Escape") {
+      if (!searchFocused.value) return;
+
+      event.preventDefault();
+      event.stopPropagation();
       searchFocused.value = false;
+      suggestionIndex.value = -1;
     } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
       searchFocused.value = true;
 
       const count = suggestions.value.length;
 
-      suggestionIndex.value = count
-        ? (suggestionIndex.value +
-            (event.key === "ArrowDown" ? 1 : count - 1) +
+      if (!count) suggestionIndex.value = -1;
+      else if (suggestionIndex.value < 0)
+        suggestionIndex.value = event.key === "ArrowDown" ? 0 : count - 1;
+      else
+        suggestionIndex.value =
+          (suggestionIndex.value +
+            (event.key === "ArrowDown" ? 1 : -1) +
             count) %
-          count
-        : -1;
+          count;
     } else if (event.key === "Enter") {
       event.preventDefault();
 

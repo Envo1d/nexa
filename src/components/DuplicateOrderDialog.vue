@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 
 import { translateUi as ui } from "../i18n/presentation";
+import { useFocusTrap } from "../shared/composables/useFocusTrap";
 import AppIcon from "./AppIcon.vue";
 import DuplicateOrderRow from "./DuplicateOrderRow.vue";
 
@@ -23,6 +24,8 @@ type Group = {
 };
 
 const dialog = ref<HTMLElement | null>(null);
+
+const { trapFocus } = useFocusTrap(dialog);
 
 const files = ref<MediaItem[]>([]);
 
@@ -86,7 +89,7 @@ async function load() {
 }
 
 async function move(id: string, destination: number) {
-  if (busy.value) return;
+  if (busy.value || error.value) return;
 
   const source = files.value.findIndex((file) => file.id === id);
 
@@ -156,25 +159,9 @@ function keyboard(event: KeyboardEvent) {
     event.preventDefault();
 
     if (!saving.value) emit("close");
-  } else if (event.key === "Tab") {
-    const focusable = [
-      ...(dialog.value?.querySelectorAll<HTMLElement>(
-        "button:not(:disabled), [tabindex='0']",
-      ) ?? []),
-    ];
-
-    const first = focusable[0];
-
-    const last = focusable[focusable.length - 1];
-
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last?.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first?.focus();
-    }
   }
+
+  trapFocus(event);
 }
 
 onMounted(() => {
@@ -188,7 +175,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   disposed = true;
-  trigger?.focus();
+  if (trigger?.isConnected) trigger.focus();
 });
 </script>
 
@@ -199,6 +186,7 @@ onBeforeUnmount(() => {
         ref="dialog"
         class="order-dialog"
         role="dialog"
+        tabindex="-1"
         aria-modal="true"
         aria-labelledby="order-title"
         :aria-busy="busy"

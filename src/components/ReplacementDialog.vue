@@ -1,15 +1,10 @@
 <script setup lang="ts">
-import {
-  computed,
-  nextTick,
-  onBeforeUnmount,
-  onMounted,
-  ref,
-  watch,
-} from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 
 import { translateUi as ui } from "../i18n/presentation";
+import { useFocusTrap } from "../shared/composables/useFocusTrap";
+import { useSearchSuggestions } from "../shared/composables/useSearchSuggestions";
 import ReplacementFile from "./ReplacementFile.vue";
 import AppIcon from "./AppIcon.vue";
 import {
@@ -89,10 +84,6 @@ const query = ref("");
 
 const appliedQuery = ref("");
 
-const searchFocused = ref(false);
-
-const suggestionIndex = ref(-1);
-
 const suggestions = computed(() =>
   metadataSuggestions(query.value, catalogSuggestions(props.catalog)),
 );
@@ -103,11 +94,13 @@ const syncWithDisk = ref(false);
 
 const hasAnnotations = ref(false);
 
-const loading = ref(true);
+const loading = ref(false);
 
 const saving = ref(false);
 
 const error = ref("");
+
+const needsReload = ref(false);
 
 const acknowledged = ref(false);
 
@@ -119,8 +112,29 @@ let disposed = false;
 
 let trigger: HTMLElement | null = null;
 
+const { trapFocus } = useFocusTrap(dialog);
+
+const {
+  searchFocused,
+  suggestionIndex,
+  chooseSearchSuggestion,
+  searchKeydown,
+} = useSearchSuggestions(
+  query,
+  suggestions,
+  chooseSuggestion,
+  commitSearch,
+  searchInput,
+);
+
 async function load(append = false) {
-  if (saving.value || !source.value) return;
+  if (
+    saving.value ||
+    needsReload.value ||
+    !source.value ||
+    (append && loading.value)
+  )
+    return;
 
   const request = ++version;
 
@@ -156,6 +170,13 @@ async function load(append = false) {
 }
 
 async function reload() {
+  if (loading.value || saving.value) return;
+
+  const request = ++version;
+
+  source.value = null;
+  files.value = [];
+  cursor.value = null;
   selected.value = null;
   acknowledged.value = false;
   loading.value = true;
@@ -168,24 +189,24 @@ async function reload() {
       hasAnnotations: boolean;
     }>("get_replacement_source", { id: props.item.nativeId });
 
-    if (disposed) return;
+    if (disposed || request !== version) return;
 
     source.value = choice(result.file);
     syncWithDisk.value = result.syncWithDisk;
     hasAnnotations.value = result.hasAnnotations;
+    needsReload.value = false;
     await load();
   } catch (cause) {
-    if (!disposed) error.value = String(cause);
-  } finally {
-    if (!disposed) loading.value = false;
+    if (!disposed && request === version) {
+      error.value = String(cause);
+      loading.value = false;
+    }
   }
 }
 
-watch(query, () => {
-  suggestionIndex.value = -1;
-});
-
 function commitSearch() {
+  if (saving.value || needsReload.value) return;
+
   query.value = normalizeMetadataSearch(query.value);
   appliedQuery.value = query.value;
   searchFocused.value = false;
@@ -199,36 +220,11 @@ function chooseSuggestion(name: string) {
   commitSearch();
 }
 
-function searchKeydown(event: KeyboardEvent) {
-  if (event.key === "Escape" && searchFocused.value) {
-    event.stopPropagation();
-    searchFocused.value = false;
-  } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-    event.preventDefault();
-
-    const count = suggestions.value.length;
-
-    suggestionIndex.value = count
-      ? (suggestionIndex.value + (event.key === "ArrowDown" ? 1 : -1) + count) %
-        count
-      : -1;
-    searchFocused.value = true;
-  } else if (event.key === "Enter") {
-    event.preventDefault();
-
-    const suggestion = searchFocused.value
-      ? suggestions.value[suggestionIndex.value]
-      : undefined;
-
-    if (suggestion) chooseSuggestion(suggestion.name);
-    else commitSearch();
-  }
-}
-
 function select(file: Choice) {
+  if (busy.value || needsReload.value) return;
+
   selected.value = file;
   acknowledged.value = false;
-  error.value = "";
 }
 
 async function save() {
@@ -237,7 +233,8 @@ async function save() {
     !selected.value ||
     busy.value ||
     !acknowledged.value ||
-    error.value
+    error.value ||
+    needsReload.value
   )
     return;
 
@@ -256,6 +253,7 @@ async function save() {
     emit("replaced");
     emit("close");
   } catch (cause) {
+    needsReload.value = true;
     error.value = `${String(cause)}. If replacement already started, Retry disk synchronization completes recovery before further file actions.`;
   } finally {
     saving.value = false;
@@ -269,25 +267,7 @@ function keyboard(event: KeyboardEvent) {
     if (!saving.value) emit("close");
   }
 
-  if (event.key !== "Tab") return;
-
-  const controls = [
-    ...(dialog.value?.querySelectorAll<HTMLElement>(
-      "button:not(:disabled), input:not(:disabled), [tabindex='0']",
-    ) ?? []),
-  ];
-
-  const first = controls[0];
-
-  const last = controls[controls.length - 1];
-
-  if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault();
-    last?.focus();
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault();
-    first?.focus();
-  }
+  trapFocus(event);
 }
 
 onMounted(async () => {
@@ -305,7 +285,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   disposed = true;
   ++version;
-  trigger?.focus();
+  if (trigger?.isConnected) trigger.focus();
 });
 </script>
 
@@ -316,6 +296,7 @@ onBeforeUnmount(() => {
         ref="dialog"
         class="replacement-dialog"
         role="dialog"
+        tabindex="-1"
         aria-modal="true"
         aria-labelledby="replacement-title"
         :aria-busy="busy"
@@ -410,7 +391,7 @@ onBeforeUnmount(() => {
                   :aria-selected="suggestionIndex === index"
                   :class="{ active: suggestionIndex === index }"
                   @mousedown.prevent
-                  @click="chooseSuggestion(suggestion.name)"
+                  @click="chooseSearchSuggestion(suggestion.name)"
                 >
                   <span
                     >{{ suggestion.name
@@ -434,7 +415,7 @@ onBeforeUnmount(() => {
                 :key="file.item.id"
                 type="button"
                 class="candidate-button"
-                :disabled="busy"
+                :disabled="busy || needsReload"
                 @click="select(file)"
               >
                 <ReplacementFile
