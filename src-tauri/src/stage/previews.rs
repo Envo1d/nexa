@@ -87,6 +87,22 @@ pub(super) fn checked_preview_path(
     Ok(path)
 }
 
+pub(super) async fn preview_permit(
+    state: &StageState,
+) -> Result<tokio::sync::OwnedSemaphorePermit, String> {
+    tracing::debug!("Waiting for preview worker availability");
+
+    state
+        .preview_slots
+        .clone()
+        .acquire_owned()
+        .await
+        .map_err(|error| {
+            tracing::error!(%error, "Preview worker pool unavailable");
+            "Preview workers unavailable".to_string()
+        })
+}
+
 #[tauri::command]
 #[tracing::instrument(level = "debug", skip_all)]
 pub async fn get_stage_preview(
@@ -97,11 +113,8 @@ pub async fn get_stage_preview(
 ) -> Result<tauri::ipc::Response, String> {
     let id = id.parse::<i64>().map_err(|_| "Invalid media ID")?;
 
-    let permit = state
-        .preview_slots
-        .clone()
-        .try_acquire_owned()
-        .map_err(|_| "Preview workers busy")?;
+    // Maintenance temporarily owns both permits; contention is not a failed preview.
+    let permit = preview_permit(&state).await?;
 
     let row = sqlx::query(concat!(
         "SELECT s.root_path,m.relative_path,m.file_revision FROM media m JOIN sources s ON ",

@@ -661,3 +661,27 @@ test("windowed range arrows, text editing and modified shortcuts retain their na
     for (const unmount of fixture.hooks.unmounted) unmount();
   }
 });
+
+test("speed listbox owns Space, arrows, Escape and typeahead without changing playback", async () => {
+  const fixture = await playerFixture();
+
+  const { module } = fixture;
+
+  try {
+    for (const key of [" ", "ArrowRight", "ArrowDown", "Escape", "f", "m", "t", "k"]) {
+      const event = keyEvent(key);
+
+      event.target = { closest: (selector) => selector.includes("[role='listbox']") ? {} : null };
+      module.keyboard(event);
+      assert.equal(event.defaultPrevented, false, `${key} belongs to the listbox`);
+    }
+
+    assert.equal(module.video.value.paused, true);
+    assert.equal(module.video.value.currentTime, 10);
+    assert.equal(module.video.value.muted, false);
+    assert.equal(module.diagnostics.value, false);
+    assert.equal(module.fullscreen.value, false);
+  } finally {
+    for (const unmount of fixture.hooks.unmounted) unmount();
+  }
+});
