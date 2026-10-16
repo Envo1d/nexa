@@ -10,6 +10,47 @@ use crate::media_metadata::FrameRate;
 use crate::media_paths::checked_action_path;
 use crate::{database::Database, media_metadata::MediaMetadata};
 
+#[tokio::test]
+async fn preview_requests_wait_for_maintenance_and_remain_bounded() {
+    use std::{future::Future, task::Context, task::Poll, task::Waker};
+
+    let temp = tempfile::tempdir().unwrap();
+
+    let state = StageState::new(temp.path().join("cache"));
+
+    let maintenance = state
+        .preview_slots
+        .clone()
+        .acquire_many_owned(2)
+        .await
+        .unwrap();
+
+    let mut preview = std::pin::pin!(super::previews::preview_permit(&state));
+
+    let mut context = Context::from_waker(Waker::noop());
+
+    assert!(preview.as_mut().poll(&mut context).is_pending());
+    drop(maintenance);
+
+    let first = preview.await.unwrap();
+
+    let second = super::previews::preview_permit(&state).await.unwrap();
+
+    let mut queued = std::pin::pin!(super::previews::preview_permit(&state));
+
+    assert!(queued.as_mut().poll(&mut context).is_pending());
+    drop(first);
+    assert!(matches!(
+        queued.as_mut().poll(&mut context),
+        Poll::Ready(Ok(_))
+    ));
+    drop(second);
+    assert_eq!(state.preview_slots.available_permits(), 2);
+
+    state.preview_slots.close();
+    assert!(super::previews::preview_permit(&state).await.is_err());
+}
+
 #[test]
 fn file_actions_reject_escaping_missing_and_non_file_paths() {
     let temp = tempfile::tempdir().unwrap();

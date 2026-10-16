@@ -379,7 +379,7 @@ function keyboard(event: KeyboardEvent) {
 
   if (
     target.closest(
-      "input:not([type='range']), textarea, [contenteditable='true']",
+      "input:not([type='range']), textarea, select, [role='listbox'], [contenteditable='true']",
     )
   )
     return;
