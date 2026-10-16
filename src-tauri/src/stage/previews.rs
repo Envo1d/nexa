@@ -5,11 +5,69 @@ use std::{
     sync::atomic::Ordering,
 };
 
+use serde::Serialize;
 use sqlx::Row;
 use tauri::Emitter;
 
 use super::{CACHE_MAX_BYTES, CacheStatus, StageState, inspect};
 use crate::{database::Database, media_paths::checked_action_path, preview_cache::PreviewOrigin};
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CacheClearResult {
+    usage: CacheStatus,
+    failed_removals: u64,
+}
+
+#[tauri::command]
+#[tracing::instrument(skip_all)]
+pub async fn clear_thumbnail_cache(
+    state: tauri::State<'_, StageState>,
+) -> Result<CacheClearResult, String> {
+    tracing::info!("Thumbnail cache cleanup requested");
+
+    // Drain both bounded preview workers before maintenance; new previews resume afterward.
+    let permit = state
+        .preview_slots
+        .clone()
+        .acquire_many_owned(2)
+        .await
+        .map_err(|error| {
+            tracing::error!(%error, "Thumbnail cache cleanup could not acquire workers");
+            "Could not start thumbnail cache cleanup".to_string()
+        })?;
+
+    let cache = state.cache.clone();
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let _permit = permit;
+
+        // PreviewCache owns maintenance failure logging and strict filename confinement.
+        let report = cache
+            .clear()
+            .map_err(|_| "Could not clear thumbnail cache".to_string())?;
+
+        tracing::info!(
+            removed_entries = report.removed.entries,
+            remaining_bytes = report.remaining.bytes,
+            failed_removals = report.failed_removals,
+            "Thumbnail cache cleanup finished"
+        );
+
+        Ok(CacheClearResult {
+            usage: CacheStatus {
+                bytes: report.remaining.bytes,
+                max_bytes: CACHE_MAX_BYTES,
+            },
+            failed_removals: report.failed_removals,
+        })
+    })
+    .await
+    .map_err(|error| {
+        tracing::error!(%error, "Thumbnail cache cleanup worker failed");
+        "Thumbnail cache cleanup worker failed".to_string()
+    })?
+}
 
 pub(super) fn checked_preview_path(
     root: &Path,

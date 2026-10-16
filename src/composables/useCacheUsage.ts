@@ -7,11 +7,20 @@ interface CacheStatus {
   maxBytes: number;
 }
 
+interface CacheClearResult {
+  usage: CacheStatus;
+  failedRemovals: number;
+}
+
 const status = ref<CacheStatus | null>(null);
 
 const error = ref("");
 
 const limitReached = ref(false);
+
+const clearing = ref(false);
+
+let generation = 0;
 
 const label = computed(() =>
   status.value
@@ -31,6 +40,26 @@ const pressure = computed(() =>
 );
 
 export function useCacheUsage() {
+  async function clear() {
+    if (!isTauri() || clearing.value) return;
+
+    clearing.value = true;
+    generation += 1;
+
+    try {
+      const result = await invoke<CacheClearResult>("clear_thumbnail_cache");
+
+      status.value = result.usage;
+      error.value = "";
+      limitReached.value = result.usage.bytes >= result.usage.maxBytes;
+
+      return result;
+    } finally {
+      generation += 1;
+      clearing.value = false;
+    }
+  }
+
   async function connect(notify: (message: string) => void) {
     if (!isTauri()) return () => {};
 
@@ -54,10 +83,14 @@ export function useCacheUsage() {
     );
 
     async function refresh() {
+      if (clearing.value) return;
+
+      const requestedGeneration = generation;
+
       try {
         const snapshot = await invoke<CacheStatus>("get_cache_usage");
 
-        if (stopped) return;
+        if (stopped || requestedGeneration !== generation) return;
 
         status.value = snapshot;
         error.value = "";
@@ -69,7 +102,7 @@ export function useCacheUsage() {
           if (snapshot.bytes < snapshot.maxBytes * 0.9) alerted = false;
         }
       } catch {
-        if (stopped) return;
+        if (stopped || requestedGeneration !== generation) return;
 
         status.value = null;
         error.value = "Could not measure thumbnail cache. Retrying…";
@@ -95,5 +128,5 @@ export function useCacheUsage() {
     };
   }
 
-  return { status, label, pressure, error, connect };
+  return { status, label, pressure, error, clearing, clear, connect };
 }

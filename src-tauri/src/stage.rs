@@ -27,7 +27,9 @@ pub use file_actions::{
     __cmd__stage_file_action, __tauri_command_name_stage_file_action, stage_file_action,
 };
 pub use previews::{
-    __cmd__get_stage_preview, __tauri_command_name_get_stage_preview, get_stage_preview,
+    __cmd__clear_thumbnail_cache, __cmd__get_stage_preview,
+    __tauri_command_name_clear_thumbnail_cache, __tauri_command_name_get_stage_preview,
+    clear_thumbnail_cache, get_stage_preview,
 };
 pub(crate) use queries::stage_file;
 pub use queries::{
