@@ -110,6 +110,11 @@ svg {
 .app-shell.system-window-corners {
   border-radius: 0;
 }
+
+body:has(.nexa-video-player:fullscreen) .app-shell {
+  visibility: hidden;
+}
+
 .titlebar {
   position: relative;
   height: 54px;

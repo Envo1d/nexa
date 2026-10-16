@@ -8,6 +8,7 @@ import AppIcon from "./components/AppIcon.vue";
 import ToggleSwitch from "./components/ToggleSwitch.vue";
 import SortSelect from "./components/SortSelect.vue";
 import MediaCollection from "./components/MediaCollection.vue";
+import MediaViewer from "./components/MediaViewer.vue";
 import FileDetails from "./components/FileDetails.vue";
 import CardContextMenu from "./components/CardContextMenu.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
@@ -28,6 +29,17 @@ const tagInput = useTemplateRef<HTMLInputElement>("tagInput");
 const modalElement = useTemplateRef<HTMLElement>("modalElement");
 
 const {
+  viewerOpen,
+  viewerItem,
+  viewerStage,
+  viewerIndex,
+  viewerTotal,
+  viewerHasNext,
+  viewerPaging,
+  viewerError,
+  closeViewer,
+  moveViewer,
+  viewerAnnotations,
   diskSync,
   retryDiskSync,
   library,
@@ -101,6 +113,7 @@ const {
 <template>
   <div
     class="app-shell"
+    :inert="viewerOpen || undefined"
     :class="{ maximized, 'system-window-corners': systemWindowCorners }"
   >
     <header class="titlebar">
@@ -593,6 +606,20 @@ const {
           </button></div
       ></Transition>
     </div>
+    <MediaViewer
+      v-if="viewerOpen && viewerItem"
+      :item="viewerItem"
+      :stage="viewerStage"
+      :index="viewerIndex"
+      :total="viewerTotal"
+      :has-next="viewerHasNext"
+      :paging="viewerPaging"
+      :paging-error="viewerError"
+      @close="closeViewer"
+      @move="moveViewer"
+      @annotations="viewerAnnotations"
+      @external="stageFileAction('Open file', [$event], !viewerStage)"
+    />
     <CardContextMenu
       v-if="context"
       :item="context.item"

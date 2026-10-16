@@ -287,6 +287,11 @@ pub async fn get_library_files(
     database: tauri::State<'_, Database>,
     config: tauri::State<'_, ConfigStore>,
 ) -> Result<Page, String> {
+    configure_stage_prefix(&mut filters, &config)?;
+    browse(database.pool(), configured_root(&config)?, filters).await
+}
+
+fn configure_stage_prefix(filters: &mut Filters, config: &ConfigStore) -> Result<(), String> {
     filters.stage_prefix = config.snapshot()?.settings.staging_path.map(|p| {
         format!(
             "{}/",
@@ -297,5 +302,48 @@ pub async fn get_library_files(
                 .trim_end_matches('/')
         )
     });
-    browse(database.pool(), configured_root(&config)?, filters).await
+    Ok(())
+}
+
+pub(crate) async fn viewer_sequence(
+    pool: &SqlitePool,
+    config: &ConfigStore,
+    mut filters: Filters,
+) -> Result<Vec<stage::ViewerEntry>, String> {
+    if !matches!(filters.scope.as_str(), "gallery" | "favorites")
+        || !matches!(filters.kind.as_str(), "all" | "image" | "video")
+        || !matches!(
+            filters.sort.as_str(),
+            "newest" | "older" | "name-asc" | "name-desc"
+        )
+    {
+        return Err("Invalid Library filters".into());
+    }
+
+    configure_stage_prefix(&mut filters, config)?;
+    capture_viewer_sequence(pool, configured_root(config)?, filters).await
+}
+
+pub(super) async fn capture_viewer_sequence(
+    pool: &SqlitePool,
+    root: Option<String>,
+    filters: Filters,
+) -> Result<Vec<stage::ViewerEntry>, String> {
+    let mut q = filtered(
+        &root,
+        &filters,
+        "SELECT m.id,m.relative_path,m.kind,m.extension",
+    );
+    q.push(match filters.sort.as_str() {
+        "older" => " ORDER BY m.file_modified_at ASC,m.id ASC",
+        "name-asc" => " ORDER BY m.relative_path COLLATE NEXA_FILENAME ASC,m.id ASC",
+        "name-desc" => " ORDER BY m.relative_path COLLATE NEXA_FILENAME DESC,m.id ASC",
+        _ => " ORDER BY m.file_modified_at DESC,m.id ASC",
+    });
+
+    q.build()
+        .fetch_all(pool)
+        .await
+        .map(|rows| rows.into_iter().map(stage::ViewerEntry::from_row).collect())
+        .map_err(|_| "Cannot read viewer sequence".into())
 }

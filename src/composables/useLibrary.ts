@@ -381,6 +381,7 @@ export function useLibrary() {
     media,
     scope,
     search,
+    appliedSearch,
     kind,
     sortMode,
     suggestions,

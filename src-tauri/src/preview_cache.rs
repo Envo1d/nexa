@@ -11,7 +11,7 @@ use std::{
 };
 
 use image::{ImageFormat, ImageReader, Limits, RgbImage};
-use twox_hash::XxHash3_128;
+use sha2::{Digest, Sha256};
 
 use crate::media_thumbnail::{MAX_THUMBNAIL_EDGE, ThumbnailError, get_thumbnail};
 
@@ -77,24 +77,31 @@ impl CacheKey {
     }
 
     fn new(path: &Path, revision: Revision, size: u32) -> Result<Self, CacheError> {
-        let mut hash = XxHash3_128::with_seed(0);
-        hash.write(b"nexa-preview-v3-xxh3-128-rgb-libwebp-lossless-quality75");
+        let mut hash = Sha256::new();
+        hash.update(b"nexa-preview-v4-sha256-rgb-libwebp-lossless-quality75");
 
         let bytes = path.as_os_str().as_encoded_bytes();
-        hash.write(&(bytes.len() as u64).to_le_bytes());
-        hash.write(bytes);
-        hash.write(&size.to_le_bytes());
-        hash.write(&revision.length.to_le_bytes());
+        hash.update((bytes.len() as u64).to_le_bytes());
+        hash.update(bytes);
+        hash.update(size.to_le_bytes());
+        hash.update(revision.length.to_le_bytes());
 
         let (negative, duration) = match revision.modified.duration_since(UNIX_EPOCH) {
             Ok(duration) => (0u8, duration),
             Err(error) => (1u8, error.duration()),
         };
-        hash.write(&[negative]);
-        hash.write(&duration.as_secs().to_le_bytes());
-        hash.write(&duration.subsec_nanos().to_le_bytes());
+        hash.update([negative]);
+        hash.update(duration.as_secs().to_le_bytes());
+        hash.update(duration.subsec_nanos().to_le_bytes());
+
+        let digest: String = hash
+            .finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
+
         Ok(Self {
-            filename: format!("v3-{:032x}.webp", hash.finish_128()),
+            filename: format!("v4-{digest}.webp"),
             revision,
             size,
         })
@@ -438,6 +445,7 @@ impl PreviewCache {
                 .or_else(|| name.strip_prefix("v2-"))
                 .map(|hash| (hash, 64))
                 .or_else(|| name.strip_prefix("v3-").map(|hash| (hash, 32)))
+                .or_else(|| name.strip_prefix("v4-").map(|hash| (hash, 64)))
                 .and_then(|(hash, length)| hash.strip_suffix(".webp").map(|hash| (hash, length)))
             else {
                 continue;

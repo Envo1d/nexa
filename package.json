@@ -1,7 +1,7 @@
 {
   "name": "nexa",
   "private": true,
-  "version": "2.5.0",
+  "version": "2.6.0",
   "type": "module",
   "scripts": {
     "build:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-windows.ps1",
@@ -13,7 +13,8 @@
     "format:check": "prettier --check \"src/**/*.{vue,ts,js,json,css,scss,less}\" index.html update.html vite.config.ts eslint.config.js package.json .prettierrc.json tsconfig.json tsconfig.node.json",
     "check:ui": "npm run format && npm run lint && npm run format:check && npm run build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "tauri:video-diagnostics": "node scripts/dev-video-diagnostics.mjs"
   },
   "dependencies": {
     "@lucide/vue": "^1.52.0",

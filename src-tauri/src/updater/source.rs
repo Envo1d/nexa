@@ -168,7 +168,11 @@ pub(super) fn verify_package(path: &Path, asset: &VelopackAsset) -> Result<(), E
         hash.update(&buffer[..count]);
     }
 
-    let actual = format!("{:x}", hash.finalize());
+    let actual: String = hash
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
 
     if !actual.eq_ignore_ascii_case(&asset.SHA256) {
         return Err(invalid("Cached package SHA-256 does not match signed feed"));

@@ -3,6 +3,8 @@
 mod metadata;
 mod queries;
 
+pub(crate) use metadata::write_tags;
+
 pub use metadata::{
     __cmd__distribute_files, __cmd__save_library_metadata, __cmd__save_library_tags,
     __cmd__set_library_favorite, __tauri_command_name_distribute_files,
@@ -11,6 +13,7 @@ pub use metadata::{
     save_library_tags, set_library_favorite,
 };
 pub(crate) use queries::apply_metadata_search;
+pub(crate) use queries::viewer_sequence;
 pub use queries::{
     __cmd__get_library_files, __tauri_command_name_get_library_files, get_library_files,
 };

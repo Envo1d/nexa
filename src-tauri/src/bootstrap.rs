@@ -108,7 +108,11 @@ pub fn run() {
             stage::get_stage_files,
             stage::stage_file_action,
             stage::get_cache_usage,
-            stage::get_stage_preview
+            stage::get_stage_preview,
+            stage::get_viewer_source,
+            stage::set_viewer_fullscreen,
+            stage::get_viewer_sequence,
+            stage::save_viewer_annotations
         ])
         .build(tauri::generate_context!());
 
@@ -145,9 +149,25 @@ pub fn run() {
 
 fn setup(app: &mut tauri::App, paths: config::AppPaths) -> Result<(), Box<dyn std::error::Error>> {
     use tauri::Manager;
+
     #[cfg(desktop)]
     use tauri_plugin_window_state::{StateFlags, WindowExt};
 
+    let video_overlay_diagnostics = app.config().app.windows.iter().any(|window| {
+        window
+            .additional_browser_args
+            .as_deref()
+            .is_some_and(|args| {
+                args.split_ascii_whitespace()
+                    .any(|argument| argument == "--disable_direct_composition_video_overlays=1")
+            })
+    });
+
+    if video_overlay_diagnostics {
+        tracing::info!(
+            "Diagnostic WebView video overlay workaround requested; runtime performance remains unverified"
+        );
+    }
     #[cfg(desktop)]
     {
         let _span = tracing::info_span!("restore_window_state", window = "main").entered();
@@ -180,6 +200,7 @@ fn setup(app: &mut tauri::App, paths: config::AppPaths) -> Result<(), Box<dyn st
     app.manage(store);
     app.manage(database);
     app.manage(stage::StageState::new(cache_path));
+    app.manage(stage::ViewerFullscreenState::default());
     app.manage(legacy_import::ImportState::default());
     app.manage(disk_sync::SyncState::default());
 

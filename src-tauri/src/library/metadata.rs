@@ -67,7 +67,7 @@ pub struct Draft {
     pub(super) video_title: String,
 }
 
-async fn write_tags(
+pub(crate) async fn write_tags(
     tx: &mut sqlx::Transaction<'_, Sqlite>,
     id: i64,
     tags: &[String],

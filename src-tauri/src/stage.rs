@@ -4,6 +4,8 @@ mod file_actions;
 mod previews;
 mod queries;
 mod scanning;
+mod viewing;
+
 pub(crate) use scanning::activate_source_for;
 pub use scanning::{
     __cmd__get_stage_scan_status, __cmd__start_library_scan, __cmd__start_stage_scan,
@@ -11,6 +13,15 @@ pub use scanning::{
     __tauri_command_name_start_stage_scan, get_stage_scan_status, launch_sources,
     start_library_scan, start_stage_scan,
 };
+pub use viewing::{
+    __cmd__get_viewer_sequence, __cmd__get_viewer_source, __cmd__save_viewer_annotations,
+    __cmd__set_viewer_fullscreen, __tauri_command_name_get_viewer_sequence,
+    __tauri_command_name_get_viewer_source, __tauri_command_name_save_viewer_annotations,
+    __tauri_command_name_set_viewer_fullscreen, ViewerFullscreenState, get_viewer_sequence,
+    get_viewer_source, save_viewer_annotations, set_viewer_fullscreen,
+};
+
+pub(crate) use viewing::ViewerEntry;
 
 pub use file_actions::{
     __cmd__stage_file_action, __tauri_command_name_stage_file_action, stage_file_action,
