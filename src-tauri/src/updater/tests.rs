@@ -12,7 +12,10 @@ fn asset(bytes: &[u8]) -> VelopackAsset {
         Version: "2.2.1".into(),
         Type: "Full".into(),
         FileName: "Nexa-2.2.1-full.nupkg".into(),
-        SHA256: format!("{:x}", Sha256::digest(bytes)),
+        SHA256: Sha256::digest(bytes)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect(),
         Size: bytes.len() as u64,
         ..Default::default()
     }

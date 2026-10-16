@@ -83,6 +83,68 @@ fn draft() -> Draft {
 }
 
 #[tokio::test]
+async fn viewer_order_matches_filters_beyond_one_page_and_survives_annotation_changes() {
+    use super::queries::capture_viewer_sequence;
+
+    let (_temp, db, root) = fixture().await;
+
+    let sequence = capture_viewer_sequence(db.pool(), Some(root.clone()), filters())
+        .await
+        .unwrap();
+
+    let captured = serde_json::to_value(&sequence).unwrap();
+    assert_eq!(sequence.len(), 501);
+    assert_eq!(captured[0]["id"], "501");
+    assert_eq!(captured[500]["id"], "1");
+
+    for sort in ["older", "name-asc", "name-desc"] {
+        let mut query = filters();
+        query.sort = sort.into();
+
+        let sequence = capture_viewer_sequence(db.pool(), Some(root.clone()), query)
+            .await
+            .unwrap();
+        let captured = serde_json::to_value(&sequence).unwrap();
+
+        let mut query = filters();
+        query.sort = sort.into();
+
+        let page = browse(db.pool(), Some(root.clone()), query).await.unwrap();
+        assert_eq!(captured[0]["id"], page.files[0].technical.id);
+        assert_eq!(captured[499]["id"], page.files[499].technical.id);
+    }
+
+    let mut query = filters();
+    query.scope = "favorites".into();
+
+    let favorites = capture_viewer_sequence(db.pool(), Some(root.clone()), query)
+        .await
+        .unwrap();
+    assert_eq!(favorites.len(), 1);
+    assert_eq!(serde_json::to_value(&favorites).unwrap()[0]["id"], "2");
+    sqlx::query("UPDATE media SET favorite=0 WHERE id=2")
+        .execute(db.pool())
+        .await
+        .unwrap();
+    assert_eq!(serde_json::to_value(&favorites).unwrap()[0]["id"], "2");
+
+    save(db.pool(), Some(root.clone()), vec!["1".into()], draft())
+        .await
+        .unwrap();
+
+    let mut query = filters();
+    query.search = "café; STRASSE".into();
+    query.tagged = true;
+
+    let matched = capture_viewer_sequence(db.pool(), Some(root), query)
+        .await
+        .unwrap();
+    assert_eq!(matched.len(), 1);
+    assert_eq!(serde_json::to_value(&matched).unwrap()[0]["id"], "1");
+    db.close().await;
+}
+
+#[tokio::test]
 async fn nested_stage_is_hidden_from_main_files_counts_favorites_and_tags_before_rescan() {
     let (_temp, db, root) = fixture().await;
     sqlx::query(concat!(

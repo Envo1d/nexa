@@ -44,7 +44,7 @@ fn lossless_encoding_preserves_varied_rgb_pixels() {
 }
 
 #[test]
-fn keys_are_deterministic_full_width_xxh3_and_maintenance_owns_all_versions() {
+fn keys_are_deterministic_full_width_sha256_and_maintenance_owns_all_versions() {
     let (_temporary, source, cache) = fixture();
 
     let key = CacheKey::from_source(&source, 32).unwrap();
@@ -52,8 +52,8 @@ fn keys_are_deterministic_full_width_xxh3_and_maintenance_owns_all_versions() {
         key.filename,
         CacheKey::from_source(&source, 32).unwrap().filename
     );
-    assert!(key.filename.starts_with("v3-"));
-    assert_eq!(key.filename.len(), 3 + 32 + 5);
+    assert!(key.filename.starts_with("v4-"));
+    assert_eq!(key.filename.len(), 3 + 64 + 5);
     cache.load_with(&source, 32, pixels).unwrap();
 
     for version in ["v1", "v2"] {
@@ -66,18 +66,25 @@ fn keys_are_deterministic_full_width_xxh3_and_maintenance_owns_all_versions() {
         .unwrap();
     }
 
+    fs::write(
+        cache.root.join(format!("v3-{}.webp", "a".repeat(32))),
+        b"old",
+    )
+    .unwrap();
+
     let unrelated = [
         format!("v3-{}.webp", "b".repeat(64)),
         format!("v2-{}.webp", "b".repeat(32)),
         format!("v3-{}.webp", "G".repeat(32)),
         format!("v4-{}.webp", "b".repeat(32)),
+        format!("v5-{}.webp", "b".repeat(64)),
     ];
 
     for name in &unrelated {
         fs::write(cache.root.join(name), b"keep").unwrap();
     }
-    assert_eq!(cache.usage().unwrap().entries, 3);
-    assert_eq!(cache.clear().unwrap().removed.entries, 3);
+    assert_eq!(cache.usage().unwrap().entries, 4);
+    assert_eq!(cache.clear().unwrap().removed.entries, 4);
 
     for name in unrelated {
         assert!(cache.root.join(name).exists());

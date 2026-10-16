@@ -185,6 +185,7 @@ export function useStage() {
     loadMore,
     refreshRedistribution,
     search,
+    appliedSearch,
     results,
     clearSearch,
     ...selection,

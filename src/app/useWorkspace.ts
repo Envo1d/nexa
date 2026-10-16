@@ -21,6 +21,7 @@ import { useModalFocus } from "../shared/composables/useModalFocus";
 import { useFileActions } from "../features/media/useFileActions";
 import { useMetadataEditing } from "../features/media/useMetadataEditing";
 import { useTagEditor } from "../features/media/useTagEditor";
+import { useMediaViewer } from "../features/media/useMediaViewer";
 import { useDesktopServices } from "./useDesktopServices";
 import { useWindowChrome } from "./useWindowChrome";
 
@@ -40,6 +41,8 @@ export function useWorkspace(elements: WorkspaceElements) {
   const library = useLibrary();
 
   const stage = useStage();
+
+  const viewer = useMediaViewer(library, stage);
 
   const { diskSync, retryDiskSync } = useDesktopServices(refreshAll, notify);
 
@@ -300,6 +303,13 @@ export function useWorkspace(elements: WorkspaceElements) {
   }
 
   async function previewAction(action: string, item: MediaItem) {
+    if (action === "Open" || action === "Open file") {
+      closeContext();
+      viewer.openViewer(item, view.value === "stage");
+
+      return;
+    }
+
     if (action === "Distribute" && view.value === "stage") {
       distribute(item);
 
@@ -358,6 +368,7 @@ export function useWorkspace(elements: WorkspaceElements) {
   function keyboard(event: KeyboardEvent) {
     if (
       event.defaultPrevented ||
+      viewer.viewerOpen.value ||
       deletionRequest.value ||
       replacementTarget.value
     )
@@ -411,6 +422,7 @@ export function useWorkspace(elements: WorkspaceElements) {
   });
 
   return {
+    ...viewer,
     diskSync,
     retryDiskSync,
     library,

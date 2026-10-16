@@ -57,10 +57,10 @@ pub(super) fn validate_selection(
 
 #[derive(sqlx::FromRow)]
 pub(super) struct ActionFile {
-    root_path: String,
+    pub(super) root_path: String,
     kind: String,
-    relative_path: String,
-    file_revision: Option<String>,
+    pub(super) relative_path: String,
+    pub(super) file_revision: Option<String>,
     needs_distribution: i64,
     library_assignment: Option<String>,
 }

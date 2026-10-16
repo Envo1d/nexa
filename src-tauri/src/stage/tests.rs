@@ -192,6 +192,148 @@ async fn fixture() -> (tempfile::TempDir, Database, PathBuf) {
     (temp, db, root)
 }
 
+#[test]
+fn viewer_rejects_escaping_missing_and_changed_originals() {
+    use super::viewing::checked_viewer_path;
+
+    let temp = tempfile::tempdir().unwrap();
+
+    let root = temp.path().join("Stage");
+    std::fs::create_dir(&root).unwrap();
+
+    let path = root.join("photo.bmp");
+    write_bmp(&path, 2);
+
+    let revision = inspect(path.clone(), &root).unwrap().unwrap().revision;
+    assert_eq!(
+        checked_viewer_path(&root, "photo.bmp", Some(&revision)).unwrap(),
+        path
+    );
+    assert!(checked_viewer_path(&root, "../outside.bmp", None).is_err());
+    assert!(checked_viewer_path(&root, "missing.bmp", None).is_err());
+    write_bmp(&path, 5);
+    assert!(checked_viewer_path(&root, "photo.bmp", Some(&revision)).is_err());
+    assert!(checked_viewer_path(&root, "photo.bmp", None).is_ok());
+}
+
+#[tokio::test]
+async fn viewer_annotations_preserve_other_fields_and_rollback_invalid_tags() {
+    use super::viewing::save_annotations;
+
+    let (_temp, db, root) = fixture().await;
+
+    let source = activate_source(db.pool(), &root, 1).await.unwrap();
+    save_batch(db.pool(), source, 1, vec![prepared(&root, "photo.bmp", 10)])
+        .await
+        .unwrap();
+
+    let id: i64 = sqlx::query_scalar("SELECT id FROM media")
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+
+    let tags = vec!["Travel".into(), "travel".into(), "日本".into()];
+    save_annotations(db.pool(), Some(&root), false, id, Some(true), Some(&tags))
+        .await
+        .unwrap();
+    assert!(
+        sqlx::query_scalar::<_, bool>("SELECT favorite FROM media WHERE id=?")
+            .bind(id)
+            .fetch_one(db.pool())
+            .await
+            .unwrap()
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM media_tags WHERE media_id=?")
+            .bind(id)
+            .fetch_one(db.pool())
+            .await
+            .unwrap(),
+        2
+    );
+
+    let invalid = vec!["Valid".into(), "\n".into()];
+    assert!(
+        save_annotations(
+            db.pool(),
+            Some(&root),
+            false,
+            id,
+            Some(false),
+            Some(&invalid)
+        )
+        .await
+        .is_err()
+    );
+    assert!(
+        sqlx::query_scalar::<_, bool>("SELECT favorite FROM media WHERE id=?")
+            .bind(id)
+            .fetch_one(db.pool())
+            .await
+            .unwrap()
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM media_tags WHERE media_id=?")
+            .bind(id)
+            .fetch_one(db.pool())
+            .await
+            .unwrap(),
+        2
+    );
+    assert!(
+        save_annotations(db.pool(), Some(&root), true, id, Some(false), None)
+            .await
+            .is_err()
+    );
+    assert!(
+        save_annotations(
+            db.pool(),
+            Some(&root),
+            false,
+            id,
+            None,
+            Some(&["x".repeat(25)])
+        )
+        .await
+        .is_err()
+    );
+
+    sqlx::query("UPDATE media SET library_assignment=? WHERE id=?")
+        .bind(root.to_str().unwrap())
+        .bind(id)
+        .execute(db.pool())
+        .await
+        .unwrap();
+    save_annotations(db.pool(), Some(&root), true, id, Some(false), None)
+        .await
+        .unwrap();
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM media_tags WHERE media_id=?")
+            .bind(id)
+            .fetch_one(db.pool())
+            .await
+            .unwrap(),
+        2
+    );
+    assert!(
+        save_annotations(db.pool(), Some(&root), false, id, Some(true), None)
+            .await
+            .is_err()
+    );
+
+    sqlx::query("UPDATE media SET availability='missing' WHERE id=?")
+        .bind(id)
+        .execute(db.pool())
+        .await
+        .unwrap();
+    assert!(
+        save_annotations(db.pool(), Some(&root), true, id, Some(true), None)
+            .await
+            .is_err()
+    );
+    db.close().await;
+}
+
 #[tokio::test]
 async fn retained_replacement_is_not_reindexed_until_its_revision_changes() {
     let (_temp, db, root) = fixture().await;
