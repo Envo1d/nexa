@@ -108,6 +108,7 @@ pub fn run() {
             stage::get_stage_files,
             stage::stage_file_action,
             stage::get_cache_usage,
+            stage::clear_thumbnail_cache,
             stage::get_stage_preview,
             stage::get_viewer_source,
             stage::set_viewer_fullscreen,

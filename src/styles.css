@@ -1808,7 +1808,7 @@ body:has(.nexa-video-player:fullscreen) .app-shell {
   z-index: 5;
   pointer-events: none;
   border: 1px solid var(--accent);
-  background: var(--accent-soft);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 .distribution-dialog {
   position: relative;

@@ -297,6 +297,38 @@ fn maintenance_is_oldest_first_and_preserves_unowned_entries() {
     assert!(cache.root.join(".temporary").exists());
 }
 
+#[cfg(windows)]
+#[test]
+fn clear_reports_locked_entries_and_succeeds_after_retry() {
+    use std::os::windows::fs::OpenOptionsExt;
+
+    let (_temporary, source, cache) = fixture();
+    cache.load_with(&source, 32, pixels).unwrap();
+    cache.load_with(&source, 64, pixels).unwrap();
+
+    let key = CacheKey::from_source(&source, 32).unwrap();
+
+    let locked = File::options()
+        .read(true)
+        .share_mode(0)
+        .open(cache.root.join(&key.filename))
+        .unwrap();
+
+    let report = cache.clear().unwrap();
+    assert_eq!(report.failed_removals, 1);
+    assert_eq!(report.removed.entries, 1);
+    assert_eq!(report.remaining.entries, 1);
+    assert!(report.remaining.bytes > 0);
+
+    drop(locked);
+
+    let report = cache.clear().unwrap();
+    assert_eq!(report.failed_removals, 0);
+    assert_eq!(report.removed.entries, 1);
+    assert_eq!(report.remaining, CacheUsage::default());
+    assert_eq!(cache.usage().unwrap(), CacheUsage::default());
+}
+
 #[test]
 fn shared_instance_serializes_concurrent_generation() {
     let (_temporary, source, cache) = fixture();

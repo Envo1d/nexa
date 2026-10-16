@@ -33,6 +33,30 @@ function answerUpdate(accepted: boolean) {
 
 const cacheUsage = useCacheUsage();
 
+const cacheMessage = ref("");
+
+async function clearCache() {
+  if (!native) {
+    emit("preview", t("clearCache"));
+
+    return;
+  }
+
+  cacheMessage.value = "";
+
+  try {
+    const result = await cacheUsage.clear();
+
+    if (result) {
+      cacheMessage.value = result.failedRemovals
+        ? t("cacheClearPartial", { count: result.failedRemovals })
+        : t("cacheCleared");
+    }
+  } catch {
+    cacheMessage.value = t("cacheClearError");
+  }
+}
+
 const stageScan = useStageScan();
 
 async function scanStage(library = false) {
@@ -552,11 +576,22 @@ function resetDrafts() {
                   :description="t('clearDescription')"
                   ><button
                     class="secondary-button"
-                    @click="$emit('preview', 'Clear thumbnail cache')"
+                    :disabled="cacheUsage.clearing.value"
+                    :aria-busy="cacheUsage.clearing.value"
+                    @click="clearCache"
                   >
-                    <AppIcon name="reset" :size="16" />{{ t("clearCache") }}
+                    <AppIcon name="reset" :size="16" />{{
+                      t(
+                        cacheUsage.clearing.value
+                          ? "clearingCache"
+                          : "clearCache",
+                      )
+                    }}
                   </button>
                 </SettingsRow>
+                <p v-if="cacheMessage" class="settings-notice" role="status">
+                  {{ cacheMessage }}
+                </p>
               </template>
               <SettingsRow
                 v-else-if="section.id === 'logs'"
