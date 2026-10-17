@@ -209,7 +209,7 @@ pub async fn stage_file_action(
         }
     }
 
-    if action == FileAction::Delete && !report.succeeded.is_empty() {
+    if library && action == FileAction::Delete && !report.succeeded.is_empty() {
         crate::disk_sync::request(&app);
     }
 

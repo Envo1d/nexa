@@ -1,4 +1,5 @@
 //! Serialized, restartable filesystem reconciliation. Never overwrite destinations.
+mod changes;
 mod moves;
 mod ordering;
 mod planning;
@@ -25,7 +26,7 @@ use sqlx::SqlitePool;
 use tauri::{Emitter, Manager};
 
 use crate::{
-    config::ConfigStore,
+    config::{AppConfig, ConfigStore},
     database::Database,
     naming::name_key,
     stage::{self, StageState},
@@ -43,6 +44,7 @@ pub struct Status {
 #[derive(Default)]
 pub struct SyncState {
     dirty: AtomicBool,
+    forced: AtomicBool,
     status: Mutex<Status>,
 }
 
@@ -63,6 +65,9 @@ pub fn get_disk_sync_status(state: tauri::State<'_, SyncState>) -> Result<Status
 
 #[tauri::command]
 pub fn retry_disk_sync(app: tauri::AppHandle) {
+    app.state::<SyncState>()
+        .forced
+        .store(true, Ordering::Release);
     request(&app);
 }
 
@@ -75,8 +80,10 @@ fn publish(app: &tauri::AppHandle, value: &Status) {
 }
 
 pub fn start(app: tauri::AppHandle) {
-    request(&app);
+    retry_disk_sync(app.clone());
     tauri::async_runtime::spawn(async move {
+        let mut previous_inputs = None;
+
         loop {
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
@@ -93,15 +100,52 @@ pub fn start(app: tauri::AppHandle) {
                 .dirty
                 .store(false, Ordering::Release);
 
+            let forced = app
+                .state::<SyncState>()
+                .forced
+                .swap(false, Ordering::AcqRel);
+
+            let preparation = async {
+                let settings = app.state::<ConfigStore>().snapshot()?.settings;
+
+                // Startup/Retry must reach journal recovery even if input inspection fails.
+                let inputs = if forced {
+                    None
+                } else {
+                    changes::Inputs::capture(app.state::<Database>().pool(), &settings).await?
+                };
+
+                Ok::<_, String>((settings, inputs))
+            }
+            .await;
+
+            if let Ok((_, inputs)) = &preparation
+                && !changes::Inputs::requires_sync(inputs, &previous_inputs, forced)
+            {
+                tracing::debug!("Disk reconciliation skipped; structure unchanged or disabled");
+                continue;
+            }
+
             let mut status = Status {
                 running: true,
                 ..Default::default()
             };
             publish(&app, &status);
 
-            tracing::info!("Disk reconciliation started");
+            tracing::info!(forced, "Disk reconciliation started");
 
-            let result = reconcile(&app, &mut status).await;
+            let result = async {
+                let (settings, inputs) = preparation?;
+                previous_inputs = inputs;
+                reconcile(&app, &mut status, &settings).await?;
+
+                // Our own moves change the stored paths. Remember the resulting state so
+                // the next unchanged scan does not invalidate this completed pass.
+                previous_inputs =
+                    changes::Inputs::capture(app.state::<Database>().pool(), &settings).await?;
+                Ok::<_, String>(())
+            }
+            .await;
             status.running = false;
 
             if let Err(error) = result {
@@ -250,14 +294,16 @@ pub(crate) fn equal_files(a: &Path, b: &Path) -> Result<bool, String> {
     }
 }
 
-async fn reconcile(app: &tauri::AppHandle, status: &mut Status) -> Result<(), String> {
+async fn reconcile(
+    app: &tauri::AppHandle,
+    status: &mut Status,
+    settings: &AppConfig,
+) -> Result<(), String> {
     let database = app.state::<Database>();
 
     let pool = database.pool();
     // Finish journaled work even when synchronization was disabled after publication.
     recover(pool).await?;
-
-    let settings = app.state::<ConfigStore>().snapshot()?.settings;
 
     if !settings.sync_structure {
         return Ok(());
@@ -276,8 +322,11 @@ async fn reconcile(app: &tauri::AppHandle, status: &mut Status) -> Result<(), St
 
     let source = stage::activate_source_for(pool, root, stage::now(), "library").await?;
 
-    let plan = targets(pool, &root_text, &settings).await?;
-    status.total = plan.len() as u64;
+    let plan = targets(pool, &root_text, settings).await?;
+    status.total = plan
+        .iter()
+        .filter(|entry| needs_move(entry, &root_text))
+        .count() as u64;
     publish(app, status);
     execute_plan(
         pool,
@@ -287,7 +336,7 @@ async fn reconcile(app: &tauri::AppHandle, status: &mut Status) -> Result<(), St
         || {
             app.state::<ConfigStore>()
                 .snapshot()
-                .is_ok_and(|s| s.settings == settings)
+                .is_ok_and(|s| s.settings.same_disk_structure(settings))
         },
         |completed| {
             status.completed = completed;
@@ -299,13 +348,22 @@ async fn reconcile(app: &tauri::AppHandle, status: &mut Status) -> Result<(), St
     )
     .await?;
 
-    if app.state::<ConfigStore>().snapshot()?.settings != settings {
+    if !app
+        .state::<ConfigStore>()
+        .snapshot()?
+        .settings
+        .same_disk_structure(settings)
+    {
         request(app);
     }
     Ok(())
 }
 
 type Plan = Vec<(i64, String, String, String)>;
+
+fn needs_move(entry: &(i64, String, String, String), root: &str) -> bool {
+    entry.2 != root || entry.3 != entry.1
+}
 
 async fn execute_plan(
     pool: &SqlitePool,
@@ -335,7 +393,11 @@ async fn execute_plan(
         }
     }
     // Validate external collisions before moving any file out of its current location.
-    for (id, destination, _, _) in &plan {
+    for entry @ (id, destination, _, _) in &plan {
+        if !needs_move(entry, root) {
+            continue;
+        }
+
         let existing: Option<i64> =
             sqlx::query_scalar("SELECT id FROM media WHERE source_id=? AND path_key=?")
                 .bind(source)
@@ -383,7 +445,13 @@ async fn execute_plan(
         .map(|(path, id)| (*id, path.clone()))
         .collect();
 
-    for (index, (id, destination, _, _)) in plan.iter().enumerate() {
+    let mut completed = 0;
+
+    for entry @ (id, destination, _, _) in &plan {
+        if !needs_move(entry, root) {
+            continue;
+        }
+
         if !proceed() {
             return Ok(());
         }
@@ -423,7 +491,8 @@ async fn execute_plan(
             occupied.remove(&old);
         }
         occupied.insert(key, *id);
-        progress(index as u64 + 1);
+        completed += 1;
+        progress(completed);
         tokio::task::yield_now().await;
     }
     Ok(())

@@ -1,5 +1,38 @@
 use super::*;
 
+#[test]
+fn saves_report_only_disk_structure_changes() {
+    let dir = tempfile::tempdir().unwrap();
+
+    let store = ConfigStore::load(paths(dir.path())).unwrap();
+
+    let mut draft = AppConfig {
+        theme: AppTheme::Paper,
+        locale: AppLocale::Russian,
+        auto_scan: true,
+        auto_update_check: true,
+        staging_path: Some(dir.path().join("Stage")),
+        ..AppConfig::default()
+    };
+    assert!(!store.save(draft.clone()).unwrap());
+    assert!(!store.save(draft.clone()).unwrap());
+
+    for field in 0..7 {
+        match field {
+            0 => draft.sync_structure = true,
+            1 => draft.library_path = Some(dir.path().join("Library")),
+            2 => draft.copyright_directory = false,
+            3 => draft.artist_directory = false,
+            4 => draft.character_separator = " & ".into(),
+            5 => draft.video_subfolder = "Clips".into(),
+            6 => draft.gif_subfolder = "GIF".into(),
+            _ => unreachable!(),
+        }
+        assert!(store.save(draft.clone()).unwrap());
+        assert!(!store.save(draft.clone()).unwrap());
+    }
+}
+
 fn paths(root: &std::path::Path) -> AppPaths {
     AppPaths {
         config_path: root.join("config/settings.json"),
