@@ -65,6 +65,18 @@ impl Default for AppConfig {
     }
 }
 
+impl AppConfig {
+    pub(crate) fn same_disk_structure(&self, other: &Self) -> bool {
+        self.sync_structure == other.sync_structure
+            && self.library_path == other.library_path
+            && self.copyright_directory == other.copyright_directory
+            && self.artist_directory == other.artist_directory
+            && self.character_separator == other.character_separator
+            && self.video_subfolder == other.video_subfolder
+            && self.gif_subfolder == other.gif_subfolder
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppPaths {
@@ -168,7 +180,7 @@ impl ConfigStore {
     }
 
     #[tracing::instrument(skip_all, fields(config_path = %self.paths.config_path.display()), err)]
-    pub fn save(&self, draft: AppConfig) -> ConfigResult<()> {
+    pub fn save(&self, draft: AppConfig) -> ConfigResult<bool> {
         let mut settings = self
             .settings
             .lock()
@@ -176,6 +188,8 @@ impl ConfigStore {
         let locale_changed = settings.locale != draft.locale;
 
         let theme_changed = settings.theme != draft.theme;
+
+        let structure_changed = !settings.same_disk_structure(&draft);
 
         Self::write(&self.paths, &draft, true)?;
         *settings = draft;
@@ -188,7 +202,7 @@ impl ConfigStore {
         if theme_changed {
             tracing::info!(theme = ?settings.theme, "Interface theme changed");
         }
-        Ok(())
+        Ok(structure_changed)
     }
 }
 
@@ -203,8 +217,9 @@ pub fn save_config(
     settings: AppConfig,
     store: tauri::State<'_, ConfigStore>,
 ) -> ConfigResult<()> {
-    store.save(settings)?;
-    crate::disk_sync::request(&app);
+    if store.save(settings)? {
+        crate::disk_sync::request(&app);
+    }
     Ok(())
 }
 

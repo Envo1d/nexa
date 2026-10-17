@@ -2,6 +2,219 @@ use super::ordering::{find_order_group, persist_order};
 use super::*;
 use crate::config::AppConfig;
 
+fn sync_settings(root: &str) -> AppConfig {
+    AppConfig {
+        library_path: Some(root.into()),
+        sync_structure: true,
+        ..AppConfig::default()
+    }
+}
+
+#[tokio::test]
+async fn unchanged_scans_tags_and_technical_metadata_do_not_invalidate_sync() {
+    let (_temp, db, root, _) = fixture().await;
+
+    let mut settings = sync_settings(&root);
+
+    sqlx::raw_sql(concat!(
+        "UPDATE media SET kind='video' WHERE id=1;",
+        "INSERT INTO video_metadata(media_id,title) VALUES(1,'Title');",
+    ))
+    .execute(db.pool())
+    .await
+    .unwrap();
+
+    let before = changes::Inputs::capture(db.pool(), &settings)
+        .await
+        .unwrap();
+    sqlx::raw_sql(concat!(
+        "UPDATE media SET last_seen_at=20,updated_at=20,file_revision='new revision',",
+        "size_bytes=900,width=500,height=300,favorite=1,metadata_state='ready';",
+        "UPDATE sources SET last_successful_scan_at=20;",
+        "INSERT INTO tags VALUES(1,'Tag','tag');",
+        "INSERT INTO media_tags VALUES(1,1);",
+        "UPDATE tags SET name='New tag',name_key='new tag' WHERE id=1;",
+        "UPDATE video_metadata SET duration_ms=1000,codec='test' WHERE media_id=1;",
+    ))
+    .execute(db.pool())
+    .await
+    .unwrap();
+    settings.theme = crate::config::AppTheme::Paper;
+    settings.locale = crate::config::AppLocale::Russian;
+    settings.auto_scan = true;
+    settings.auto_update_check = true;
+    settings.staging_path = Some("other-stage".into());
+
+    let after = changes::Inputs::capture(db.pool(), &settings)
+        .await
+        .unwrap();
+    assert!(!changes::Inputs::requires_sync(&after, &before, false));
+    assert!(changes::Inputs::requires_sync(&after, &before, true));
+
+    settings.sync_structure = false;
+
+    let disabled = changes::Inputs::capture(db.pool(), &settings)
+        .await
+        .unwrap();
+    assert!(disabled.is_none());
+    assert!(!changes::Inputs::requires_sync(&disabled, &before, false));
+    assert!(changes::Inputs::requires_sync(&disabled, &before, true));
+}
+
+#[tokio::test]
+async fn naming_membership_paths_and_order_invalidate_sync() {
+    let (_temp, db, root, _) = fixture().await;
+
+    let settings = sync_settings(&root);
+
+    let mut previous = changes::Inputs::capture(db.pool(), &settings)
+        .await
+        .unwrap();
+
+    for statement in [
+        "UPDATE artists SET name='Renamed' WHERE id=1",
+        "UPDATE copyrights SET name='First' WHERE id=2",
+        "UPDATE characters SET name='Changed' WHERE id=1",
+        "DELETE FROM media_characters WHERE media_id=1 AND character_id=2",
+        "UPDATE media SET relative_path='different.png' WHERE id=1",
+        "UPDATE media SET extension='jpg' WHERE id=1",
+        "DELETE FROM media_characters WHERE media_id=1",
+        "UPDATE media SET original_filename='original.png' WHERE id=1",
+        "UPDATE media SET naming_order_key='key',naming_order=0 WHERE id=1",
+        "UPDATE media SET availability='missing' WHERE id=1",
+        "UPDATE media SET availability='present' WHERE id=1",
+        "UPDATE media SET needs_distribution=1 WHERE id=1",
+        "UPDATE media SET needs_distribution=0 WHERE id=1",
+        "UPDATE media SET library_assignment=NULL WHERE id=1",
+        "DELETE FROM media WHERE id=2",
+    ] {
+        sqlx::query(statement).execute(db.pool()).await.unwrap();
+
+        let current = changes::Inputs::capture(db.pool(), &settings)
+            .await
+            .unwrap();
+        assert!(changes::Inputs::requires_sync(&current, &previous, false));
+        previous = current;
+    }
+}
+
+#[tokio::test]
+async fn stage_only_changes_and_unused_copyrights_do_not_invalidate_sync() {
+    let (_temp, db, root, _) = fixture().await;
+
+    let settings = AppConfig {
+        copyright_directory: false,
+        ..sync_settings(&root)
+    };
+
+    let before = changes::Inputs::capture(db.pool(), &settings)
+        .await
+        .unwrap();
+    sqlx::raw_sql(concat!(
+        "UPDATE copyrights SET name='Renamed',name_key='renamed' WHERE id=1;",
+        "INSERT INTO media(source_id,relative_path,path_key,original_filename,kind,extension,",
+        "artist_id,last_seen_at,created_at,updated_at) ",
+        "VALUES(2,'stage.png','stage.png','stage.png','image','png',1,1,1,1);",
+    ))
+    .execute(db.pool())
+    .await
+    .unwrap();
+
+    let after = changes::Inputs::capture(db.pool(), &settings)
+        .await
+        .unwrap();
+    assert!(!changes::Inputs::requires_sync(&after, &before, false));
+}
+
+#[tokio::test]
+async fn fingerprint_covers_later_batches_and_video_titles() {
+    let (_temp, db, root, _) = fixture().await;
+
+    let settings = sync_settings(&root);
+    sqlx::query(concat!(
+        "WITH RECURSIVE ids(id) AS (SELECT 5 UNION ALL SELECT id+1 FROM ids WHERE id<300) ",
+        "INSERT INTO media(id,source_id,relative_path,path_key,original_filename,kind,extension,",
+        "artist_id,last_seen_at,created_at,updated_at,library_assignment) ",
+        "SELECT id,2,id||'.mp4',id||'.mp4',id||'.mp4','video','mp4',1,1,1,1,? FROM ids",
+    ))
+    .bind(&root)
+    .execute(db.pool())
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO video_metadata(media_id,title) SELECT id,'Title' FROM media WHERE id>=5",
+    )
+    .execute(db.pool())
+    .await
+    .unwrap();
+
+    let before = changes::Inputs::capture(db.pool(), &settings)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE video_metadata SET title='Changed' WHERE media_id=300")
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+    let after = changes::Inputs::capture(db.pool(), &settings)
+        .await
+        .unwrap();
+    assert!(changes::Inputs::requires_sync(&after, &before, false));
+    sqlx::query("UPDATE video_metadata SET title=NULL WHERE media_id=300")
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+    let without_title = changes::Inputs::capture(db.pool(), &settings)
+        .await
+        .unwrap();
+    assert!(changes::Inputs::requires_sync(
+        &without_title,
+        &after,
+        false
+    ));
+}
+
+#[tokio::test]
+async fn completed_moves_establish_a_stable_baseline_and_only_count_real_moves() {
+    let (_temp, db, root, _) = fixture().await;
+
+    let settings = sync_settings(&root);
+    run(db.pool(), &root, &settings).await;
+
+    let before = changes::Inputs::capture(db.pool(), &settings)
+        .await
+        .unwrap();
+
+    let plan = targets(db.pool(), &root, &settings).await.unwrap();
+    assert!(plan.iter().all(|entry| !needs_move(entry, &root)));
+
+    let mut progress = Vec::new();
+    execute_plan(db.pool(), 1, &root, plan, || true, |n| progress.push(n))
+        .await
+        .unwrap();
+    assert!(progress.is_empty());
+
+    let after = changes::Inputs::capture(db.pool(), &settings)
+        .await
+        .unwrap();
+    assert!(!changes::Inputs::requires_sync(&after, &before, false));
+    sqlx::query("DELETE FROM media_characters WHERE media_id=4")
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+    let plan = targets(db.pool(), &root, &settings).await.unwrap();
+
+    let changed = plan.iter().filter(|entry| needs_move(entry, &root)).count();
+    assert!(changed > 0 && changed < plan.len());
+    execute_plan(db.pool(), 1, &root, plan, || true, |n| progress.push(n))
+        .await
+        .unwrap();
+    assert_eq!(progress.len(), changed);
+    assert_eq!(progress.last(), Some(&(changed as u64)));
+}
+
 async fn fixture() -> (tempfile::TempDir, Database, String, String) {
     let temp = tempfile::tempdir().unwrap();
 

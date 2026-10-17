@@ -142,9 +142,11 @@ pub async fn rename_taxonomy(
 
     tracing::info!("Renaming dictionary entry");
     rename(database.pool(), category, id, &name).await?;
-    crate::disk_sync::request(&app);
+    if !matches!(category, Category::Tag) {
+        crate::disk_sync::request(&app);
+    }
 
-    tracing::info!("Dictionary entry renamed; disk synchronization requested");
+    tracing::info!("Dictionary entry renamed");
     Ok(())
 }
 
@@ -228,7 +230,9 @@ pub async fn delete_taxonomy(
         affected_files = count,
         "Dictionary entry deleted; redistribution queued without disk changes"
     );
-    crate::disk_sync::request(&app);
+    if !matches!(category, Category::Tag) {
+        crate::disk_sync::request(&app);
+    }
     Ok(count)
 }
 

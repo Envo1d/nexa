@@ -112,7 +112,9 @@ pub async fn import_legacy_database(
 
     match result {
         Ok(report) => {
-            crate::disk_sync::request(&app);
+            if report.library_added > 0 {
+                crate::disk_sync::request(&app);
+            }
 
             tracing::info!(
                 library_added = report.library_added,

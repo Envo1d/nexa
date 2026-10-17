@@ -158,8 +158,10 @@ pub async fn save_duplicate_order(
         .and_then(|p| p.to_str())
         .ok_or("Library is not configured")?;
     persist_order(database.pool(), root, &settings, &key, &expected_ids, &ids).await?;
-    request(&app);
+    if expected_ids != ids {
+        request(&app);
+    }
 
-    tracing::info!("Duplicate order saved; disk reconciliation requested");
+    tracing::info!(order_changed = expected_ids != ids, "Duplicate order saved");
     Ok(())
 }
