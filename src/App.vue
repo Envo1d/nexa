@@ -6,6 +6,7 @@ import { isTauri } from "@tauri-apps/api/core";
 import { translateUi as ui } from "./i18n/presentation";
 import AppIcon from "./components/AppIcon.vue";
 import ToggleSwitch from "./components/ToggleSwitch.vue";
+import ToastNotifications from "./components/ToastNotifications.vue";
 import SortSelect from "./components/SortSelect.vue";
 import MediaCollection from "./components/MediaCollection.vue";
 import MediaViewer from "./components/MediaViewer.vue";
@@ -42,6 +43,8 @@ const {
   viewerAnnotations,
   diskSync,
   retryDiskSync,
+  indexing,
+  openIndexing,
   library,
   stage,
   demoTaxonomy,
@@ -88,7 +91,11 @@ const {
   openContext,
   contextAction,
   saveMetadata,
-  toast,
+  toasts,
+  dismissToast,
+  pauseToasts,
+  runToastAction,
+  settingsSection,
   maximized,
   systemWindowCorners,
   displayedTags,
@@ -443,10 +450,11 @@ const {
       />
       <SettingsPanel
         v-else-if="view === 'settings'"
+        :section-request="settingsSection"
         @close="view = 'main'"
         @saved="
           refreshAll();
-          notify(t('saved'));
+          notify(t('saved'), { kind: 'success' });
         "
         @preview="
           notify(`${$event} is a UI preview. No settings or files are changed.`)
@@ -559,53 +567,16 @@ const {
         </div>
       </Transition>
     </main>
-    <div class="notification-stack">
-      <Transition name="toast">
-        <div
-          v-if="diskSync.running || diskSync.error"
-          class="toast-message disk-sync-notification"
-          role="status"
-        >
-          <div class="disk-sync-heading">
-            <AppIcon name="info" :size="18" />
-            <span>{{
-              diskSync.error
-                ? t("syncStopped", { error: ui(diskSync.error) })
-                : diskSync.total
-                  ? t("syncCount", diskSync)
-                  : t("preparingSync")
-            }}</span>
-            <button
-              v-if="diskSync.error"
-              class="secondary-button"
-              @click="retryDiskSync"
-            >
-              {{ t("retry") }}
-            </button>
-          </div>
-          <progress
-            :aria-label="t('syncProgress')"
-            :max="Math.max(1, diskSync.total)"
-            :value="
-              diskSync.total || diskSync.error
-                ? Math.min(diskSync.completed, Math.max(1, diskSync.total))
-                : undefined
-            "
-          ></progress>
-        </div>
-      </Transition>
-      <Transition name="toast"
-        ><div v-if="toast" class="toast-message" role="status">
-          <AppIcon name="info" :size="18" /><span>{{ ui(toast) }}</span
-          ><button
-            class="icon-button"
-            :aria-label="t('dismissMessage')"
-            @click="toast = ''"
-          >
-            <AppIcon name="close" :size="16" />
-          </button></div
-      ></Transition>
-    </div>
+    <ToastNotifications
+      :toasts="toasts"
+      :disk-sync="diskSync"
+      :indexing="indexing"
+      @dismiss="dismissToast"
+      @action="runToastAction"
+      @pause="pauseToasts"
+      @retry="retryDiskSync"
+      @indexing="openIndexing"
+    />
     <MediaViewer
       v-if="viewerOpen && viewerItem"
       :item="viewerItem"

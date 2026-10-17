@@ -2,7 +2,7 @@ import { ref } from "vue";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
-interface ScanStatus {
+export interface ScanStatus {
   running: boolean;
   scanned: number;
   extracted: number;
