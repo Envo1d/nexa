@@ -105,8 +105,7 @@ async function checkOnStartup(notify: (message: string) => void) {
 
     await check();
 
-    if (available.value)
-      notify(`${status.value} Open Settings → Updates to install.`);
+    if (available.value) notify(status.value);
   } catch {
     status.value = "Could not load the startup update preference.";
   }

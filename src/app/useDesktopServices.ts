@@ -6,9 +6,12 @@ import { useCacheUsage } from "../composables/useCacheUsage";
 import { useStageScan } from "../composables/useStageScan";
 import { useUpdater } from "../composables/useUpdater";
 
+import type { Notify } from "../shared/composables/useToast";
+
 export function useDesktopServices(
   refreshAll: () => Promise<void>,
-  notify: (message: string) => void,
+  notify: Notify,
+  openSettings: (section: "updates" | "cache" | "indexing") => void,
 ) {
   const cacheUsage = useCacheUsage();
 
@@ -30,7 +33,11 @@ export function useDesktopServices(
   }>({ running: false, completed: 0, total: 0, error: null });
 
   async function retryDiskSync() {
-    await invoke("retry_disk_sync");
+    try {
+      await invoke("retry_disk_sync");
+    } catch {
+      notify("Could not retry disk synchronization.", { kind: "error" });
+    }
   }
 
   watch(
@@ -41,10 +48,23 @@ export function useDesktopServices(
   );
 
   onMounted(() => {
-    void updater.checkOnStartup(notify);
+    void updater.checkOnStartup((message) => {
+      notify(message, {
+        id: "update-available",
+        kind: "update",
+        description: "Review what is new and install from Settings.",
+        duration: 0,
+        action: { label: "View update", run: () => openSettings("updates") },
+      });
+    });
 
     void cacheUsage
-      .connect(notify)
+      .connect((message) => {
+        notify(message, {
+          id: "cache-limit",
+          action: { label: "Manage cache", run: () => openSettings("cache") },
+        });
+      })
       .then((stop) => {
         if (disposed) stop();
         else stopCacheUsage = stop;
@@ -105,5 +125,10 @@ export function useDesktopServices(
     stopDiskSync?.();
   });
 
-  return { diskSync, retryDiskSync };
+  return {
+    diskSync,
+    retryDiskSync,
+    indexing: stageScan.status,
+    openIndexing: () => openSettings("indexing"),
+  };
 }

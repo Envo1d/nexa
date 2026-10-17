@@ -36,7 +36,8 @@ interface WorkspaceElements {
 export function useWorkspace(elements: WorkspaceElements) {
   const { t } = useI18n();
 
-  const { toast, notify } = useToast();
+  const { toasts, notify, dismissToast, pauseToasts, runToastAction } =
+    useToast();
 
   const library = useLibrary();
 
@@ -44,7 +45,11 @@ export function useWorkspace(elements: WorkspaceElements) {
 
   const viewer = useMediaViewer(library, stage);
 
-  const { diskSync, retryDiskSync } = useDesktopServices(refreshAll, notify);
+  const { diskSync, retryDiskSync, indexing, openIndexing } =
+    useDesktopServices(refreshAll, notify, (id) => {
+      settingsSection.value = { id };
+      view.value = "settings";
+    });
 
   const { maximized, systemWindowCorners, windowAction, startDrag } =
     useWindowChrome(notify);
@@ -81,6 +86,12 @@ export function useWorkspace(elements: WorkspaceElements) {
   } = library;
 
   const view = ref<"main" | "stage" | "settings" | "tags">("main");
+
+  const settingsSection = ref<{ id: string } | null>(null);
+
+  watch(view, (next) => {
+    if (next !== "settings") settingsSection.value = null;
+  });
 
   watch(view, (next) => {
     if (next === "stage") void refreshRedistribution();
@@ -270,9 +281,9 @@ export function useWorkspace(elements: WorkspaceElements) {
         if (isTauri()) await writeText(item.filename);
         else await navigator.clipboard.writeText(item.filename);
 
-        notify("Filename copied.");
+        notify("Filename copied.", { kind: "success" });
       } catch {
-        notify("Could not copy the filename.");
+        notify("Could not copy the filename.", { kind: "error" });
       }
     } else previewAction(action, item);
   }
@@ -348,9 +359,9 @@ export function useWorkspace(elements: WorkspaceElements) {
         if (isTauri()) await writeText(item.path);
         else await navigator.clipboard.writeText(item.path);
 
-        notify("Path copied.");
+        notify("Path copied.", { kind: "success" });
       } catch {
-        notify("Could not copy the path.");
+        notify("Could not copy the path.", { kind: "error" });
       }
     } else {
       notify(
@@ -425,6 +436,8 @@ export function useWorkspace(elements: WorkspaceElements) {
     ...viewer,
     diskSync,
     retryDiskSync,
+    indexing,
+    openIndexing,
     library,
     stage,
     demoTaxonomy,
@@ -472,7 +485,11 @@ export function useWorkspace(elements: WorkspaceElements) {
     openContext,
     contextAction,
     saveMetadata,
-    toast,
+    toasts,
+    dismissToast,
+    pauseToasts,
+    runToastAction,
+    settingsSection,
     maximized,
     systemWindowCorners,
     displayedTags,

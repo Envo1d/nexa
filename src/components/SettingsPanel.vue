@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -21,6 +21,8 @@ import { applyTheme, themeIds, themePreference } from "../themes";
 import type { ConfigSnapshot } from "../types/config";
 
 const { t } = useI18n();
+
+const props = defineProps<{ sectionRequest?: { id: string } | null }>();
 
 const updater = useUpdater();
 
@@ -338,6 +340,20 @@ function trackSection() {
       activeSection.value = section.id;
   }
 }
+
+watch(
+  [() => props.sectionRequest, loading],
+  async ([request, isLoading]) => {
+    if (!request || isLoading) return;
+
+    await nextTick();
+    goToSection(request.id);
+    scrollArea.value
+      ?.querySelector<HTMLElement>(`#settings-${request.id} button`)
+      ?.focus({ preventScroll: true });
+  },
+  { immediate: true, flush: "post" },
+);
 
 function resetDrafts() {
   draft.value = defaultConfig();
