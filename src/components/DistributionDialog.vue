@@ -16,8 +16,10 @@ import ToggleSwitch from "./ToggleSwitch.vue";
 import MediaPreview from "./MediaPreview.vue";
 import MetadataRow from "./MetadataRow.vue";
 import AppIcon from "./AppIcon.vue";
+import StageMetadataPresets from "./StageMetadataPresets.vue";
 
 import type { MediaItem, MediaMetadataDraft } from "../types/media";
+import type { PresetMetadata } from "../types/metadataPresets";
 
 const props = defineProps<{
   items: MediaItem[];
@@ -63,6 +65,32 @@ const characters = ref<MetadataValue[]>([]);
 const tags = ref<MetadataValue[]>([]);
 
 const title = ref("");
+
+const presetMetadata = computed<PresetMetadata>(() => ({
+  artist: artist.value,
+  copyrights: copyrights.value.map((value) => value.name),
+  characters: characters.value.map((value) => ({
+    name: value.name,
+    copyright: value.copyright ?? "",
+  })),
+  tags: tags.value.map((value) => value.name),
+}));
+
+function applyPreset(metadata: PresetMetadata) {
+  if (saving.value) return;
+
+  copyrights.value = values(metadata.copyrights, false);
+  artist.value = metadata.artist;
+  characters.value = metadata.characters.map((entry) => ({
+    ...entry,
+    id: JSON.stringify([
+      entry.copyright.toLocaleLowerCase(),
+      entry.name.toLocaleLowerCase(),
+    ]),
+  }));
+  tags.value = values(metadata.tags, false);
+  error.value = "";
+}
 
 const error = ref("");
 
@@ -477,6 +505,13 @@ onBeforeUnmount(() => {
             ><span>{{ ui(label) }}</span>
           </button>
         </nav>
+        <StageMetadataPresets
+          v-if="!editing"
+          v-show="!done && step === 0"
+          :metadata="presetMetadata"
+          :disabled="saving"
+          @apply="applyPreset"
+        />
         <div
           class="distribution-scroll"
           :class="{

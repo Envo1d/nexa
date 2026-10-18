@@ -8,6 +8,7 @@ mod logging;
 pub mod media_metadata;
 mod media_paths;
 pub mod media_thumbnail;
+mod metadata_presets;
 mod naming;
 pub mod preview_cache;
 mod replacement;

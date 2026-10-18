@@ -1,5 +1,9 @@
 # SQLite Migrations
 
+## Metadata Presets - Version 8 / PLAN-215
+
+0008_metadata_presets.sql adds the thirteenth application table for independent reusable metadata snapshots, with unique normalized names and JSON validity enforcement. Versions 1-7 remain byte-for-byte unchanged. Fresh/reopen, version-7 upgrade preservation, history checks and rollback regressions cover the new migration; synthetic pending migrations use version 9.
+
 ## Replacement Cleanup — Version 7
 
 0007_replacement_cleanup.sql adds a default-zero delete_old policy to replacement intent/history. Previously recorded operations retain their policy; new replacements explicitly request old-original deletion after commit and temporary-backup removal after cleanup. Existing schema/history is preserved. Custom pending/broken migration fixtures now use version 8; application table count stays twelve.
