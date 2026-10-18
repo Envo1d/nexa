@@ -3,7 +3,8 @@
 #[cfg(desktop)]
 use crate::updater;
 use crate::{
-    config, database, disk_sync, legacy_import, library, logging, replacement, stage, taxonomy,
+    config, database, disk_sync, legacy_import, library, logging, metadata_presets, replacement,
+    stage, taxonomy,
 };
 
 pub fn run() {
@@ -91,6 +92,9 @@ pub fn run() {
             legacy_import::find_legacy_database,
             legacy_import::import_legacy_database,
             taxonomy::get_taxonomy,
+            metadata_presets::get_metadata_presets,
+            metadata_presets::save_metadata_preset,
+            metadata_presets::delete_metadata_preset,
             taxonomy::rename_taxonomy,
             taxonomy::delete_taxonomy,
             taxonomy::get_redistribution_files,
