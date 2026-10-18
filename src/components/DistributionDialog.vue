@@ -493,7 +493,7 @@ onBeforeUnmount(() => {
               complete: done || index < step,
             }"
             :aria-current="!done && step === index ? 'step' : undefined"
-            :disabled="saving || done || index > step"
+            :disabled="saving || done"
             @click="navigate(index)"
           >
             <span class="wizard-step-number"
