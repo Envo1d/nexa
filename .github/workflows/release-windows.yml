@@ -3,33 +3,20 @@ name: Windows build and release
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
-    tags:
-      - "v*"
-    paths:
-      - ".github/workflows/release-windows.yml"
-      - ".github/tauri-ci.json"
-      - "src/**"
-      - "src-tauri/**"
-      - "public/**"
-      - "scripts/**"
-      - "package*.json"
-      - "*config*"
-      - ".prettierrc.json"
-      - ".gitattributes"
-      - "index.html"
-      - "update.html"
+    branches: [dev, main]
+  pull_request:
+    branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: windows-release-${{ github.ref }}
+  group: windows-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  release:
+  checks:
+    name: Windows checks
     runs-on: windows-latest
     env:
       CARGO_INCREMENTAL: "0"
@@ -37,33 +24,25 @@ jobs:
       CARGO_PROFILE_TEST_DEBUG: "0"
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v5
         with:
           node-version: "24"
           cache: npm
       - name: Validate release versions
         run: node scripts/validate-release.mjs
-      - name: Test update feed signature validation
-        run: node --test scripts/verify-update-signature.test.mjs
-      - name: Require updater signing key
-        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
-        shell: pwsh
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-        run: |
-          if (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
-            throw "Add the TAURI_SIGNING_PRIVATE_KEY repository secret before releasing."
-          }
+      - name: Test release and signature tooling
+        run: node --test scripts/github-release.test.mjs scripts/verify-update-signature.test.mjs
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
-      - name: Restore Rust dependencies and compiled targets
+      - name: Restore Rust check cache
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
-          shared-key: windows-build
-          # Tags can restore main's cache, but cannot share caches with other tags.
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          shared-key: windows-checks
+          save-if: ${{ github.event_name == 'push' }}
       - name: Install frontend dependencies
         run: npm ci --no-audit --no-fund
       - name: Validate frontend formatting
@@ -78,48 +57,71 @@ jobs:
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
       - name: Test Rust
         run: cargo test --manifest-path src-tauri/Cargo.toml --locked -- --test-threads=1
-      - name: Warm release compilation cache on main
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: npm run tauri build -- --ci --no-bundle --config .github/tauri-ci.json -- --locked
+      - name: Save validated frontend for release
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-frontend
+          path: dist/
+          if-no-files-found: error
+          retention-days: 1
+
+  release:
+    name: Publish Windows release
+    needs: checks
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: windows-release-main
+      cancel-in-progress: false
+    env:
+      CARGO_INCREMENTAL: "0"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+      - name: Check release version and tag availability
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/github-release.mjs check
+      - name: Require updater signing key
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
+            throw "Add the TAURI_SIGNING_PRIVATE_KEY repository secret before releasing."
+          }
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Restore Rust release cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          shared-key: windows-release
+      - name: Install frontend dependencies and packaging CLI
+        run: npm ci --no-audit --no-fund
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-frontend
+          path: dist/
       - uses: actions/setup-dotnet@v5
-        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
         with:
           dotnet-version: "8.0.x"
       - name: Build application for Velopack
-        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
         run: npm run tauri build -- --ci --no-bundle --config .github/tauri-ci.json -- --locked
       - name: Package Velopack setup and signed update feed
-        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
         shell: pwsh
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: ./scripts/build-windows.ps1 -SkipBuild
-      - name: Create draft release with Velopack assets
-        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
-        shell: pwsh
+      - name: Tag built commit and publish complete release
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          $releaseVersion = (Get-Content package.json -Raw | ConvertFrom-Json).version
-          $tag = "v$releaseVersion"
-          $outputPath = "src-tauri/target/release/bundle/velopack/$releaseVersion"
-          $assets = Get-ChildItem -LiteralPath $outputPath -File |
-            Where-Object { $_.Name -match '(-Setup\.exe|-full\.nupkg|^releases\.win-x64\.json(\.sig)?|^RELEASES)$' } |
-            ForEach-Object { $_.FullName }
-          gh release view $tag --json isDraft --jq .isDraft 1> draft-state.txt 2> $null
-          if ($LASTEXITCODE -eq 0) {
-            if ((Get-Content draft-state.txt -Raw).Trim() -ne "true") {
-              throw "Refusing to overwrite an already published release. Increase the version."
-            }
-            $legacyAssets = gh release view $tag --json assets --jq '.assets[].name' |
-              Where-Object { $_ -eq 'latest.json' -or $_ -match '_x64-setup\.exe(\.sig)?$' }
-            if ($LASTEXITCODE -ne 0) { throw "Could not inspect draft release assets" }
-            if ($legacyAssets) {
-              throw "Draft contains legacy NSIS assets. Remove that obsolete draft or increase the version before releasing Velopack."
-            }
-            gh release upload $tag @assets --clobber
-          } else {
-            gh release create $tag @assets --draft --title "Nexa v$releaseVersion" --target $env:GITHUB_SHA --notes "Download Nexa-win-x64-Setup.exe. Existing NSIS users must close Nexa, uninstall the old application and install this setup once; preserve NexaNew settings/database and media folders. Future updates use Velopack packages."
-          }
-          if ($LASTEXITCODE -ne 0) { throw "Draft release creation/upload failed" }
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/github-release.mjs publish
