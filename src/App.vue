@@ -416,6 +416,7 @@ const {
         </aside>
         <MediaCollection
           :items="results"
+          :collection-key="library.collectionKey.value"
           :native="isTauri()"
           :total="isTauri() ? library.total.value : undefined"
           :has-more="library.hasMore.value"
@@ -494,6 +495,7 @@ const {
         </aside>
         <MediaCollection
           :items="stage.results.value"
+          :collection-key="stage.appliedSearch.value"
           :native="isTauri()"
           :total="isTauri() ? stage.total.value : undefined"
           :has-more="stage.hasMore.value"

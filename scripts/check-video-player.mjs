@@ -65,7 +65,7 @@ async function playerFixture() {
 
   const setup = source.match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1];
 
-  let code = transpileModule(setup + "\nexport { player, video, diagnostics, duration, position, playing, togglePlayback, seek, toggleFullscreen, fullscreen, keyboard, stop, feedback, timeUpdate, sync, controlsVisible, toolbarVisible, setVolume, toggleMute, setSpeed, speed };", { compilerOptions: { module: ModuleKind.ESNext } }).outputText;
+  let code = transpileModule(setup + "\nexport { player, video, diagnostics, duration, position, playing, togglePlayback, seek, toggleFullscreen, fullscreen, keyboard, stop, feedback, timeUpdate, sync, controlsVisible, toolbarVisible, setVolume, toggleMute, setSpeed, speed, repeat, toggleRepeat };", { compilerOptions: { module: ModuleKind.ESNext } }).outputText;
 
   code = code.replace(/import \{[\s\S]*?\} from "vue";/, `import { computed, nextTick, ref, watch } from ${JSON.stringify(import.meta.resolve("vue"))}; const onMounted = (hook) => globalThis.__nexaVideoPlayerTest.mounted.push(hook); const onBeforeUnmount = (hook) => globalThis.__nexaVideoPlayerTest.unmounted.push(hook);`);
   code = code.replace(/import \{ useI18n \} from "vue-i18n";/, 'const useI18n = () => ({ t: (key) => key });');
@@ -668,7 +668,7 @@ test("speed listbox owns Space, arrows, Escape and typeahead without changing pl
   const { module } = fixture;
 
   try {
-    for (const key of [" ", "ArrowRight", "ArrowDown", "Escape", "f", "m", "t", "k"]) {
+    for (const key of [" ", "ArrowRight", "ArrowDown", "Escape", "f", "m", "t", "r", "k"]) {
       const event = keyEvent(key);
 
       event.target = { closest: (selector) => selector.includes("[role='listbox']") ? {} : null };
@@ -681,6 +681,43 @@ test("speed listbox owns Space, arrows, Escape and typeahead without changing pl
     assert.equal(module.video.value.muted, false);
     assert.equal(module.diagnostics.value, false);
     assert.equal(module.fullscreen.value, false);
+  } finally {
+    for (const unmount of fixture.hooks.unmounted) unmount();
+  }
+});
+
+
+test("repeat toggles the same media in windowed/fullscreen, ignores held keys and editing", async () => {
+  const fixture = await playerFixture();
+  const { module } = fixture;
+
+  try {
+    const media = module.video.value;
+    module.toggleRepeat();
+    assert.equal(media.loop, true);
+    assert.equal(module.repeat.value, true);
+    assert.equal(media.currentTime, 10);
+    assert.equal(fixture.loads(), 0);
+    module.keyboard(keyEvent("r", { control: true, repeat: true }));
+    assert.equal(media.loop, true);
+    module.keyboard(keyEvent("к", { code: "KeyR", control: true }));
+    assert.equal(media.loop, false);
+    await module.toggleFullscreen();
+    module.keyboard(keyEvent("r"));
+    assert.equal(media.loop, true);
+    assert.equal(module.controlsVisible.value, true);
+
+    for (const options of [{ editable: true }, { ctrlKey: true }, { altKey: true }, { metaKey: true }, { isComposing: true }]) {
+      const event = keyEvent("r", options);
+      module.keyboard(event);
+      assert.equal(event.defaultPrevented, false);
+      assert.equal(media.loop, true);
+    }
+
+    module.keyboard(keyEvent("r"));
+    assert.equal(media.loop, false);
+    assert.equal(module.video.value, media);
+    assert.equal(fixture.loads(), 0);
   } finally {
     for (const unmount of fixture.hooks.unmounted) unmount();
   }
