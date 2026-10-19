@@ -83,7 +83,11 @@ npm run build:windows
 
 Installer builds require the .NET 8 runtime (or SDK) and an updater signing key matching `src-tauri/updater.pub`. The helper downloads a pinned, checksum-verified Velopack CLI into the ignored build directory. It reads the existing key from `%LOCALAPPDATA%\NexaNew\signing\updater.key`, or accepts `-SigningKeyPath` / `TAURI_SIGNING_PRIVATE_KEY`. Build artifacts are written under `src-tauri/target/release/bundle/velopack/<version>/`.
 
-GitHub release builds upload Setup, the full `.nupkg`, `releases.win-x64.json` and its `.sig` to a draft release. Publish a higher version to make updates available; published release assets are never overwritten by CI. Development and unpackaged binaries require installation through Setup before checking for package updates.
+Pushes to `dev` and pull requests into `main` run Windows checks. Every push to `main` (including a merged PR) runs checks, builds and signs the Windows package, creates `v<version>` on the built commit, and automatically publishes a stable GitHub Release with Setup, the full `.nupkg`, `releases.win-x64.json` and its `.sig`. Tag pushes do not trigger another build. Manual runs publish only when run on `main`.
+
+Before each release PR, increase the matching versions in `package.json`, `src-tauri/Cargo.toml` and `src-tauri/tauri.conf.json`, and synchronize both lockfiles. Run `node scripts/validate-release.mjs`. Use a version higher than the latest stable release; CI refuses published versions and tags belonging to another commit. Upload failures leave a draft that can be retried from the same commit. Keep `dev` after merging and merge `origin/main` back into it. Configure a GitHub ruleset for `main` requiring a PR and the **Windows checks** status check; workflow files alone do not prevent direct pushes.
+
+CI requires the existing `TAURI_SIGNING_PRIVATE_KEY` repository secret and its optional `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. Development and unpackaged binaries require installation through Setup before checking for package updates.
 
 ## Feedback
 
