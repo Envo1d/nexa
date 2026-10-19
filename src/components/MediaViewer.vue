@@ -338,7 +338,8 @@ function keyboard(event: KeyboardEvent) {
     event.code === "KeyF" ||
     event.code === "KeyM" ||
     event.code === "KeyT" ||
-    [" ", "f", "m", "t", "k"].includes(event.key.toLowerCase());
+    event.code === "KeyR" ||
+    [" ", "f", "m", "t", "r", "k"].includes(event.key.toLowerCase());
 
   if (props.item.kind === "video" && playerShortcut)
     videoPlayer.value?.keyboard(event);

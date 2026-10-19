@@ -46,7 +46,7 @@ export function useStage() {
 
   let refreshVersion = 0;
 
-  async function loadPage(append = false) {
+  async function loadPage(append = false, reset = false) {
     if (!isTauri()) return;
 
     if (append && loading.value) return;
@@ -77,12 +77,32 @@ export function useStage() {
         bitrate: number | null;
       };
 
-      const page = await invoke<{ files: NativeFile[]; total: number }>(
-        "get_stage_files",
-        { after: append ? cursor : null, search: appliedSearch.value },
-      );
+      const readPage = (after: string | null) =>
+        invoke<{ files: NativeFile[]; total: number }>("get_stage_files", {
+          after,
+          search: appliedSearch.value,
+        });
+
+      const target = append || reset ? 0 : media.value.length;
+
+      const page = await readPage(append ? cursor : null);
 
       if (version !== refreshVersion) return;
+
+      while (!append && page.files.length < Math.min(target, page.total)) {
+        const after = page.files[page.files.length - 1]?.id;
+
+        if (!after) break;
+
+        const next = await readPage(after);
+
+        if (version !== refreshVersion) return;
+
+        if (!next.files.length) break;
+
+        page.files.push(...next.files);
+        page.total = next.total;
+      }
 
       const queued: MediaItem[] = page.files.map((file) => ({
         id: `database-${file.id}`,
@@ -112,7 +132,7 @@ export function useStage() {
       }));
 
       total.value = page.total;
-      cursor = page.files[page.files.length - 1]?.id ?? cursor;
+      cursor = page.files[page.files.length - 1]?.id ?? null;
       media.value = append ? [...media.value, ...queued] : queued;
     } catch (cause) {
       if (version === refreshVersion)
@@ -149,7 +169,7 @@ export function useStage() {
   watch(appliedSearch, () => {
     if (isTauri()) {
       cursor = null;
-      void loadPage();
+      void loadPage(false, true);
     }
   });
 

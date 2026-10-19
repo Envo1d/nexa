@@ -19,6 +19,7 @@ const { t } = useI18n();
 
 const props = defineProps<{
   items: MediaItem[];
+  collectionKey: string;
   showPreviews: boolean;
   mode: "grid" | "list";
   selectedId: string | null;
@@ -352,9 +353,32 @@ watch(columns, async (count, previous) => {
   updateScroll();
 });
 
+let resetItems = false;
+
+watch(
+  () => props.collectionKey,
+  () => {
+    resetItems = true;
+    resetScroll();
+  },
+);
+
 watch(
   () => props.items,
-  (items, previous) => {
+  async (items, previous, onCleanup) => {
+    let stale = false;
+
+    onCleanup(() => {
+      stale = true;
+    });
+
+    if (resetItems || !previous.length || !items.length) {
+      resetItems = false;
+      resetScroll();
+
+      return;
+    }
+
     const appended =
       props.native &&
       items.length > previous.length &&
@@ -363,7 +387,59 @@ watch(
 
     if (appended) {
       void nextTick(updateScroll);
-    } else resetScroll();
+    } else {
+      endSelection();
+      cancelScrollFrame();
+
+      const top = viewport.value?.scrollTop ?? scrollTop.value;
+
+      const first = Math.min(
+        previous.length - 1,
+        Math.floor(top / rowHeight.value) * columns.value,
+      );
+
+      const indices = new Map(items.map((item, index) => [item.id, index]));
+
+      // Keep the first visible survivor, or a nearby predecessor if the tail was removed.
+      let anchor = first;
+
+      while (anchor < previous.length && !indices.has(previous[anchor]!.id))
+        anchor++;
+
+      if (anchor === previous.length) {
+        anchor = Math.min(first - 1, previous.length - 1);
+
+        while (anchor >= 0 && !indices.has(previous[anchor]!.id)) anchor--;
+      }
+
+      const index = anchor >= 0 ? indices.get(previous[anchor]!.id) : undefined;
+
+      const nextTop =
+        index === undefined
+          ? top
+          : Math.max(
+              0,
+              Math.floor(index / columns.value) * rowHeight.value +
+                top -
+                Math.floor(anchor / columns.value) * rowHeight.value,
+            );
+
+      loaded.value = Math.max(
+        loaded.value,
+        Math.ceil((nextTop + height.value) / rowHeight.value + 3) *
+          columns.value,
+      );
+      scrollTop.value = nextTop;
+      await nextTick();
+
+      if (stale || !viewport.value) return;
+
+      viewport.value.scrollTop = Math.min(
+        nextTop,
+        Math.max(0, rowCount.value * rowHeight.value - height.value),
+      );
+      updateScroll();
+    }
   },
 );
 
@@ -380,7 +456,7 @@ watch(
 
 onMounted(() => {
   observer = new ResizeObserver(([entry]) => {
-    if (entry) {
+    if (entry && entry.contentRect.width > 0 && entry.contentRect.height > 0) {
       remSize.value = parseFloat(
         getComputedStyle(document.documentElement).fontSize,
       );
