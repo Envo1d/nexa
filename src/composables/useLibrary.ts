@@ -39,7 +39,7 @@ export function useLibrary() {
 
   let version = 0;
 
-  async function refresh(append = false) {
+  async function refresh(append = false, reset = false) {
     if (!native || (append && loading.value)) return;
 
     const request = append ? version : ++version;
@@ -68,25 +68,42 @@ export function useLibrary() {
         height: number | null;
       };
 
-      const page = await invoke<{
-        files: NativeFile[];
-        total: number;
-        typeCounts: [number, number, number];
-        tags: { name: string; count: number }[];
-        suggestions: { name: string; category: string }[];
-        characters: { name: string; copyright: string }[];
-      }>("get_library_files", {
-        filters: {
-          scope: scope.value,
-          search: appliedSearch.value,
-          kind: kind.value,
-          sort: sortMode.value,
-          tagged: taggedOnly.value || hideUntagged.value,
-          offset: append ? media.value.length : 0,
-        },
-      });
+      const readPage = (offset: number) =>
+        invoke<{
+          files: NativeFile[];
+          total: number;
+          typeCounts: [number, number, number];
+          tags: { name: string; count: number }[];
+          suggestions: { name: string; category: string }[];
+          characters: { name: string; copyright: string }[];
+        }>("get_library_files", {
+          filters: {
+            scope: scope.value,
+            search: appliedSearch.value,
+            kind: kind.value,
+            sort: sortMode.value,
+            tagged: taggedOnly.value || hideUntagged.value,
+            offset,
+          },
+        });
+
+      const target = append || reset ? 0 : media.value.length;
+
+      const page = await readPage(append ? media.value.length : 0);
 
       if (request !== version) return;
+
+      // Publish a refreshed prefix atomically so the virtual viewport never collapses.
+      while (!append && page.files.length < Math.min(target, page.total)) {
+        const next = await readPage(page.files.length);
+
+        if (request !== version) return;
+
+        if (!next.files.length) break;
+
+        page.files.push(...next.files);
+        page.total = next.total;
+      }
 
       const items: MediaItem[] = page.files.map((file) => ({
         ...file,
@@ -346,10 +363,20 @@ export function useLibrary() {
     hideUntagged.value = false;
   }
 
+  const collectionKey = computed(() =>
+    JSON.stringify([
+      scope.value,
+      appliedSearch.value,
+      kind.value,
+      sortMode.value,
+      taggedOnly.value || hideUntagged.value,
+    ]),
+  );
+
   watch(
     [scope, appliedSearch, kind, sortMode, taggedOnly, hideUntagged],
     () => {
-      if (native) void refresh();
+      if (native) void refresh(false, true);
     },
   );
 
@@ -371,6 +398,7 @@ export function useLibrary() {
   );
 
   return {
+    collectionKey,
     catalog,
     total,
     loading,

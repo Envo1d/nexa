@@ -56,6 +56,8 @@ const volume = ref(1);
 
 const muted = ref(false);
 
+const repeat = ref(false);
+
 const speed = ref(1);
 
 const speedOptions = [0.5, 0.75, 1, 1.25, 1.5, 2].map((rate) => ({
@@ -309,6 +311,14 @@ function setVolume(value: number) {
   showFullscreenControls();
 }
 
+function toggleRepeat() {
+  if (!video.value) return;
+
+  repeat.value = !repeat.value;
+  video.value.loop = repeat.value;
+  showFullscreenControls();
+}
+
 function toggleMute() {
   if (!video.value) return;
 
@@ -391,7 +401,9 @@ function keyboard(event: KeyboardEvent) {
         ? "m"
         : event.code === "KeyT"
           ? "t"
-          : event.key.toLowerCase();
+          : event.code === "KeyR"
+            ? "r"
+            : event.key.toLowerCase();
 
   if (key === " " || event.code === "Space" || key === "k") {
     if (!event.repeat) void togglePlayback();
@@ -399,6 +411,8 @@ function keyboard(event: KeyboardEvent) {
     if (!event.repeat) void toggleFullscreen();
   } else if (key === "m") {
     if (!event.repeat) toggleMute();
+  } else if (key === "r") {
+    if (!event.repeat) toggleRepeat();
   } else if (key === "t") {
     if (!event.repeat) diagnostics.value = !diagnostics.value;
   } else {
@@ -472,6 +486,7 @@ defineExpose({ stop, keyboard });
       <video
         ref="video"
         :src="source"
+        :loop="repeat"
         :aria-label="filename"
         tabindex="0"
         playsinline
@@ -557,6 +572,16 @@ defineExpose({ stop, keyboard });
           @click="togglePlayback"
         >
           <AppIcon :name="playing ? 'pause' : 'play'" />
+        </button>
+        <button
+          class="icon-button"
+          :class="{ active: repeat }"
+          :aria-label="t('playerRepeat')"
+          :title="`${t('playerRepeat')} (R)`"
+          :aria-pressed="repeat"
+          @click="toggleRepeat"
+        >
+          <AppIcon name="repeat" :size="18" />
         </button>
         <output class="video-time">{{ timeLabel }}</output>
         <button
@@ -718,6 +743,10 @@ defineExpose({ stop, keyboard });
   display: flex;
   align-items: center;
   gap: 10px;
+}
+.video-actions .icon-button.active {
+  color: var(--accent);
+  background: var(--accent-soft);
 }
 .video-time {
   color: var(--muted);
