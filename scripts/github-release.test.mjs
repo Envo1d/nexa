@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import {
   githubApi,
   inspectRelease,
+  prepareRelease,
   publishRelease,
 } from "./github-release.mjs";
 
@@ -181,6 +185,99 @@ test("prevents older queued builds from replacing a newer stable release", async
 
   for (const tag_name of ["v2.7.9", "v2.7.10", "v1.99.99"]) {
     await inspectRelease(fixture({ latest: { tag_name } }));
+  }
+});
+
+test("version gate skips used versions without mutation and allows a fresh version or same-commit draft retry", async () => {
+  for (const context of [
+    fixture({ reference: { object: { type: "commit", sha: "b".repeat(40) } } }),
+    fixture({ release: { draft: false, assets: [] } }),
+    fixture({ latest: { tag_name: "v2.8.0" } }),
+    fixture({ latest: { tag_name: "v2.9.0" } }),
+  ]) {
+    const messages = [];
+
+    assert.equal(
+      await prepareRelease({
+        ...context,
+        log: (message) => messages.push(message),
+      }),
+      false,
+    );
+    assert.match(messages[0], /Skipping release build/);
+    assert.deepEqual(context.operations, []);
+  }
+
+  for (const context of [
+    fixture(),
+    fixture({ latest: { tag_name: "v2.7.2" } }),
+    fixture({
+      reference: { object: { type: "commit", sha } },
+      release: { draft: true, assets: [], target_commitish: sha },
+    }),
+  ]) {
+    assert.equal(await prepareRelease(context), true);
+    assert.deepEqual(context.operations, []);
+  }
+});
+
+test("version gate fails on API errors, invalid identities and ambiguous latest versions", async () => {
+  await assert.rejects(
+    prepareRelease({
+      ...fixture(),
+      api: async () => {
+        throw new Error("HTTP 403");
+      },
+    }),
+    /HTTP 403/,
+  );
+  await assert.rejects(
+    prepareRelease({ ...fixture(), version: "broken" }),
+    /Stable release requires/,
+  );
+  await assert.rejects(
+    prepareRelease(fixture({ latest: { tag_name: "unknown" } })),
+    /Cannot compare/,
+  );
+});
+
+test("prepare CLI writes the job output for a new version or a published version without network access", () => {
+  const directory = mkdtempSync(join(tmpdir(), "nexa-release-gate-"));
+
+  try {
+    for (const published of [false, true]) {
+      const output = join(directory, `output-${published}`);
+      const preload = `globalThis.fetch = async (url) => url.includes('/releases/tags/') && ${published} ? Response.json({ draft: false, assets: [] }) : new Response('', { status: 404 });`;
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          `data:text/javascript,${encodeURIComponent(preload)}`,
+          "scripts/github-release.mjs",
+          "prepare",
+        ],
+        {
+          env: {
+            ...process.env,
+            GITHUB_REF: "refs/heads/main",
+            GITHUB_EVENT_NAME: "push",
+            GITHUB_REPOSITORY: "owner/repo",
+            GITHUB_SHA: sha,
+            GH_TOKEN: "mock-token",
+            GITHUB_REF_TYPE: "branch",
+            GITHUB_OUTPUT: output,
+          },
+          encoding: "utf8",
+        },
+      );
+
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(readFileSync(output, "utf8"), `release=${!published}\n`);
+    }
+  } finally {
+    rmSync(join(directory, "output-false"), { force: true });
+    rmSync(join(directory, "output-true"), { force: true });
+    rmdirSync(directory);
   }
 });
 
