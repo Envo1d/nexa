@@ -691,5 +691,19 @@
   "presetInvalidName": "Use a nonempty name of at most 256 characters without control characters.",
   "presetLimit": "A preset supports at most 500 entries per field.",
   "presetCharacterCopyright": "Every character must belong to a selected copyright.",
-  "presetMissing": "This preset no longer exists. Reload the presets."
+  "presetMissing": "This preset no longer exists. Reload the presets.",
+  "presetsButton": "Presets",
+  "presetsSearch": "Search presets",
+  "presetsManageAction": "Manage presets…",
+  "presetsSaveAs": "Save as preset…",
+  "presetsManagerTitle": "Manage metadata presets",
+  "presetsManagerHelp": "Edit reusable metadata independently of the current file.",
+  "presetsNewFromCurrent": "New from current details",
+  "presetsDuplicateAction": "Duplicate preset",
+  "presetsNewHeading": "New preset",
+  "presetsEditHeading": "Edit preset",
+  "presetsNoMatches": "No matching presets.",
+  "presetsEmpty": "No presets yet.",
+  "presetsLoading": "Loading presets…",
+  "presetsIndependentSave": "Saving a preset does not change the current form or files."
 }

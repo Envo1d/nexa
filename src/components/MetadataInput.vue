@@ -122,7 +122,7 @@ function positionPopup() {
   const parent = target.getBoundingClientRect();
 
   const scroll = anchor
-    .closest(".distribution-scroll")
+    .closest(".distribution-scroll, .preset-manager-body")
     ?.getBoundingClientRect();
 
   anchorVisible.value =
@@ -166,7 +166,9 @@ watch([popupOpen, query, () => props.modelValue.length], async () => {
 
 onMounted(() => {
   popupTarget.value =
-    entry.value?.closest<HTMLElement>(".distribution-dialog") ?? null;
+    entry.value?.closest<HTMLElement>(
+      ".distribution-dialog, .preset-manager",
+    ) ?? null;
   document.addEventListener("scroll", schedulePosition, true);
   document.addEventListener("pointerdown", dismissAssignment, true);
   window.addEventListener("resize", schedulePosition);
