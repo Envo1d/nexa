@@ -1,10 +1,12 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync, statSync } from "node:fs";
+import { appendFileSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const releaseNotes =
   "Download Nexa-win-x64-Setup.exe. Existing NSIS users must close Nexa, uninstall the old application and install this setup once; preserve NexaNew settings/database and media folders. Future updates use Velopack packages.";
+
+class ReleaseVersionUnavailableError extends Error {}
 
 export function githubApi({ token, repository, fetchImpl = fetch }) {
   return async (path, { method = "GET", body, optional = false } = {}) => {
@@ -53,7 +55,7 @@ export async function inspectRelease({ api, version, sha }) {
   }
 
   if (reference && (object?.type !== "commit" || object.sha !== sha)) {
-    throw new Error(
+    throw new ReleaseVersionUnavailableError(
       `${tag} already points to another commit. Increase the version; tags are never moved.`,
     );
   }
@@ -61,7 +63,9 @@ export async function inspectRelease({ api, version, sha }) {
   const release = await api(`releases/tags/${tag}`, { optional: true });
 
   if (release && !release.draft) {
-    throw new Error(`${tag} is already published. Increase the version.`);
+    throw new ReleaseVersionUnavailableError(
+      `${tag} is already published. Increase the version.`,
+    );
   }
 
   if (release && !reference && release.target_commitish !== sha) {
@@ -93,18 +97,36 @@ export async function inspectRelease({ api, version, sha }) {
       (part, index) => part !== latestVersion?.[index],
     );
 
+    if (!latestVersion) {
+      throw new Error(
+        `Cannot compare latest stable tag ${latest.tag_name} with an x.y.z version.`,
+      );
+    }
+
     if (
-      !latestVersion ||
       differingPart === -1 ||
       nextVersion[differingPart] < latestVersion[differingPart]
     ) {
-      throw new Error(
+      throw new ReleaseVersionUnavailableError(
         `Release version must be higher than latest stable ${latest.tag_name}.`,
       );
     }
   }
 
   return { tag, reference, release };
+}
+
+export async function prepareRelease({ log = console.log, ...context }) {
+  try {
+    await inspectRelease(context);
+    log(`New release version: v${context.version} at ${context.sha}.`);
+    return true;
+  } catch (error) {
+    if (!(error instanceof ReleaseVersionUnavailableError)) throw error;
+
+    log(`Skipping release build: ${error.message}`);
+    return false;
+  }
 }
 
 export async function publishRelease({
@@ -182,9 +204,13 @@ async function main() {
     );
   }
 
-  if (!["check", "publish"].includes(mode) || !token || !repository) {
+  if (
+    !["prepare", "check", "publish"].includes(mode) ||
+    !token ||
+    !repository
+  ) {
     throw new Error(
-      "Expected check/publish mode and GitHub repository credentials.",
+      "Expected prepare/check/publish mode and GitHub repository credentials.",
     );
   }
 
@@ -194,6 +220,17 @@ async function main() {
 
   const { version } = JSON.parse(readFileSync("package.json", "utf8"));
   const api = githubApi({ token, repository });
+
+  if (mode === "prepare") {
+    if (!process.env.GITHUB_OUTPUT) {
+      throw new Error("Release preparation requires GITHUB_OUTPUT.");
+    }
+
+    const eligible = await prepareRelease({ api, version, sha });
+
+    appendFileSync(process.env.GITHUB_OUTPUT, `release=${eligible}\n`);
+    return;
+  }
 
   if (mode === "check") {
     await inspectRelease({ api, version, sha });
