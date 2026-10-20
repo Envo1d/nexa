@@ -76,6 +76,12 @@ const presetMetadata = computed<PresetMetadata>(() => ({
   tags: tags.value.map((value) => value.name),
 }));
 
+const presetsControl = ref<InstanceType<typeof StageMetadataPresets> | null>(
+  null,
+);
+
+const managingPresets = ref(false);
+
 function applyPreset(metadata: PresetMetadata) {
   if (saving.value) return;
 
@@ -444,6 +450,7 @@ onBeforeUnmount(() => {
       <section
         ref="dialog"
         class="distribution-dialog"
+        :inert="managingPresets"
         role="dialog"
         tabindex="-1"
         aria-modal="true"
@@ -470,6 +477,16 @@ onBeforeUnmount(() => {
               </p>
             </div>
           </div>
+          <StageMetadataPresets
+            v-if="!editing"
+            v-show="!done"
+            ref="presetsControl"
+            :metadata="presetMetadata"
+            :catalog="catalog"
+            :disabled="saving"
+            @apply="applyPreset"
+            @managing="managingPresets = $event"
+          />
           <button
             class="icon-button"
             :aria-label="
@@ -505,13 +522,6 @@ onBeforeUnmount(() => {
             ><span>{{ ui(label) }}</span>
           </button>
         </nav>
-        <StageMetadataPresets
-          v-if="!editing"
-          v-show="!done && step === 0"
-          :metadata="presetMetadata"
-          :disabled="saving"
-          @apply="applyPreset"
-        />
         <div
           class="distribution-scroll"
           :class="{
@@ -772,6 +782,16 @@ onBeforeUnmount(() => {
                   :value="value || '—'"
                 />
               </dl>
+              <button
+                v-if="!editing"
+                class="secondary-button wizard-save-preset"
+                :disabled="
+                  saving || !artist.trim() || !presetsControl?.available
+                "
+                @click="presetsControl?.openManager(true)"
+              >
+                <AppIcon name="plus" :size="15" />{{ ui("Save as preset…") }}
+              </button>
               <details v-if="allFiles" class="wizard-batch-files" open>
                 <summary>
                   {{ ui(editing ? "Files to update" : "Files to distribute") }}

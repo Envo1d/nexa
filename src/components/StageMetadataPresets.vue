@@ -1,19 +1,53 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  useId,
+} from "vue";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 
 import { translateUi as ui } from "../i18n/presentation";
 import AppIcon from "./AppIcon.vue";
-import AppSelect from "./AppSelect.vue";
+import MetadataPresetManager from "./MetadataPresetManager.vue";
 
 import type { MetadataPreset, PresetMetadata } from "../types/metadataPresets";
 
 const props = defineProps<{
   metadata: PresetMetadata;
   disabled: boolean;
+  catalog?: {
+    artists: string[];
+    copyrights: string[];
+    tags: string[];
+    characters: { name: string; copyright: string }[];
+  };
 }>();
 
-const emit = defineEmits<{ apply: [metadata: PresetMetadata] }>();
+const emit = defineEmits<{
+  apply: [metadata: PresetMetadata];
+  managing: [open: boolean];
+}>();
+
+const id = useId();
+
+const root = ref<HTMLElement | null>(null);
+
+const trigger = ref<HTMLButtonElement | null>(null);
+
+const search = ref<HTMLInputElement | null>(null);
+
+const open = ref(false);
+
+const managing = ref(false);
+
+const creating = ref(false);
+
+const query = ref("");
+
+let returnFocus: HTMLElement | null = null;
 
 const presets = ref<MetadataPreset[]>([]);
 
@@ -29,14 +63,105 @@ const error = ref("");
 
 const notice = ref("");
 
-const confirmingDelete = ref(false);
-
 const blocked = computed(() => props.disabled || busy.value || !loaded.value);
 
-const options = computed(() => [
-  { value: "", label: ui("Choose a metadata preset") },
-  ...presets.value.map((preset) => ({ value: preset.id, label: preset.name })),
-]);
+const available = computed(() => !blocked.value);
+
+const visiblePresets = computed(() =>
+  presets.value.filter((preset) =>
+    preset.name
+      .toLocaleLowerCase()
+      .includes(query.value.trim().toLocaleLowerCase()),
+  ),
+);
+
+async function toggle() {
+  if (props.disabled || managing.value) return;
+
+  open.value = !open.value;
+
+  if (open.value) {
+    query.value = "";
+    await nextTick();
+    search.value?.focus();
+  }
+}
+
+function dismiss(event: Event) {
+  if (event.target instanceof Node && !root.value?.contains(event.target))
+    open.value = false;
+}
+
+function closePicker() {
+  open.value = false;
+  trigger.value?.focus();
+}
+
+function pickerKeyboard(event: KeyboardEvent) {
+  if (event.key !== "Escape" || !open.value) return;
+
+  event.preventDefault();
+  event.stopPropagation();
+  closePicker();
+}
+
+function dismissFocus(event: FocusEvent) {
+  if (
+    !(event.relatedTarget instanceof Node) ||
+    !root.value?.contains(event.relatedTarget)
+  )
+    open.value = false;
+}
+
+function openManager(create = false) {
+  if (blocked.value) return;
+
+  returnFocus =
+    document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+  open.value = false;
+  creating.value = create;
+  error.value = "";
+  notice.value = "";
+  managing.value = true;
+  emit("managing", true);
+}
+
+async function closeManager() {
+  if (busy.value) return;
+
+  managing.value = false;
+  emit("managing", false);
+  await nextTick();
+
+  if (returnFocus?.isConnected && !returnFocus.closest("[inert]"))
+    returnFocus.focus();
+  else trigger.value?.focus();
+}
+
+async function saveManaged(
+  id: string | null,
+  presetName: string,
+  metadata: PresetMetadata,
+) {
+  if (blocked.value) return;
+
+  selected.value = id ?? "";
+  name.value = presetName;
+  await save(id !== null, metadata);
+
+  if (!error.value) await closeManager();
+}
+
+async function deleteManaged(id: string) {
+  if (blocked.value) return;
+
+  selected.value = id;
+  await remove();
+}
+
+defineExpose({ openManager, available });
 
 async function load() {
   busy.value = true;
@@ -58,7 +183,6 @@ function apply(id: string) {
   if (blocked.value) return;
 
   selected.value = id;
-  confirmingDelete.value = false;
 
   const preset = presets.value.find((preset) => preset.id === id);
 
@@ -68,27 +192,25 @@ function apply(id: string) {
   error.value = "";
   notice.value = "Preset applied to the form. Review before distributing.";
   emit("apply", JSON.parse(JSON.stringify(preset.metadata)) as PresetMetadata);
+  closePicker();
 }
 
-async function save(update: boolean) {
+async function save(update: boolean, source = props.metadata) {
   if (blocked.value || (update && !selected.value)) return;
 
   busy.value = true;
   error.value = "";
   notice.value = "";
-  confirmingDelete.value = false;
 
   try {
     const presetName = name.value.trim();
 
-    if (!presetName || !props.metadata.artist.trim())
+    if (!presetName || !source.artist.trim())
       throw new Error(ui("Enter a preset name and an artist."));
 
     const id = update ? selected.value : null;
 
-    const metadata = JSON.parse(
-      JSON.stringify(props.metadata),
-    ) as PresetMetadata;
+    const metadata = JSON.parse(JSON.stringify(source)) as PresetMetadata;
 
     if (
       !isTauri() &&
@@ -138,7 +260,6 @@ async function remove() {
     );
     selected.value = "";
     name.value = "";
-    confirmingDelete.value = false;
     notice.value = "Metadata preset deleted. The form is unchanged.";
   } catch (cause) {
     error.value = `Could not delete preset: ${String(cause)}`;
@@ -147,23 +268,81 @@ async function remove() {
   }
 }
 
-onMounted(load);
+onMounted(() => {
+  void load();
+  document.addEventListener("pointerdown", dismiss);
+});
+
+onBeforeUnmount(() => document.removeEventListener("pointerdown", dismiss));
 </script>
 
 <template>
-  <section
+  <div
+    ref="root"
     class="stage-presets"
-    :aria-label="ui('Metadata presets')"
-    :aria-busy="busy"
+    @keydown="pickerKeyboard"
+    @focusout="dismissFocus"
   >
-    <div class="preset-picker">
-      <AppSelect
-        :model-value="selected"
-        :options="options"
-        :label="ui('Metadata presets')"
-        :disabled="blocked"
-        @update:model-value="apply"
+    <button
+      ref="trigger"
+      type="button"
+      class="secondary-button preset-trigger"
+      :disabled="disabled"
+      :aria-expanded="open"
+      :aria-controls="`${id}-picker`"
+      @click="toggle"
+    >
+      <AppIcon name="copy" :size="15" />{{ ui("Presets")
+      }}<AppIcon name="down" :size="14" />
+    </button>
+    <section
+      v-if="open"
+      :id="`${id}-picker`"
+      class="preset-picker"
+      :aria-label="ui('Metadata presets')"
+      :aria-busy="busy"
+    >
+      <h3>{{ ui("Choose a metadata preset") }}</h3>
+      <input
+        ref="search"
+        v-model="query"
+        type="search"
+        :aria-label="ui('Search presets')"
+        :placeholder="ui('Search presets')"
       />
+      <div class="preset-picker-list">
+        <button
+          v-for="preset in visiblePresets"
+          :key="preset.id"
+          class="preset-choice"
+          :disabled="blocked"
+          @click="apply(preset.id)"
+        >
+          <strong>{{ preset.name }}</strong>
+          <span>{{ preset.metadata.artist }}</span>
+          <small>{{
+            [
+              ...preset.metadata.copyrights,
+              ...preset.metadata.characters.map((entry) => entry.name),
+              ...preset.metadata.tags,
+            ].join(" · ") || "—"
+          }}</small>
+        </button>
+        <p v-if="loaded && !visiblePresets.length" class="muted">
+          {{ ui(presets.length ? "No matching presets." : "No presets yet.") }}
+        </p>
+        <p v-if="busy" class="muted" role="status">
+          {{ ui("Loading presets…") }}
+        </p>
+      </div>
+      <p class="muted">
+        {{
+          ui(
+            "Presets replace copyrights, artist, characters and tags. Video titles stay unchanged.",
+          )
+        }}
+      </p>
+      <p v-if="error" role="alert" class="error-message">{{ ui(error) }}</p>
       <button
         v-if="!loaded && !busy"
         class="secondary-button"
@@ -172,199 +351,133 @@ onMounted(load);
       >
         {{ ui("Retry") }}
       </button>
-    </div>
-    <details>
-      <summary tabindex="0" class="preset-management-toggle">
-        <AppIcon name="settings" :size="15" aria-hidden="true" />
-        <span>{{ ui("Save and manage presets") }}</span>
-        <AppIcon
-          name="down"
-          :size="15"
-          class="preset-management-chevron"
-          aria-hidden="true"
-        />
-      </summary>
-      <p class="muted">
-        {{
-          ui(
-            "Presets replace copyrights, artist, characters and tags. Video titles stay unchanged.",
-          )
-        }}
-      </p>
-      <div class="preset-actions">
-        <label
-          >{{ ui("Preset name")
-          }}<input v-model="name" :disabled="blocked" maxlength="256"
-        /></label>
+      <div class="preset-picker-actions">
         <button
           class="secondary-button"
-          :disabled="blocked || !name.trim() || !metadata.artist.trim()"
-          @click="save(false)"
+          :disabled="blocked || !metadata.artist.trim()"
+          @click="openManager(true)"
         >
-          {{ ui("Save new preset") }}
-        </button>
-        <button
-          class="secondary-button"
-          :disabled="
-            blocked || !selected || !name.trim() || !metadata.artist.trim()
-          "
-          @click="save(true)"
-        >
-          {{ ui("Update selected preset") }}
-        </button>
-        <button
-          class="secondary-button"
-          :disabled="blocked || !selected"
-          @click="confirmingDelete = !confirmingDelete"
-        >
-          {{ ui("Delete preset") }}
-        </button>
-      </div>
-      <div v-if="confirmingDelete" class="preset-actions">
-        <span>{{
-          ui("Delete the selected preset? Your form and files will be kept.")
-        }}</span>
-        <button class="secondary-button" :disabled="blocked" @click="remove">
-          {{ ui("Confirm deletion") }}
+          <AppIcon name="plus" :size="14" />{{ ui("Save as preset…") }}
         </button>
         <button
           class="secondary-button"
           :disabled="blocked"
-          @click="confirmingDelete = false"
+          @click="openManager()"
         >
-          {{ ui("Cancel") }}
+          <AppIcon name="settings" :size="14" />{{ ui("Manage presets…") }}
         </button>
       </div>
-      <p v-if="!isTauri()" class="muted">
-        {{ ui("Demo presets last only while this dialog is open.") }}
-      </p>
-    </details>
-    <p v-if="notice" role="status" class="muted">{{ ui(notice) }}</p>
-    <p v-if="error" role="alert" class="error-message">{{ ui(error) }}</p>
-  </section>
+    </section>
+    <span class="preset-status" role="status">{{ ui(notice) }}</span>
+    <MetadataPresetManager
+      v-if="managing"
+      :presets="presets"
+      :metadata="metadata"
+      :create="creating"
+      :busy="busy"
+      :error="error"
+      :notice="notice"
+      :catalog="catalog"
+      :demo="!isTauri()"
+      @close="closeManager"
+      @save="saveManaged"
+      @delete="deleteManaged"
+    />
+  </div>
 </template>
 
 <style scoped>
 .stage-presets {
+  position: relative;
   flex-shrink: 0;
-  margin: 12px 22px 0;
-  padding: 14px;
+}
+.preset-trigger {
+  white-space: nowrap;
+}
+.preset-picker {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 8px);
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(360px, calc(100vw - 64px));
+  max-height: min(560px, calc(100dvh - 150px));
+  overflow-y: auto;
+  padding: 16px;
   border: 1px solid var(--line);
   border-radius: 10px;
+  background: var(--surface-raised);
+  box-shadow: 0 20px 70px var(--shadow);
 }
-
-.preset-picker,
-.preset-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: end;
-  gap: 8px;
+.preset-picker h3 {
+  margin: 0;
+  font-size: 13px;
 }
-
-.preset-picker > :first-child {
-  flex: 1 1 220px;
-  min-width: 0;
-}
-
-.preset-picker :deep(.sort-select-options) {
-  max-height: min(240px, 35vh);
-  overflow-y: auto;
-}
-
-.stage-presets details,
-.stage-presets p,
-.preset-actions {
-  margin-top: 10px;
-}
-
-.preset-management-toggle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 35px;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: var(--surface-input);
-  color: var(--muted);
+.preset-picker p {
+  margin: 0;
+  max-width: none;
   font-size: 12px;
-  list-style: none;
-  cursor: pointer;
-  transition:
-    background 0.14s,
-    color 0.14s,
-    border-color 0.14s;
+  line-height: 1.5;
+  white-space: normal;
 }
-
-.preset-management-toggle::-webkit-details-marker {
-  display: none;
-}
-
-.preset-management-toggle span {
-  flex: 1;
-}
-
-.preset-management-toggle svg {
-  flex-shrink: 0;
-}
-
-.preset-management-toggle:hover {
-  border-color: var(--accent-line);
-  background: var(--surface-hover);
-  color: var(--text);
-}
-
-.preset-management-toggle:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-}
-
-.stage-presets details[open] > .preset-management-toggle {
-  border-color: var(--accent-line);
-  color: var(--text-accent);
-}
-
-.preset-management-chevron {
-  transition: transform 0.14s;
-}
-
-.stage-presets details[open] .preset-management-chevron {
-  transform: rotate(180deg);
-}
-
-.stage-presets details {
-  max-height: 140px;
-  overflow-y: auto;
-}
-
-.preset-actions label {
-  display: grid;
-  flex: 1 1 180px;
-  gap: 6px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.preset-actions input {
+.preset-picker input {
   width: 100%;
-  min-width: 0;
-  height: 35px;
+  min-height: 35px;
   padding: 0 10px;
   border: 1px solid var(--line);
   border-radius: 7px;
   background: var(--surface-input);
   color: var(--text);
 }
-
-.preset-actions input:hover:not(:disabled) {
+.preset-picker-list {
+  display: grid;
+  gap: 4px;
+  min-height: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+.preset-choice {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.preset-choice:hover,
+.preset-choice:focus-visible {
   border-color: var(--accent-line);
+  background: var(--accent-soft);
 }
-
-.preset-actions input:focus-visible {
-  border-color: var(--accent);
+.preset-choice span,
+.preset-choice small {
+  color: var(--muted);
+  font-size: 12px;
 }
-
-.preset-actions input:disabled {
-  opacity: 0.5;
+.preset-choice small {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.preset-picker-actions {
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.preset-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
 }
 </style>
