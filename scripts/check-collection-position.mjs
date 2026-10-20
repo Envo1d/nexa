@@ -16,12 +16,13 @@ async function settle() {
   for (let i = 0; i < 8; i++) await nextTick();
 }
 
-async function collection() {
+async function collection(options = {}) {
   const props = reactive({
     items: items(300),
     mode: "list",
     collectionKey: "all",
     native: true,
+    ...options,
   });
   const scope = effectScope();
   globalThis.__collectionProps = props;
@@ -32,7 +33,7 @@ async function collection() {
   source = source.match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1];
   source = source.replace(
     /import \{[\s\S]*?\} from "vue";/,
-    `import { computed, nextTick, ref, watch } from ${vueUrl}; const onMounted = () => {}; const onBeforeUnmount = () => {};`,
+    `import { computed, nextTick, ref, watch } from ${vueUrl}; const mounted = []; const unmounting = []; const onMounted = fn => mounted.push(fn); const onBeforeUnmount = fn => unmounting.push(fn);`,
   );
   source = source.replace(
     /import \{ useI18n \} from "vue-i18n";/,
@@ -41,7 +42,7 @@ async function collection() {
   source = source.replace(/import .* from ".*?";/g, (line) =>
     line.includes('from "file:') ? line : "",
   );
-  source = `const defineProps = () => globalThis.__collectionProps; const defineEmits = () => () => {};\n${source}\nexport { viewport, loaded, scrollTop, updateScroll, visibleItems, rowHeight, columns };`;
+  source = `const events = []; const defineProps = () => globalThis.__collectionProps; const defineEmits = () => (...args) => events.push(args);\n${source}\nexport { viewport, loaded, scrollTop, updateScroll, visibleItems, rowHeight, columns, mounted, unmounting, events };`;
   const code = transpileModule(source, {
     compilerOptions: { module: ModuleKind.ESNext },
   }).outputText;
@@ -50,16 +51,62 @@ async function collection() {
   );
   const state = scope.run(() => create.setup());
   const viewport = {
-    scrollTop: 8807,
+    scrollTop: options.position ? 0 : 8807,
     scrollTo({ top }) {
       this.scrollTop = top;
     },
   };
   state.viewport.value = viewport;
-  state.loaded.value = 250;
-  state.updateScroll();
+  if (!options.position) {
+    state.loaded.value = 250;
+    state.updateScroll();
+  }
   return { props, scope, state, viewport };
 }
+
+test("view navigation restores independent positions and reads pending scroll before unmount", async () => {
+  const main = await collection();
+  const stage = await collection({ collectionKey: "stage" });
+  const scopes = [main.scope, stage.scope];
+  const previousObserver = globalThis.ResizeObserver;
+  globalThis.ResizeObserver = class {
+    observe() {}
+    disconnect() {}
+  };
+  try {
+    // No animation frame has consumed these final native scroll positions.
+    main.viewport.scrollTop = 12019;
+    stage.viewport.scrollTop = 4403;
+    for (const f of [main, stage]) {
+      f.state.unmounting.forEach((fn) => fn());
+      const position = f.state.events.find(
+        ([name]) => name === "savePosition",
+      )[1];
+      const restored = await collection({
+        position,
+        collectionKey: f.props.collectionKey,
+      });
+      scopes.push(restored.scope);
+      restored.state.mounted.forEach((fn) => fn());
+      assert.equal(restored.viewport.scrollTop, f.viewport.scrollTop);
+      assert.equal(restored.state.scrollTop.value, f.viewport.scrollTop);
+      assert.ok(restored.state.loaded.value >= position.loaded);
+      assert.ok(restored.state.visibleItems.value.length > 0);
+
+      for (const change of [{ collectionKey: "other" }, { mode: "grid" }]) {
+        const reset = await collection({ position, ...change });
+        scopes.push(reset.scope);
+        reset.state.mounted.forEach((fn) => fn());
+        assert.equal(reset.state.scrollTop.value, 0);
+        assert.equal(reset.viewport.scrollTop, 0);
+        assert.equal(reset.state.loaded.value, 36);
+      }
+    }
+  } finally {
+    scopes.forEach((scope) => scope.stop());
+    globalThis.ResizeObserver = previousObserver;
+  }
+});
 
 for (const scenario of [
   "refresh",
