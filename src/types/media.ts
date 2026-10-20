@@ -1,5 +1,15 @@
 export type MediaKind = "video" | "image";
 
+export interface CollectionPosition {
+  collectionKey: string;
+  mode: "grid" | "list";
+  scrollTop: number;
+  loaded: number;
+  width: number;
+  height: number;
+  remSize: number;
+}
+
 export interface MediaItem {
   nativeId?: string;
   nativeRevision?: string;

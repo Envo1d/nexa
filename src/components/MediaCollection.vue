@@ -13,13 +13,14 @@ import { translateUi as ui } from "../i18n/presentation";
 import MediaCard from "./MediaCard.vue";
 import AppIcon from "./AppIcon.vue";
 
-import type { MediaItem } from "../types/media";
+import type { CollectionPosition, MediaItem } from "../types/media";
 
 const { t } = useI18n();
 
 const props = defineProps<{
   items: MediaItem[];
   collectionKey: string;
+  position?: CollectionPosition;
   showPreviews: boolean;
   mode: "grid" | "list";
   selectedId: string | null;
@@ -48,23 +49,30 @@ const emit = defineEmits<{
   reset: [];
   loadMore: [];
   retry: [];
+  savePosition: [position: CollectionPosition];
 }>();
+
+const savedPosition =
+  props.position?.collectionKey === props.collectionKey &&
+  props.position.mode === props.mode
+    ? props.position
+    : undefined;
 
 const viewport = ref<HTMLElement | null>(null);
 
-const width = ref(660);
+const width = ref(savedPosition?.width ?? 660);
 
-const height = ref(600);
+const height = ref(savedPosition?.height ?? 600);
 
-const scrollTop = ref(0);
+const scrollTop = ref(savedPosition?.scrollTop ?? 0);
 
 const showBackToTop = computed(
   () => height.value > 0 && scrollTop.value >= height.value * 2 && !drag.value,
 );
 
-const loaded = ref(36);
+const loaded = ref(savedPosition?.loaded ?? 36);
 
-const remSize = ref(13);
+const remSize = ref(savedPosition?.remSize ?? 13);
 
 const cardWidth = computed(() => 17.5 * remSize.value);
 
@@ -455,6 +463,11 @@ watch(
 );
 
 onMounted(() => {
+  if (viewport.value && savedPosition) {
+    viewport.value.scrollTop = savedPosition.scrollTop;
+    updateScroll();
+  }
+
   observer = new ResizeObserver(([entry]) => {
     if (entry && entry.contentRect.width > 0 && entry.contentRect.height > 0) {
       remSize.value = parseFloat(
@@ -469,6 +482,15 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  emit("savePosition", {
+    collectionKey: props.collectionKey,
+    mode: props.mode,
+    scrollTop: viewport.value?.scrollTop ?? scrollTop.value,
+    loaded: loaded.value,
+    width: width.value,
+    height: height.value,
+    remSize: remSize.value,
+  });
   endSelection();
   observer?.disconnect();
   cancelScrollFrame();

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useTemplateRef } from "vue";
+import { shallowRef, useTemplateRef } from "vue";
 import { useI18n } from "vue-i18n";
 import { isTauri } from "@tauri-apps/api/core";
 
@@ -21,7 +21,13 @@ import DeleteFilesDialog from "./components/DeleteFilesDialog.vue";
 import { useWorkspace } from "./app/useWorkspace";
 import "./styles.css";
 
+import type { CollectionPosition } from "./types/media";
+
 const { t } = useI18n();
+
+const mainPosition = shallowRef<CollectionPosition>();
+
+const stagePosition = shallowRef<CollectionPosition>();
 
 const searchInput = useTemplateRef<HTMLInputElement>("searchInput");
 
@@ -416,6 +422,7 @@ const {
         </aside>
         <MediaCollection
           :items="results"
+          :position="mainPosition"
           :collection-key="library.collectionKey.value"
           :native="isTauri()"
           :total="isTauri() ? library.total.value : undefined"
@@ -430,6 +437,7 @@ const {
           :heading="heading"
           :filtered="activeFilterCount > 0"
           @load-more="library.loadMore"
+          @save-position="mainPosition = $event"
           @retry="library.refresh()"
           @select="library.select"
           @open="previewAction('Open file', $event)"
@@ -495,6 +503,7 @@ const {
         </aside>
         <MediaCollection
           :items="stage.results.value"
+          :position="stagePosition"
           :collection-key="stage.appliedSearch.value"
           :native="isTauri()"
           :total="isTauri() ? stage.total.value : undefined"
@@ -510,6 +519,7 @@ const {
           :filtered="Boolean(stage.search.value.trim())"
           stage
           @load-more="stage.loadMore"
+          @save-position="stagePosition = $event"
           @retry="refreshRedistribution"
           @select="stage.select"
           @open="previewAction('Open file', $event)"

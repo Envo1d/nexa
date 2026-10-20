@@ -1318,6 +1318,7 @@ body:has(.nexa-video-player:fullscreen) .app-shell {
   place-items: center;
   width: 22px;
   height: 22px;
+  padding: 0;
   border: 1px solid var(--line-strong);
   border-radius: 50%;
   background: var(--surface-raised);
