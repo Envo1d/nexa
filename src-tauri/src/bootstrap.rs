@@ -96,6 +96,7 @@ pub fn run() {
             metadata_presets::save_metadata_preset,
             metadata_presets::delete_metadata_preset,
             taxonomy::rename_taxonomy,
+            taxonomy::update_taxonomy_character,
             taxonomy::delete_taxonomy,
             taxonomy::get_redistribution_files,
             stage::start_stage_scan,

@@ -23,6 +23,7 @@ const props = withDefaults(
     modelValue?: MetadataValue[];
     textValue?: string;
     textInput?: boolean;
+    required?: boolean;
     options: MetadataValue[];
     label: string;
     disabled?: boolean;
@@ -76,6 +77,7 @@ const showSuggestions = computed(
   () =>
     focused.value &&
     !props.disabled &&
+    (!props.textInput || props.options.length > 0) &&
     Boolean(query.value.trim()) &&
     !assignment.value.length,
 );
@@ -314,6 +316,8 @@ function chooseAssignment(value: MetadataValue) {
 function keydown(event: KeyboardEvent) {
   if (event.isComposing || props.disabled) return;
 
+  if (props.textInput && !props.options.length) return;
+
   if (event.key === "ArrowDown" || event.key === "ArrowUp") {
     event.preventDefault();
     focused.value = true;
@@ -389,6 +393,7 @@ function keydown(event: KeyboardEvent) {
         ref="input"
         v-model="query"
         :disabled="disabled"
+        :required="textInput && required"
         role="combobox"
         aria-autocomplete="list"
         :aria-expanded="showSuggestions && anchorVisible && matches.length > 0"
