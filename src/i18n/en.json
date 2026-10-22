@@ -707,7 +707,7 @@
   "presetsLoading": "Loading presets…",
   "presetsIndependentSave": "Saving a preset does not change the current form or files.",
   "uiEntryUpdated": "Entry updated.",
-  "uiCharacterCopyrightChangeHelp": "Changing copyright updates all linked files. Their existing copyrights are kept.",
+  "uiCharacterCopyrightChangeHelp": "Changing copyright updates all linked files. The previous copyright is removed if no characters on the file still use it.",
   "uiCharacterCopyrightMissing": "The character or copyright no longer exists. Refresh the list.",
   "uiEnterNamePlaceholder": "Enter name…"
 }

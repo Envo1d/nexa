@@ -146,7 +146,7 @@ test("other categories retain the rename command", async () => {
   assert.equal(calls[0], "rename_taxonomy");
 });
 
-test("demo reassigns qualified links, keeps copyrights, and rejects collisions atomically", async () => {
+test("demo reassigns qualified links, cleans old copyright, and rejects collisions atomically", async () => {
   const item = {
     id: "1",
     copyrights: ["World", "Other"],
@@ -159,7 +159,7 @@ test("demo reassigns qualified links, keeps copyrights, and rejects collisions a
   const state = run(demoCode, false).useDemoTaxonomy(library, ref([]));
   state.change("character", "Alice", "Hero", "World", "Other");
   assert.equal(library.value[0].characterCopyrights[0].copyright, "Other");
-  assert.deepEqual([...library.value[0].copyrights], ["World", "Other"]);
+  assert.deepEqual([...library.value[0].copyrights], ["Other"]);
   state.change("character", "Hero", "Hero", "Other", "World");
   assert.throws(() =>
     state.change("character", "Hero", "Hero", "World", "Missing"),
@@ -199,7 +199,7 @@ test("demo adds a new copyright without changing inferred old character identity
   ]);
   const state = run(demoCode, false).useDemoTaxonomy(library, ref([]));
   state.change("character", "Alice", "Alice", "World", "Another");
-  assert.deepEqual([...library.value[0].copyrights], ["Another", "World"]);
+  assert.deepEqual([...library.value[0].copyrights], ["Another"]);
   assert.equal(library.value[0].characterCopyrights[0].copyright, "Another");
   assert.equal(library.value[0].characterCopyrights[0].name, "Alice");
 });
@@ -231,4 +231,47 @@ test("plain name input keeps form keys and hides suggestions; metadata search st
   assert.equal(searchable.showSuggestions.value, true);
   searchable.keydown(enter);
   assert.equal(prevented, 1);
+});
+
+test("demo keeps previous copyright only where another character uses it", () => {
+  const library = ref([
+    {
+      id: "1",
+      copyrights: ["World", "Other", "Unrelated"],
+      characters: ["Alice", "Bob"],
+      characterCopyrights: [
+        { name: "Alice", copyright: "World" },
+        { name: "Bob", copyright: "World" },
+      ],
+      tags: [],
+      artist: "Artist",
+    },
+    {
+      id: "2",
+      copyrights: ["World", "Other"],
+      characters: ["Alice"],
+      characterCopyrights: [{ name: "Alice", copyright: "World" }],
+      tags: [],
+      artist: "Artist",
+    },
+    {
+      id: "3",
+      copyrights: ["World"],
+      characters: [],
+      tags: [],
+      artist: "Artist",
+    },
+  ]);
+  const state = run(demoCode, false).useDemoTaxonomy(library, ref([]));
+  state.change("character", "Alice", "Alice", "World", "Other");
+  assert.deepEqual(
+    [...library.value[0].copyrights],
+    ["World", "Other", "Unrelated"],
+  );
+  assert.deepEqual([...library.value[1].copyrights], ["Other"]);
+  assert.deepEqual([...library.value[2].copyrights], ["World"]);
+  state.change("character", "Alice", "Hero", "Other", "Other");
+  assert.deepEqual([...library.value[1].copyrights], ["Other"]);
+  state.change("character", "Hero", undefined, "Other");
+  assert.deepEqual([...library.value[1].copyrights], ["Other"]);
 });

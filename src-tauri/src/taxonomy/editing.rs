@@ -68,7 +68,8 @@ async fn update(
         .await?;
 
     // Restore qualified links only after the parent identity has changed.
-    // Existing copyrights are independent annotations and must remain selected.
+    let mut removed_copyrights = 0;
+
     for media_id in &media_ids {
         sqlx::query("INSERT OR IGNORE INTO media_copyrights(media_id, copyright_id) VALUES (?, ?)")
             .bind(media_id)
@@ -85,6 +86,20 @@ async fn update(
         .bind(copyright_id)
         .execute(&mut *tx)
         .await?;
+
+        // Cleanup is local to this file and the character's previous copyright.
+        removed_copyrights += sqlx::query(concat!(
+            "DELETE FROM media_copyrights WHERE media_id = ? AND copyright_id = ? ",
+            "AND NOT EXISTS (SELECT 1 FROM media_characters ",
+            "WHERE media_id = ? AND copyright_id = ?)",
+        ))
+        .bind(media_id)
+        .bind(old_copyright)
+        .bind(media_id)
+        .bind(old_copyright)
+        .execute(&mut *tx)
+        .await?
+        .rows_affected();
     }
 
     let affected = sqlx::query(concat!(
@@ -97,5 +112,10 @@ async fn update(
     .rows_affected();
 
     tx.commit().await?;
+    tracing::debug!(
+        removed_copyright_links = removed_copyrights,
+        "Removed previous copyright links without remaining characters"
+    );
+
     Ok(affected)
 }
