@@ -4,6 +4,8 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 
 import { translateUi as ui } from "../i18n/presentation";
 import AppIcon from "./AppIcon.vue";
+import AppSelect from "./AppSelect.vue";
+import MetadataInput from "./MetadataInput.vue";
 import {
   categoryKey,
   type TaxonomyCatalog,
@@ -18,6 +20,7 @@ const props = defineProps<{
     old: string,
     replacement?: string,
     copyright?: string,
+    replacementCopyright?: string,
   ) => number;
 }>();
 
@@ -72,7 +75,16 @@ const pending = ref<{ entry: TaxonomyEntry; action: "edit" | "delete" } | null>(
 
 const name = ref("");
 
+const copyright = ref("");
+
 const data = computed(() => (native ? catalog.value : props.demoCatalog));
+
+const copyrightOptions = computed(() =>
+  data.value.copyrights.map((entry) => ({
+    value: entry.name,
+    label: entry.name,
+  })),
+);
 
 const characterNameKey = (name: string) =>
   name.normalize("NFC").toLocaleLowerCase();
@@ -141,6 +153,7 @@ async function load() {
 function begin(entry: TaxonomyEntry, action: "edit" | "delete") {
   pending.value = { entry, action };
   name.value = entry.name;
+  copyright.value = entry.copyright ?? "";
   error.value = "";
 }
 
@@ -161,7 +174,19 @@ async function apply() {
     let count = 0;
 
     if (native) {
-      if (operation.action === "edit")
+      if (operation.action === "edit" && category.value === "character") {
+        const target = data.value.copyrights.find(
+          (entry) => entry.name === copyright.value,
+        );
+
+        if (!target) throw new Error("Select the character’s copyright");
+
+        await invoke("update_taxonomy_character", {
+          id: Number(operation.entry.id),
+          name: name.value,
+          copyrightId: Number(target.id),
+        });
+      } else if (operation.action === "edit")
         await invoke("rename_taxonomy", {
           category: category.value,
           id: Number(operation.entry.id),
@@ -178,6 +203,7 @@ async function apply() {
         operation.entry.name,
         operation.action === "edit" ? name.value : undefined,
         operation.entry.copyright,
+        operation.action === "edit" ? copyright.value : undefined,
       );
 
     pending.value = null;
@@ -185,7 +211,7 @@ async function apply() {
     emit(
       "notice",
       operation.action === "edit"
-        ? "Name updated."
+        ? "Entry updated."
         : `Entry deleted.${count ? ` ${count} file(s) queued in Stage for redistribution.` : ""}`,
     );
 
@@ -364,14 +390,34 @@ onMounted(load);
             @submit.prevent="apply"
             @keydown.esc.stop="!busy && (pending = null)"
           >
-            <template v-if="pending.action === 'edit'"
-              ><label :for="`name-${entry.id}`">{{ ui("Name") }}</label
-              ><input
-                :id="`name-${entry.id}`"
-                v-model="name"
+            <template v-if="pending.action === 'edit'">
+              <MetadataInput
+                v-model:text-value="name"
+                text-input
+                label="Name"
+                :options="[]"
                 :disabled="busy"
                 required
-            /></template>
+              />
+              <template v-if="category === 'character'">
+                <div>
+                  <p class="metadata-label">{{ ui("Copyrights") }}</p>
+                  <AppSelect
+                    v-model="copyright"
+                    :label="ui('Copyrights')"
+                    :options="copyrightOptions"
+                    :disabled="busy"
+                  />
+                </div>
+                <p class="muted">
+                  {{
+                    ui(
+                      "Changing copyright updates all linked files. Their existing copyrights are kept.",
+                    )
+                  }}
+                </p>
+              </template>
+            </template>
             <p v-else>
               {{ ui(`Delete “${entry.name}”?`) }}
               {{
@@ -394,14 +440,18 @@ onMounted(load);
               ><button
                 type="submit"
                 class="primary-button"
-                :disabled="busy || (pending.action === 'edit' && !name.trim())"
+                :disabled="
+                  busy ||
+                  (pending.action === 'edit' &&
+                    (!name.trim() || (category === 'character' && !copyright)))
+                "
               >
                 {{
                   ui(
                     busy
                       ? "Saving…"
                       : pending.action === "edit"
-                        ? "Save name"
+                        ? "Save changes"
                         : "Delete entry",
                   )
                 }}
@@ -579,16 +629,13 @@ onMounted(load);
   flex-direction: column;
   gap: 12px;
 }
-.taxonomy-editor input {
-  border: 1px solid var(--line);
-  background: var(--surface-alt);
-  color: inherit;
-  padding: 9px 12px;
-  border-radius: 7px;
-}
 .taxonomy-editor p {
   line-height: 1.6;
   overflow-wrap: anywhere;
+}
+.taxonomy-editor :deep(.sort-select-options) {
+  max-height: min(240px, 40vh);
+  overflow-y: auto;
 }
 .taxonomy-editor-actions {
   display: flex;

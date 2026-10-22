@@ -5,6 +5,8 @@ use unicode_normalization::UnicodeNormalization;
 
 use crate::{database::Database, naming::name_key};
 
+mod editing;
+
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Category {
@@ -147,6 +149,27 @@ pub async fn rename_taxonomy(
     }
 
     tracing::info!("Dictionary entry renamed");
+    Ok(())
+}
+
+#[tauri::command]
+#[tracing::instrument(skip_all, fields(id, copyright_id), err)]
+pub async fn update_taxonomy_character(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, crate::stage::StageState>,
+    database: tauri::State<'_, Database>,
+    id: i64,
+    name: String,
+    copyright_id: i64,
+) -> Result<(), String> {
+    let _guard = state.operation().await;
+    crate::disk_sync::recover(database.pool()).await?;
+
+    tracing::info!("Updating character attribution");
+    let affected = editing::update_character(database.pool(), id, &name, copyright_id).await?;
+
+    crate::disk_sync::request(&app);
+    tracing::info!(affected_files = affected, "Character attribution updated");
     Ok(())
 }
 

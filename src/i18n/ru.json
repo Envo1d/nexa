@@ -705,5 +705,9 @@
   "presetsNoMatches": "Подходящих пресетов нет.",
   "presetsEmpty": "Пресетов пока нет.",
   "presetsLoading": "Загрузка пресетов…",
-  "presetsIndependentSave": "Сохранение пресета не меняет текущую форму и файлы."
+  "presetsIndependentSave": "Сохранение пресета не меняет текущую форму и файлы.",
+  "uiEntryUpdated": "Запись обновлена.",
+  "uiCharacterCopyrightChangeHelp": "Смена произведения обновит все связанные файлы. Их прежние произведения сохранятся.",
+  "uiCharacterCopyrightMissing": "Персонаж или произведение больше не существует. Обновите список.",
+  "uiEnterNamePlaceholder": "Введите имя…"
 }

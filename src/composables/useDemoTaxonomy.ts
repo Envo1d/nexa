@@ -101,6 +101,7 @@ export function useDemoTaxonomy(
     old: string,
     replacement?: string,
     copyright?: string,
+    replacementCopyright?: string,
   ) {
     const key = categoryKey[category];
 
@@ -120,12 +121,17 @@ export function useDemoTaxonomy(
       if (copyright === undefined)
         throw new Error("Select a copyright-qualified character.");
 
+      const targetCopyright = replacementCopyright ?? copyright;
+
+      if (next && !dictionaries.copyrights.has(targetCopyright))
+        throw new Error("Select the character’s copyright");
+
       if (
         [...characters.values()].some(
           (entry) =>
             next &&
-            entry.copyright === copyright &&
-            entry.name !== old &&
+            entry.copyright === targetCopyright &&
+            !(entry.name === old && entry.copyright === copyright) &&
             entry.name.normalize("NFC").toLocaleLowerCase() ===
               next.normalize("NFC").toLocaleLowerCase(),
         )
@@ -133,10 +139,21 @@ export function useDemoTaxonomy(
         throw new Error("This character already exists in the copyright.");
 
       for (const item of [...library.value, ...stage.value]) {
-        item.characterCopyrights = qualified(item).flatMap((entry) =>
+        const assignments = qualified(item);
+
+        const linked = assignments.some(
+          (entry) => entry.name === old && entry.copyright === copyright,
+        );
+
+        if (next && linked && !item.copyrights.includes(targetCopyright))
+          item.copyrights = [...item.copyrights, targetCopyright].sort((a, b) =>
+            a.localeCompare(b),
+          );
+
+        item.characterCopyrights = assignments.flatMap((entry) =>
           entry.name === old && entry.copyright === copyright
             ? next
-              ? [{ ...entry, name: next }]
+              ? [{ ...entry, name: next, copyright: targetCopyright }]
               : []
             : [entry],
         );
@@ -149,7 +166,10 @@ export function useDemoTaxonomy(
       characters.delete(characterId(old, copyright));
 
       if (next)
-        characters.set(characterId(next, copyright), { name: next, copyright });
+        characters.set(characterId(next, targetCopyright), {
+          name: next,
+          copyright: targetCopyright,
+        });
 
       library.value = [...library.value];
 

@@ -705,5 +705,9 @@
   "presetsNoMatches": "No matching presets.",
   "presetsEmpty": "No presets yet.",
   "presetsLoading": "Loading presets…",
-  "presetsIndependentSave": "Saving a preset does not change the current form or files."
+  "presetsIndependentSave": "Saving a preset does not change the current form or files.",
+  "uiEntryUpdated": "Entry updated.",
+  "uiCharacterCopyrightChangeHelp": "Changing copyright updates all linked files. Their existing copyrights are kept.",
+  "uiCharacterCopyrightMissing": "The character or copyright no longer exists. Refresh the list.",
+  "uiEnterNamePlaceholder": "Enter name…"
 }

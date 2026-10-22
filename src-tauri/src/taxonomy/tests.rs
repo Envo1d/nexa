@@ -1,5 +1,188 @@
 use super::*;
 
+#[tokio::test]
+async fn character_reassignment_preserves_identity_links_and_existing_copyrights() {
+    let (root, db) = fixture().await;
+    sqlx::query("INSERT INTO copyrights(id,name,name_key) VALUES(3,'New','new')")
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+    sqlx::raw_sql(concat!(
+        "INSERT INTO media(id,source_id,artist_id,relative_path,original_filename,path_key,",
+        "kind,extension,last_seen_at,created_at,updated_at,needs_distribution) ",
+        "VALUES(2,1,1,'queued.png','queued.png','queued.png','image','png',1,1,1,1); ",
+        "INSERT INTO media_copyrights VALUES(2,1); INSERT INTO media_characters VALUES(2,1,1);",
+    ))
+    .execute(db.pool())
+    .await
+    .unwrap();
+
+    assert_eq!(
+        editing::update_character(db.pool(), 1, " Hero ", 3)
+            .await
+            .unwrap(),
+        2
+    );
+
+    let character: (i64, String) =
+        sqlx::query_as("SELECT copyright_id,name FROM characters WHERE id = 1")
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+    assert_eq!(character, (3, "Hero".into()));
+
+    let links: Vec<(i64, i64)> = sqlx::query_as(
+        "SELECT character_id,copyright_id FROM media_characters ORDER BY character_id,media_id",
+    )
+    .fetch_all(db.pool())
+    .await
+    .unwrap();
+    assert_eq!(links, vec![(1, 3), (1, 3), (2, 2)]);
+
+    let copyrights: Vec<i64> = sqlx::query_scalar(
+        "SELECT DISTINCT copyright_id FROM media_copyrights ORDER BY copyright_id",
+    )
+    .fetch_all(db.pool())
+    .await
+    .unwrap();
+    assert_eq!(copyrights, vec![1, 2, 3]);
+
+    let media: (String, String, i64, i64) = sqlx::query_as(
+        "SELECT relative_path,original_filename,artist_id,needs_distribution FROM media WHERE id = 1",
+    )
+    .fetch_one(db.pool())
+    .await
+    .unwrap();
+    assert_eq!(media, ("image.png".into(), "image.png".into(), 1, 0));
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM pragma_foreign_key_check")
+            .fetch_one(db.pool())
+            .await
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        std::fs::read(root.path().join("image.png")).unwrap(),
+        b"unchanged media bytes"
+    );
+
+    db.close().await;
+    let reopened = Database::open(&root.path().join("vault.db")).await.unwrap();
+    assert_eq!(
+        entries(reopened.pool(), Category::Character)
+            .await
+            .unwrap()
+            .iter()
+            .find(|entry| entry.id == "1")
+            .unwrap()
+            .copyright
+            .as_deref(),
+        Some("New")
+    );
+}
+
+#[tokio::test]
+async fn character_reassignment_rejects_collisions_missing_entries_and_rolls_back_links() {
+    let (_root, db) = fixture().await;
+
+    assert!(
+        editing::update_character(db.pool(), 1, "ALICE", 2)
+            .await
+            .unwrap_err()
+            .contains("already exists")
+    );
+    assert!(
+        editing::update_character(db.pool(), 1, "Hero", 999)
+            .await
+            .is_err()
+    );
+    assert!(
+        editing::update_character(db.pool(), 999, "Hero", 2)
+            .await
+            .is_err()
+    );
+    assert!(
+        editing::update_character(db.pool(), 1, " ", 2)
+            .await
+            .is_err()
+    );
+
+    sqlx::query("INSERT INTO copyrights(id,name,name_key) VALUES(3,'New','new')")
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+    // Fail after parent mutation and link removal to exercise complete rollback.
+    sqlx::raw_sql(concat!(
+        "CREATE TRIGGER reject_character_link BEFORE INSERT ON media_characters ",
+        "BEGIN SELECT RAISE(ABORT,'blocked'); END;",
+    ))
+    .execute(db.pool())
+    .await
+    .unwrap();
+    assert!(
+        editing::update_character(db.pool(), 1, "Hero", 3)
+            .await
+            .is_err()
+    );
+
+    assert_eq!(
+        sqlx::query_as::<_, (i64, String)>("SELECT copyright_id,name FROM characters WHERE id = 1")
+            .fetch_one(db.pool())
+            .await
+            .unwrap(),
+        (1, "Alice".into())
+    );
+    assert_eq!(
+        sqlx::query_as::<_, (i64, i64)>(
+            "SELECT character_id,copyright_id FROM media_characters WHERE character_id = 1"
+        )
+        .fetch_one(db.pool())
+        .await
+        .unwrap(),
+        (1, 1)
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM pragma_foreign_key_check")
+            .fetch_one(db.pool())
+            .await
+            .unwrap(),
+        0
+    );
+}
+
+#[tokio::test]
+async fn character_edit_supports_same_copyright_and_unused_characters() {
+    let (_root, db) = fixture().await;
+    assert_eq!(
+        editing::update_character(db.pool(), 1, "Hero", 1)
+            .await
+            .unwrap(),
+        1
+    );
+
+    sqlx::query(
+        "INSERT INTO characters(id,copyright_id,name,name_key) VALUES(3,1,'Unused','unused')",
+    )
+    .execute(db.pool())
+    .await
+    .unwrap();
+    assert_eq!(
+        editing::update_character(db.pool(), 3, "Unused", 2)
+            .await
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM media_characters")
+            .fetch_one(db.pool())
+            .await
+            .unwrap(),
+        2
+    );
+}
+
 async fn fixture() -> (tempfile::TempDir, Database) {
     let root = tempfile::tempdir().unwrap();
 
