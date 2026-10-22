@@ -158,6 +158,19 @@ export function useDemoTaxonomy(
             : [entry],
         );
 
+        const removePreviousCopyright =
+          next &&
+          linked &&
+          targetCopyright !== copyright &&
+          !item.characterCopyrights.some(
+            (entry) => entry.copyright === copyright,
+          );
+
+        if (removePreviousCopyright)
+          item.copyrights = item.copyrights.filter(
+            (value) => value !== copyright,
+          );
+
         item.characters = [
           ...new Set(item.characterCopyrights.map((entry) => entry.name)),
         ];

@@ -412,7 +412,7 @@ onMounted(load);
                 <p class="muted">
                   {{
                     ui(
-                      "Changing copyright updates all linked files. Their existing copyrights are kept.",
+                      "Changing copyright updates all linked files. The previous copyright is removed if no characters on the file still use it.",
                     )
                   }}
                 </p>

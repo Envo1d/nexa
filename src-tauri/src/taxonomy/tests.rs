@@ -1,7 +1,7 @@
 use super::*;
 
 #[tokio::test]
-async fn character_reassignment_preserves_identity_links_and_existing_copyrights() {
+async fn character_reassignment_cleans_previous_copyright_per_file_and_preserves_other_links() {
     let (root, db) = fixture().await;
     sqlx::query("INSERT INTO copyrights(id,name,name_key) VALUES(3,'New','new')")
         .execute(db.pool())
@@ -13,6 +13,14 @@ async fn character_reassignment_preserves_identity_links_and_existing_copyrights
         "kind,extension,last_seen_at,created_at,updated_at,needs_distribution) ",
         "VALUES(2,1,1,'queued.png','queued.png','queued.png','image','png',1,1,1,1); ",
         "INSERT INTO media_copyrights VALUES(2,1); INSERT INTO media_characters VALUES(2,1,1);",
+        "INSERT INTO characters(id,copyright_id,name,name_key) VALUES(3,1,'Bob','bob'); ",
+        "INSERT INTO media_characters VALUES(1,3,1); ",
+        "INSERT INTO copyrights(id,name,name_key) VALUES(4,'Unrelated','unrelated'); ",
+        "INSERT INTO media_copyrights VALUES(1,4);",
+        "INSERT INTO media(id,source_id,relative_path,original_filename,path_key,kind,",
+        "extension,last_seen_at,created_at,updated_at) ",
+        "VALUES(3,1,'untouched.png','untouched.png','untouched.png','image','png',1,1,1); ",
+        "INSERT INTO media_copyrights VALUES(3,1);",
     ))
     .execute(db.pool())
     .await
@@ -38,15 +46,18 @@ async fn character_reassignment_preserves_identity_links_and_existing_copyrights
     .fetch_all(db.pool())
     .await
     .unwrap();
-    assert_eq!(links, vec![(1, 3), (1, 3), (2, 2)]);
+    assert_eq!(links, vec![(1, 3), (1, 3), (2, 2), (3, 1)]);
 
-    let copyrights: Vec<i64> = sqlx::query_scalar(
-        "SELECT DISTINCT copyright_id FROM media_copyrights ORDER BY copyright_id",
+    let copyrights: Vec<(i64, i64)> = sqlx::query_as(
+        "SELECT media_id,copyright_id FROM media_copyrights ORDER BY media_id,copyright_id",
     )
     .fetch_all(db.pool())
     .await
     .unwrap();
-    assert_eq!(copyrights, vec![1, 2, 3]);
+    assert_eq!(
+        copyrights,
+        vec![(1, 1), (1, 2), (1, 3), (1, 4), (2, 3), (3, 1)]
+    );
 
     let media: (String, String, i64, i64) = sqlx::query_as(
         "SELECT relative_path,original_filename,artist_id,needs_distribution FROM media WHERE id = 1",
@@ -153,6 +164,44 @@ async fn character_reassignment_rejects_collisions_missing_entries_and_rolls_bac
 }
 
 #[tokio::test]
+async fn failed_previous_copyright_cleanup_rolls_back_character_and_all_file_links() {
+    let (_root, db) = fixture().await;
+    sqlx::raw_sql(concat!(
+        "INSERT INTO copyrights(id,name,name_key) VALUES(3,'New','new'); ",
+        "CREATE TRIGGER reject_copyright_unlink BEFORE DELETE ON media_copyrights ",
+        "WHEN OLD.copyright_id = 1 BEGIN SELECT RAISE(ABORT,'blocked'); END;",
+    ))
+    .execute(db.pool())
+    .await
+    .unwrap();
+
+    assert!(
+        editing::update_character(db.pool(), 1, "Hero", 3)
+            .await
+            .is_err()
+    );
+
+    let character: (i64, String) =
+        sqlx::query_as("SELECT copyright_id,name FROM characters WHERE id = 1")
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+    assert_eq!(character, (1, "Alice".into()));
+
+    let copyrights: Vec<i64> = sqlx::query_scalar(
+        "SELECT copyright_id FROM media_copyrights WHERE media_id = 1 ORDER BY copyright_id",
+    )
+    .fetch_all(db.pool())
+    .await
+    .unwrap();
+    assert_eq!(copyrights, vec![1, 2]);
+
+    let links: Vec<(i64, i64)> = sqlx::query_as("SELECT character_id,copyright_id FROM media_characters WHERE media_id = 1 ORDER BY character_id")
+        .fetch_all(db.pool()).await.unwrap();
+    assert_eq!(links, vec![(1, 1), (2, 2)]);
+}
+
+#[tokio::test]
 async fn character_edit_supports_same_copyright_and_unused_characters() {
     let (_root, db) = fixture().await;
     assert_eq!(
@@ -176,6 +225,14 @@ async fn character_edit_supports_same_copyright_and_unused_characters() {
     );
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT count(*) FROM media_characters")
+            .fetch_one(db.pool())
+            .await
+            .unwrap(),
+        2
+    );
+
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM media_copyrights")
             .fetch_one(db.pool())
             .await
             .unwrap(),
