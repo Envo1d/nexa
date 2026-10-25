@@ -622,6 +622,8 @@ body:has(.nexa-video-player:fullscreen) .app-shell {
   outline-offset: 3px;
 }
 .filter-reset {
+  display: grid;
+  gap: 8px;
   padding: 14px;
   border-top: 1px solid var(--line);
 }

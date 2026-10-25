@@ -1,5 +1,9 @@
 # SQLite Migrations
 
+## Persistent Duplicate Search - Version 10 / PLAN-250
+
+0010_duplicate_cache.sql adds versioned per-media fingerprints with cascading deletion and scope-keyed generation-protected JSON search checkpoints. Existing migrations, media identities, metadata and version-9 dissimilar decisions are preserved. Fresh/reopen, version-9 upgrade/history preservation and rollback fixtures cover ten migrations and sixteen application tables; synthetic pending/failure work uses version 11. Fingerprint and snapshot SQL writes never span filesystem hashing or revision checks.
+
 ## Metadata Presets - Version 8 / PLAN-215
 
 0008_metadata_presets.sql adds the thirteenth application table for independent reusable metadata snapshots, with unique normalized names and JSON validity enforcement. Versions 1-7 remain byte-for-byte unchanged. Fresh/reopen, version-7 upgrade preservation, history checks and rollback regressions cover the new migration; synthetic pending migrations use version 9.
@@ -27,6 +31,10 @@ The Rust database service embeds the `.sql` migrations with `sqlx::migrate!("./m
 3. Never modify, delete or renumber a migration already shipped. Use a new migration for corrections; SQLx compares stored checksums and rejects changed/missing history.
 4. Test both a new empty database and an upgrade from the previous version, including preservation of user metadata and rollback on failure.
 5. Run strict all-target Clippy, Rust tests and formatting checks.
+
+## Visual Review Decisions — Version 9
+
+0009_duplicate_rejections.sql adds canonical distinct lowercase SHA-256 pair exclusions and their creation timestamp. It preserves all earlier migrations and media metadata. Decisions survive record deletion/renaming because they describe content, not file identity. Fresh, reopen, previous-version upgrade, migration-history and rollback tests cover nine migrations and fourteen application tables; custom pending/failure fixtures use version 10.
 
 `0001_init.sql` initializes ten application tables, indexes and video-kind integrity triggers. SQLx records applied versions/checksums in its own `_sqlx_migrations` table. Do not maintain a second schema version or use CREATE TABLE IF NOT EXISTS to conceal schema conflicts.
 

@@ -13,11 +13,11 @@ pub struct StageFile {
     pub(crate) id: String,
     pub(super) path: String,
     pub(super) filename: String,
-    pub(super) kind: String,
+    pub(crate) kind: String,
     pub(super) extension: String,
     pub(super) size: Option<i64>,
-    pub(super) width: Option<i64>,
-    pub(super) height: Option<i64>,
+    pub(crate) width: Option<i64>,
+    pub(crate) height: Option<i64>,
     pub(super) modified_at: Option<i64>,
     pub(super) created_at: Option<i64>,
     pub(super) duration: Option<i64>,
@@ -25,7 +25,7 @@ pub struct StageFile {
     pub(super) codec: Option<String>,
     pub(super) bitrate: Option<f64>,
     pub(super) native_redistribution: bool,
-    pub(super) revision: Option<String>,
+    pub(crate) revision: Option<String>,
     pub(super) availability: String,
 }
 

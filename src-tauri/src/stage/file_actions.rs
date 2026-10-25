@@ -1,7 +1,7 @@
 //! stage: file actions responsibility.
 
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     path::{Path, PathBuf},
 };
 
@@ -158,11 +158,13 @@ pub struct FileActionReport {
 
 #[tauri::command]
 #[tracing::instrument(skip_all, fields(action, count = ids.len()), err)]
+#[allow(clippy::too_many_arguments)] // Tauri injects the three managed dependencies.
 pub async fn stage_file_action(
     app: tauri::AppHandle,
     ids: Vec<String>,
     action: String,
     library: Option<bool>,
+    expected_revisions: Option<HashMap<String, String>>,
     database: tauri::State<'_, Database>,
     state: tauri::State<'_, StageState>,
     config: tauri::State<'_, ConfigStore>,
@@ -197,6 +199,10 @@ pub async fn stage_file_action(
             library,
             action,
             id,
+            expected_revisions
+                .as_ref()
+                .and_then(|values| values.get(&raw_id))
+                .cloned(),
         )
         .await;
 
@@ -228,6 +234,7 @@ async fn perform_action(
     library: bool,
     action: FileAction,
     id: i64,
+    expected_revision: Option<String>,
 ) -> Result<(), String> {
     let file = action_file(pool, configured_root, library, id).await?;
 
@@ -239,6 +246,14 @@ async fn perform_action(
         use tauri_plugin_opener::OpenerExt;
 
         let path = checked_action_path(&root, &file.relative_path)?;
+
+        if let Some(expected) = expected_revision {
+            let current = inspect(path.clone(), &root)?;
+
+            if current.is_none_or(|current| current.revision != expected) {
+                return Err("File changed since comparison; restart duplicate search".into());
+            }
+        }
 
         match action {
             FileAction::Delete => {

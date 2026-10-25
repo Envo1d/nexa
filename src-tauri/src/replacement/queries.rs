@@ -2,7 +2,7 @@
 
 use sqlx::{QueryBuilder, Row, Sqlite, SqlitePool};
 
-use super::{Candidates, SELECT, Source, candidate, id, is_stage, record, root};
+use super::{Candidates, SELECT, Source, candidate, id, is_main, is_stage, record, root};
 use crate::{
     config::{AppConfig, ConfigStore},
     database::Database,
@@ -11,6 +11,7 @@ use crate::{
 #[tauri::command]
 pub async fn get_replacement_source(
     id: String,
+    preferred_main_id: Option<String>,
     database: tauri::State<'_, Database>,
     config: tauri::State<'_, ConfigStore>,
 ) -> Result<Source, String> {
@@ -35,7 +36,23 @@ pub async fn get_replacement_source(
     .fetch_one(database.pool())
     .await
     .map_err(|e| e.to_string())?;
+
+    let preferred = if let Some(preferred_id) = preferred_main_id {
+        let target = record(database.pool(), self::id(&preferred_id)?).await?;
+
+        if !is_main(&target, &settings)
+            || target.get::<String, _>("kind") != row.get::<String, _>("kind")
+        {
+            return Err("Replacement target changed; restart duplicate search".into());
+        }
+
+        Some(candidate(target))
+    } else {
+        None
+    };
+
     Ok(Source {
+        preferred,
         file: candidate(row),
         sync_with_disk: settings.sync_structure,
         has_annotations,
