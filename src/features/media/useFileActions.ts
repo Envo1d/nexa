@@ -34,6 +34,7 @@ export function useFileActions(
     action: string,
     items: MediaItem[],
     main = isMain(),
+    verifyRevision = false,
   ) {
     if (fileActionBusy.value || !items.length) return;
 
@@ -72,6 +73,11 @@ export function useFileActions(
           ids: items.map((item) => item.nativeId),
           action: operation,
           library: main,
+          expectedRevisions: verifyRevision
+            ? Object.fromEntries(
+                items.map((item) => [item.nativeId, item.nativeRevision]),
+              )
+            : null,
         },
       );
 

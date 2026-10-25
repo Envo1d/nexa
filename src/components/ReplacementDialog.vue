@@ -22,6 +22,7 @@ const props = defineProps<{
   showPreviews: boolean;
   opening: boolean;
   catalog?: MetadataCatalog;
+  preferredMainId?: string;
 }>();
 
 const emit = defineEmits<{
@@ -187,7 +188,11 @@ async function reload() {
       file: NativeFile;
       syncWithDisk: boolean;
       hasAnnotations: boolean;
-    }>("get_replacement_source", { id: props.item.nativeId });
+      preferred: NativeFile | null;
+    }>("get_replacement_source", {
+      id: props.item.nativeId,
+      preferredMainId: props.preferredMainId ?? null,
+    });
 
     if (disposed || request !== version) return;
 
@@ -195,6 +200,7 @@ async function reload() {
     syncWithDisk.value = result.syncWithDisk;
     hasAnnotations.value = result.hasAnnotations;
     needsReload.value = false;
+    selected.value = result.preferred ? choice(result.preferred) : null;
     await load();
   } catch (cause) {
     if (!disposed && request === version) {

@@ -39,6 +39,7 @@ pub struct Candidate {
 #[serde(rename_all = "camelCase")]
 pub struct Source {
     file: Candidate,
+    preferred: Option<Candidate>,
     sync_with_disk: bool,
     has_annotations: bool,
 }
@@ -118,7 +119,7 @@ fn root(settings: &AppConfig) -> Result<String, String> {
         .ok_or("Configure Main Library first".into())
 }
 
-fn is_main(row: &SqliteRow, settings: &AppConfig) -> bool {
+pub(crate) fn is_main(row: &SqliteRow, settings: &AppConfig) -> bool {
     let Ok(library) = root(settings) else {
         return false;
     };
@@ -141,7 +142,7 @@ fn is_main(row: &SqliteRow, settings: &AppConfig) -> bool {
             || row.get::<String, _>("source_kind") == "library" && physical == library && !in_stage)
 }
 
-fn is_stage(row: &SqliteRow, settings: &AppConfig) -> bool {
+pub(crate) fn is_stage(row: &SqliteRow, settings: &AppConfig) -> bool {
     row.get::<String, _>("availability") == "present"
         && (row.get::<i64, _>("needs_distribution") != 0
             || row.get::<String, _>("source_kind") == "stage"

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { shallowRef, useTemplateRef } from "vue";
+import { ref, shallowRef, useTemplateRef } from "vue";
 import { useI18n } from "vue-i18n";
 import { isTauri } from "@tauri-apps/api/core";
 
@@ -17,6 +17,7 @@ import DistributionDialog from "./components/DistributionDialog.vue";
 import TagsPanel from "./components/TagsPanel.vue";
 import DuplicateOrderDialog from "./components/DuplicateOrderDialog.vue";
 import ReplacementDialog from "./components/ReplacementDialog.vue";
+import ContentDuplicatesDialog from "./components/ContentDuplicatesDialog.vue";
 import DeleteFilesDialog from "./components/DeleteFilesDialog.vue";
 import { useWorkspace } from "./app/useWorkspace";
 import "./styles.css";
@@ -24,6 +25,10 @@ import "./styles.css";
 import type { CollectionPosition } from "./types/media";
 
 const { t } = useI18n();
+
+const contentDuplicatesOpen = ref(false);
+
+const duplicateReplacementMain = ref<string>();
 
 const mainPosition = shallowRef<CollectionPosition>();
 
@@ -126,7 +131,7 @@ const {
 <template>
   <div
     class="app-shell"
-    :inert="viewerOpen || undefined"
+    :inert="viewerOpen || contentDuplicatesOpen || undefined"
     :class="{ maximized, 'system-window-corners': systemWindowCorners }"
   >
     <header class="titlebar">
@@ -415,6 +420,13 @@ const {
             </section>
           </div>
           <div class="filter-reset">
+            <button
+              v-if="isTauri()"
+              class="secondary-button"
+              @click="contentDuplicatesOpen = true"
+            >
+              <AppIcon name="search" :size="16" />{{ t("contentDuplicates") }}
+            </button>
             <button class="secondary-button" @click="library.reset()">
               <AppIcon name="reset" :size="16" />{{ t("resetFilters") }}
             </button>
@@ -637,12 +649,36 @@ const {
     <ReplacementDialog
       v-if="replacementTarget"
       :item="replacementTarget"
+      :preferred-main-id="duplicateReplacementMain"
       :opening="fileActionBusy"
       :catalog="library.catalog.value"
       :show-previews="showPreviews"
-      @close="replacementTarget = null"
+      @close="
+        replacementTarget = null;
+        duplicateReplacementMain = undefined;
+      "
       @replaced="replacementCompleted"
       @open="(item, main) => stageFileAction('Open file', [item], main)"
+    />
+    <ContentDuplicatesDialog
+      v-if="contentDuplicatesOpen"
+      :show-previews="showPreviews"
+      :opening="fileActionBusy"
+      @close="contentDuplicatesOpen = false"
+      @open="(item, main) => stageFileAction('Open file', [item], main, true)"
+      @remove="
+        (item, main) => {
+          contentDuplicatesOpen = false;
+          stageFileAction('Delete file', [item], main, true);
+        }
+      "
+      @replace="
+        (stageItem, mainItem) => {
+          contentDuplicatesOpen = false;
+          duplicateReplacementMain = mainItem.nativeId;
+          replacementTarget = stageItem;
+        }
+      "
     />
     <DistributionDialog
       v-if="distributionQueue.length"

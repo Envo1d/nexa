@@ -82,6 +82,16 @@ fn migration_directory(root: &Path) -> std::path::PathBuf {
         include_str!("../../migrations/0008_metadata_presets.sql"),
     )
     .unwrap();
+    std::fs::write(
+        directory.join("0009_duplicate_rejections.sql"),
+        include_str!("../../migrations/0009_duplicate_rejections.sql"),
+    )
+    .unwrap();
+    std::fs::write(
+        directory.join("0010_duplicate_cache.sql"),
+        include_str!("../../migrations/0010_duplicate_cache.sql"),
+    )
+    .unwrap();
     directory
 }
 
@@ -132,7 +142,7 @@ async fn reopens_shipped_line_endings_and_applies_pending_migration_without_rewr
 
         let directory = migration_directory(root.path());
         std::fs::write(
-            directory.join("0009_marker.sql"),
+            directory.join("0011_marker.sql"),
             "CREATE TABLE upgrade_marker(id INTEGER PRIMARY KEY);\r\n",
         )
         .unwrap();
@@ -167,7 +177,7 @@ async fn reopens_shipped_line_endings_and_applies_pending_migration_without_rewr
         assert_eq!(title, "Video");
         assert_eq!(
             count(database.pool(), "SELECT count(*) FROM _sqlx_migrations").await,
-            9
+            11
         );
         database.close().await;
 
@@ -282,7 +292,7 @@ async fn upgrades_version_five_preserving_annotations_order_and_history() {
     );
     assert_eq!(
         count(db.pool(), "SELECT count(*) FROM _sqlx_migrations").await,
-        8
+        10
     );
     db.close().await;
 }
@@ -346,7 +356,7 @@ async fn initializes_domain_and_operation_tables_and_preserves_data_on_reopen() 
             "AND name <> '_sqlx_migrations'",
         ))
 .await,
-        13
+        16
     );
     assert_eq!(
         count(
@@ -375,7 +385,7 @@ async fn initializes_domain_and_operation_tables_and_preserves_data_on_reopen() 
     let database = Database::open(&path).await.unwrap();
     assert_eq!(
         count(database.pool(), "SELECT count(*) FROM _sqlx_migrations").await,
-        8
+        10
     );
     assert_eq!(
         count(
@@ -398,6 +408,112 @@ async fn initializes_domain_and_operation_tables_and_preserves_data_on_reopen() 
         0
     );
     database.close().await;
+}
+
+#[tokio::test]
+async fn upgrades_version_eight_preserving_history_and_media_with_empty_review_decisions() {
+    let root = tempfile::tempdir().unwrap();
+
+    let path = root.path().join("vault.db");
+
+    let migrations = MIGRATOR
+        .iter()
+        .filter(|migration| migration.version <= 8)
+        .cloned()
+        .collect::<Vec<_>>();
+
+    let db = Database::open_with_migrator(&path, &Migrator::with_migrations(migrations))
+        .await
+        .unwrap();
+    seed(db.pool()).await;
+
+    let history: Vec<(i64, Vec<u8>)> =
+        sqlx::query_as("SELECT version,checksum FROM _sqlx_migrations ORDER BY version")
+            .fetch_all(db.pool())
+            .await
+            .unwrap();
+
+    db.close().await;
+
+    let db = Database::open(&path).await.unwrap();
+
+    let preserved: Vec<(i64, Vec<u8>)> = sqlx::query_as(
+        "SELECT version,checksum FROM _sqlx_migrations WHERE version<=8 ORDER BY version",
+    )
+    .fetch_all(db.pool())
+    .await
+    .unwrap();
+
+    assert_eq!(history, preserved);
+    assert_eq!(count(db.pool(), "SELECT count(*) FROM media").await, 2);
+    assert_eq!(
+        count(db.pool(), "SELECT count(*) FROM media_characters").await,
+        1
+    );
+    assert_eq!(
+        count(db.pool(), "SELECT count(*) FROM duplicate_rejections").await,
+        0
+    );
+    assert_eq!(
+        count(db.pool(), "SELECT count(*) FROM _sqlx_migrations").await,
+        10
+    );
+}
+
+#[tokio::test]
+async fn upgrades_version_nine_preserving_review_decisions_and_migration_checksums() {
+    let root = tempfile::tempdir().unwrap();
+
+    let path = root.path().join("vault.db");
+
+    let migrations = MIGRATOR
+        .iter()
+        .filter(|migration| migration.version <= 9)
+        .cloned()
+        .collect::<Vec<_>>();
+
+    let db = Database::open_with_migrator(&path, &Migrator::with_migrations(migrations))
+        .await
+        .unwrap();
+    seed(db.pool()).await;
+    sqlx::query("INSERT INTO duplicate_rejections(left_hash,right_hash,created_at) VALUES(?,?,1)")
+        .bind("a".repeat(64))
+        .bind("b".repeat(64))
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+    let history: Vec<(i64, Vec<u8>)> =
+        sqlx::query_as("SELECT version,checksum FROM _sqlx_migrations ORDER BY version")
+            .fetch_all(db.pool())
+            .await
+            .unwrap();
+
+    db.close().await;
+
+    let db = Database::open(&path).await.unwrap();
+
+    let preserved: Vec<(i64, Vec<u8>)> = sqlx::query_as(
+        "SELECT version,checksum FROM _sqlx_migrations WHERE version<=9 ORDER BY version",
+    )
+    .fetch_all(db.pool())
+    .await
+    .unwrap();
+
+    assert_eq!(history, preserved);
+    assert_eq!(count(db.pool(), "SELECT count(*) FROM media").await, 2);
+    assert_eq!(
+        count(db.pool(), "SELECT count(*) FROM duplicate_rejections").await,
+        1
+    );
+    assert_eq!(
+        count(db.pool(), "SELECT count(*) FROM duplicate_fingerprints").await,
+        0
+    );
+    assert_eq!(
+        count(db.pool(), "SELECT count(*) FROM duplicate_searches").await,
+        0
+    );
 }
 
 #[tokio::test]
@@ -684,7 +800,7 @@ async fn applies_pending_migrations_and_rejects_missing_history() {
 
     let directory = migration_directory(root.path());
     std::fs::write(
-        directory.join("0009_upgrade.sql"),
+        directory.join("0011_upgrade.sql"),
         "CREATE TABLE upgrade_marker(id INTEGER PRIMARY KEY) STRICT;",
     )
     .unwrap();
@@ -700,7 +816,7 @@ async fn applies_pending_migrations_and_rejects_missing_history() {
             "SELECT count(*) FROM _sqlx_migrations WHERE success = 1"
         )
         .await,
-        9
+        11
     );
     assert_eq!(
         count(database.pool(), "SELECT count(*) FROM media").await,
@@ -723,7 +839,7 @@ async fn failed_migration_rolls_back_and_preserves_existing_records() {
 
     let directory = migration_directory(root.path());
     std::fs::write(
-        directory.join("0009_broken.sql"),
+        directory.join("0011_broken.sql"),
         "CREATE TABLE rollback_marker(id INTEGER PRIMARY KEY); DELETE FROM media; INVALID SQL;",
     )
     .unwrap();
@@ -741,7 +857,7 @@ async fn failed_migration_rolls_back_and_preserves_existing_records() {
     );
     assert_eq!(
         count(database.pool(), "SELECT count(*) FROM _sqlx_migrations").await,
-        8
+        10
     );
     assert_eq!(
         count(
