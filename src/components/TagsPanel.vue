@@ -108,25 +108,27 @@ const repeatedNames = computed(() => {
   );
 });
 
-const characterFiltersActive = computed(
+const filtersActive = computed(
   () =>
-    category.value === "character" &&
-    (repeatedOnly.value || linkedCount.value !== "all"),
+    linkedCount.value !== "all" ||
+    (category.value === "character" && repeatedOnly.value),
 );
 
 const entries = computed(() => {
   const query = search.value.trim().toLocaleLowerCase();
 
   return data.value[categoryKey[category.value]].filter((entry) => {
+    const matchesLinkedCount =
+      linkedCount.value === "all" || entry.count === linkedCount.value;
+
+    if (!matchesLinkedCount) return false;
+
     if (category.value === "character") {
       const matchesRepeatedName =
         !repeatedOnly.value ||
         repeatedNames.value.has(characterNameKey(entry.name));
 
-      const matchesLinkedCount =
-        linkedCount.value === "all" || entry.count === linkedCount.value;
-
-      if (!matchesRepeatedName || !matchesLinkedCount) return false;
+      if (!matchesRepeatedName) return false;
     }
 
     return `${entry.name} ${entry.copyright ?? ""}`
@@ -286,8 +288,9 @@ onMounted(load);
         </button>
       </div>
     </div>
-    <div v-if="category === 'character'" class="taxonomy-character-filters">
+    <div class="taxonomy-filters">
       <button
+        v-if="category === 'character'"
         type="button"
         class="taxonomy-repeat-filter"
         :class="{ active: repeatedOnly }"
@@ -305,7 +308,7 @@ onMounted(load);
       <div
         class="taxonomy-link-filters"
         role="group"
-        :aria-label="ui('Filter characters by linked-file count')"
+        :aria-label="ui('Filter entries by linked-file count')"
       >
         <button
           v-for="option in linkedCountOptions"
@@ -345,7 +348,7 @@ onMounted(load);
       <p v-else-if="!entries.length" class="taxonomy-empty muted">
         {{
           ui(
-            search || characterFiltersActive
+            search || filtersActive
               ? "No matching names."
               : "No entries in this category yet.",
           )
@@ -517,7 +520,7 @@ onMounted(load);
   border-radius: 5px;
   padding: 2px 6px;
 }
-.taxonomy-character-filters {
+.taxonomy-filters {
   display: flex;
   align-items: center;
   flex-wrap: wrap;

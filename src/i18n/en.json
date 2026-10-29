@@ -322,6 +322,7 @@
   "uiFilesToUpdate": "Files to update",
   "uiFilesWillBeMovedToTheRecycleBinWhen": "Files will be moved to the Recycle Bin when available. Windows will ask before permanently deleting files that cannot be recycled.",
   "uiFilterCharactersByLinkedFileCount": "Filter characters by linked-file count",
+  "uiFilterEntriesByLinkedFileCount": "Filter entries by linked-file count",
   "uiImagePreview": "Image preview",
   "uiInformation": "Information",
   "uiDetails": "Details",

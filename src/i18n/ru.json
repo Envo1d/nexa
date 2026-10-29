@@ -322,6 +322,7 @@
   "uiFilesToUpdate": "Файлы для обновления",
   "uiFilesWillBeMovedToTheRecycleBinWhen": "Если возможно, файлы будут перемещены в корзину. Windows запросит подтверждение перед безвозвратным удалением файлов, которые нельзя переместить в корзину.",
   "uiFilterCharactersByLinkedFileCount": "Фильтр персонажей по количеству связанных файлов",
+  "uiFilterEntriesByLinkedFileCount": "Фильтр записей по количеству связанных файлов",
   "uiImagePreview": "Предпросмотр изображения",
   "uiInformation": "Информация",
   "uiDetails": "Сведения",
