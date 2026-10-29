@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 
+import { isNativeData } from "../runtime";
 import { translateUi as ui } from "../i18n/presentation";
 import { defaultConfig } from "../types/config";
 import { version } from "../../package.json";
@@ -80,7 +81,7 @@ async function scanStage(library = false) {
 
 const emit = defineEmits<{ preview: [action: string]; close: []; saved: [] }>();
 
-const native = isTauri();
+const native = isNativeData();
 
 const draft = ref({
   ...defaultConfig(),

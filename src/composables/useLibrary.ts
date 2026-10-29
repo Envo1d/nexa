@@ -1,7 +1,8 @@
 import { computed, ref, watch, onScopeDispose } from "vue";
 import { useI18n } from "vue-i18n";
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 
+import { isNativeData } from "../runtime";
 import { useMediaSelection } from "./useMediaSelection";
 import { createMockMedia } from "../data/mockMedia";
 import {
@@ -16,7 +17,7 @@ import type { MediaItem, MediaKind } from "../types/media";
 export function useLibrary() {
   const { t } = useI18n();
 
-  const native = isTauri();
+  const native = isNativeData();
 
   const media = ref<MediaItem[]>(native ? [] : createMockMedia());
   const total = ref(0);

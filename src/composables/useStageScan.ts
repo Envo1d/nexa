@@ -1,6 +1,8 @@
 import { ref } from "vue";
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+
+import { isNativeData } from "../runtime";
 
 export interface ScanStatus {
   running: boolean;
@@ -31,7 +33,7 @@ async function refreshStatus() {
 
 export function useStageScan() {
   async function connect() {
-    if (!isTauri()) return;
+    if (!isNativeData()) return;
 
     listening ??= (async () => {
       const stop = await listen<ScanStatus>("stage-scan-status", (event) => {
@@ -56,6 +58,8 @@ export function useStageScan() {
   }
 
   async function start(library = false) {
+    if (!isNativeData()) return;
+
     await connect();
 
     await invoke(library ? "start_library_scan" : "start_stage_scan");

@@ -201,8 +201,12 @@ async function model(name, invoke) {
     "const useI18n = () => ({t: x => x});",
   );
   code = code.replace(
-    /import \{ invoke, isTauri \} from "@tauri-apps\/api\/core";/,
-    "const invoke = (...args) => globalThis.__collectionInvoke(...args); const isTauri = () => true;",
+    /import \{ invoke \} from "@tauri-apps\/api\/core";/,
+    "const invoke = (...args) => globalThis.__collectionInvoke(...args);",
+  );
+  code = code.replace(
+    'import { isNativeData } from "../runtime";',
+    "const isNativeData = () => true;",
   );
   code = code.replace(
     /import \{ useMediaSelection \} from .*?;/,

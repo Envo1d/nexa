@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, shallowRef, useTemplateRef } from "vue";
+import { computed, ref, shallowRef, useTemplateRef } from "vue";
 import { useI18n } from "vue-i18n";
-import { isTauri } from "@tauri-apps/api/core";
 
+import { isNativeData } from "./runtime";
 import { translateUi as ui } from "./i18n/presentation";
 import AppIcon from "./components/AppIcon.vue";
 import ToggleSwitch from "./components/ToggleSwitch.vue";
@@ -10,6 +10,7 @@ import ToastNotifications from "./components/ToastNotifications.vue";
 import SortSelect from "./components/SortSelect.vue";
 import MediaCollection from "./components/MediaCollection.vue";
 import MediaViewer from "./components/MediaViewer.vue";
+import MetadataInput from "./components/MetadataInput.vue";
 import FileDetails from "./components/FileDetails.vue";
 import CardContextMenu from "./components/CardContextMenu.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
@@ -33,7 +34,8 @@ const stagePosition = shallowRef<CollectionPosition>();
 
 const searchInput = useTemplateRef<HTMLInputElement>("searchInput");
 
-const tagInput = useTemplateRef<HTMLInputElement>("tagInput");
+const tagForm = useTemplateRef<HTMLElement>("tagForm");
+const tagInput = computed(() => tagForm.value?.querySelector("input") ?? null);
 
 const modalElement = useTemplateRef<HTMLElement>("modalElement");
 
@@ -127,6 +129,27 @@ const {
   tagInput,
   modalElement,
 });
+
+const tagNames = computed(() => [
+  ...new Set([
+    ...(library.catalog.value?.tags ??
+      demoTaxonomy.catalog.value.tags.map((tag) => tag.name)),
+    ...library.media.value.flatMap((item) => item.tags),
+    ...stage.media.value.flatMap((item) => item.tags),
+  ]),
+]);
+
+const tagOptions = computed(() =>
+  tagNames.value
+    .filter(
+      (name) =>
+        !draftTags.value.some(
+          (selected) =>
+            selected.toLocaleLowerCase() === name.toLocaleLowerCase(),
+        ),
+    )
+    .map((name) => ({ id: name.toLocaleLowerCase(), name })),
+);
 </script>
 
 <template>
@@ -422,7 +445,7 @@ const {
           </div>
           <div class="filter-reset">
             <button
-              v-if="isTauri()"
+              v-if="isNativeData()"
               class="secondary-button"
               @click="contentDuplicatesOpen = true"
             >
@@ -437,8 +460,8 @@ const {
           :items="results"
           :position="mainPosition"
           :collection-key="library.collectionKey.value"
-          :native="isTauri()"
-          :total="isTauri() ? library.total.value : undefined"
+          :native="isNativeData()"
+          :total="isNativeData() ? library.total.value : undefined"
           :has-more="library.hasMore.value"
           :loading="library.loading.value"
           :error="library.error.value"
@@ -522,8 +545,8 @@ const {
           :items="stage.results.value"
           :position="stagePosition"
           :collection-key="stage.queryKey.value"
-          :native="isTauri()"
-          :total="isTauri() ? stage.total.value : undefined"
+          :native="isNativeData()"
+          :total="isNativeData() ? stage.total.value : undefined"
           :has-more="stage.hasMore.value"
           :loading="stage.loading.value"
           :error="stage.error.value"
@@ -608,6 +631,7 @@ const {
     />
     <MediaViewer
       v-if="viewerOpen && viewerItem"
+      :tag-names="tagNames"
       :item="viewerItem"
       :stage="viewerStage"
       :index="viewerIndex"
@@ -698,8 +722,8 @@ const {
       @processed="
         notify(
           editingMetadata
-            ? `${$event} file(s) updated${isTauri() ? '' : ' for this demo session'}.`
-            : `${$event} file(s) distributed${isTauri() ? '' : ' for this demo session'}.`,
+            ? `${$event} file(s) updated${isNativeData() ? '' : ' for this demo session'}.`
+            : `${$event} file(s) distributed${isNativeData() ? '' : ' for this demo session'}.`,
         )
       "
     />
@@ -710,7 +734,7 @@ const {
     >
       <section
         ref="modalElement"
-        class="modal"
+        class="modal tag-editor"
         role="dialog"
         tabindex="-1"
         aria-modal="true"
@@ -719,7 +743,15 @@ const {
       >
         <template v-if="tagTarget"
           ><header class="panel-heading">
-            <h2 id="modal-title">{{ t("editTags") }}</h2>
+            <div class="tag-editor-heading">
+              <span class="tag-editor-icon"
+                ><AppIcon name="tag" :size="20"
+              /></span>
+              <div>
+                <h2 id="modal-title">{{ t("editTags") }}</h2>
+                <p class="modal-subtitle">{{ tagTarget.filename }}</p>
+              </div>
+            </div>
             <button
               class="icon-button"
               :aria-label="t('closeTagEditor')"
@@ -729,47 +761,54 @@ const {
               <AppIcon name="close" :size="18" />
             </button>
           </header>
-          <p class="modal-subtitle">{{ tagTarget.filename }}</p>
-          <div class="draft-tags">
-            <button
-              v-for="tag in draftTags"
-              :key="tag"
-              class="tag-chip"
-              :aria-label="t('removeTag', { tag })"
-              @click="draftTags = draftTags.filter((name) => name !== tag)"
-            >
-              {{ tag }}<AppIcon name="close" :size="12" /></button
-            ><span v-if="!draftTags.length" class="muted">{{
-              t("tagContext")
-            }}</span>
+          <section class="tag-editor-selection" :aria-label="t('selectedTags')">
+            <div class="tag-editor-selection-heading">
+              <h3>{{ t("selectedTags") }}</h3>
+              <span>{{ draftTags.length }}</span>
+            </div>
+            <div class="draft-tags">
+              <button
+                v-for="tag in draftTags"
+                :key="tag"
+                class="tag-chip"
+                :disabled="tagSaving"
+                :aria-label="t('removeTag', { tag })"
+                @click="draftTags = draftTags.filter((name) => name !== tag)"
+              >
+                {{ tag }}<AppIcon name="close" :size="12" /></button
+              ><span v-if="!draftTags.length" class="muted">{{
+                t("noTagsYet")
+              }}</span>
+            </div>
+          </section>
+          <div class="tag-editor-search">
+            <p class="tag-editor-hint">{{ t("tagSearchHint") }}</p>
+            <form ref="tagForm" class="tag-form" @submit.prevent="addDraftTag">
+              <MetadataInput
+                v-model:text-value="newTag"
+                label="Tags"
+                hide-label
+                :placeholder="t('addTagPlaceholder')"
+                :options="tagOptions"
+                text-input
+                :disabled="tagSaving"
+                @keydown.enter="!$event.isComposing && addDraftTag()"
+              /><button
+                class="secondary-button"
+                type="submit"
+                :disabled="tagSaving || !newTag.trim()"
+              >
+                <AppIcon name="plus" :size="16" />
+                {{ t("add") }}
+              </button>
+            </form>
           </div>
-          <form class="tag-form" @submit.prevent="addDraftTag">
-            <input
-              ref="tagInput"
-              v-model="newTag"
-              :aria-label="t('newTag')"
-              :placeholder="t('addTagPlaceholder')"
-              maxlength="25"
-            /><button class="secondary-button" type="submit">
-              {{ t("add") }}
-            </button>
-          </form>
           <p v-if="tagError" class="error-message" role="alert">
             {{ ui(tagError) }}
           </p>
-          <p class="modal-note">{{ t("tagDemoNotice") }}</p>
-          <div class="suggested-tags">
-            <button
-              v-for="tag in tags
-                .filter((entry) => !draftTags.includes(entry.name))
-                .slice(0, 8)"
-              :key="tag.name"
-              class="tag-chip"
-              @click="draftTags.push(tag.name)"
-            >
-              <AppIcon name="plus" :size="12" />{{ tag.name }}
-            </button>
-          </div>
+          <p v-if="!isNativeData()" class="modal-note">
+            {{ t("tagDemoNotice") }}
+          </p>
           <footer class="modal-footer">
             <button
               class="secondary-button"

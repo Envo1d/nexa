@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 
+import { isNativeData } from "../runtime";
 import SettingsRow from "./SettingsRow.vue";
 import { translateUi as ui } from "../i18n/presentation";
 
@@ -18,7 +19,7 @@ const { t, locale } = useI18n();
 
 const emit = defineEmits<{ working: [value: boolean]; restored: [] }>();
 
-const native = isTauri();
+const native = isNativeData();
 
 const busy = ref(false);
 const message = ref("");

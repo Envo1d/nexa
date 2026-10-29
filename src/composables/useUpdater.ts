@@ -1,6 +1,7 @@
 import { ref } from "vue";
-import { Channel, invoke, isTauri } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 
+import { isNativeData } from "../runtime";
 import { i18n } from "../i18n";
 
 import type { ConfigSnapshot } from "../types/config";
@@ -21,7 +22,7 @@ let startupChecked = false;
 async function check() {
   if (busy.value || confirmation.value) return;
 
-  if (!isTauri()) {
+  if (!isNativeData()) {
     status.value = "Updates are available in the desktop application.";
 
     return;
@@ -45,7 +46,7 @@ async function check() {
 }
 
 function install() {
-  if (busy.value || !available.value || !isTauri()) return;
+  if (busy.value || !available.value || !isNativeData()) return;
 
   confirmation.value = { ...available.value };
 }
@@ -57,7 +58,7 @@ function cancelInstall() {
 async function confirmInstall() {
   const requested = confirmation.value;
 
-  if (busy.value || !requested || !isTauri()) return;
+  if (busy.value || !requested || !isNativeData()) return;
 
   confirmation.value = null;
 
@@ -91,7 +92,7 @@ async function confirmInstall() {
 }
 
 async function checkOnStartup(notify: (message: string) => void) {
-  if (!isTauri() || startupChecked) return;
+  if (!isNativeData() || startupChecked) return;
 
   startupChecked = true;
 

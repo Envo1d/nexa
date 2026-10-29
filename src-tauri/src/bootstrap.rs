@@ -1,5 +1,7 @@
 //! Application composition root and native lifecycle.
 
+mod demo;
+
 #[cfg(desktop)]
 use crate::updater;
 use crate::{
@@ -8,6 +10,14 @@ use crate::{
 };
 
 pub fn run() {
+    if cfg!(debug_assertions) {
+        demo::run();
+    } else {
+        run_production();
+    }
+}
+
+fn run_production() {
     use tauri::Manager;
 
     #[cfg(desktop)]
@@ -21,29 +31,13 @@ pub fn run() {
 
     let setup_log_guard = log_guard.clone();
 
-    let development = cfg!(debug_assertions);
-
     tracing::info!(
         version = env!("CARGO_PKG_VERSION"),
-        mode = if development {
-            "development"
-        } else {
-            "production"
-        },
+        mode = "production",
         "Starting NexaNew"
     );
 
-    let mut context = tauri::generate_context!();
-
-    if development {
-        // Native single-instance locks, window state and WebView storage must
-        // remain separate even when launched alongside the installed app.
-        context.config_mut().identifier.push_str(".dev");
-
-        for window in &mut context.config_mut().app.windows {
-            window.title.push_str(" (Dev)");
-        }
-    }
+    let context = tauri::generate_context!();
 
     let builder = tauri::Builder::default();
 

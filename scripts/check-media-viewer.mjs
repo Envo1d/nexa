@@ -18,8 +18,12 @@ code = code.replace(
   `from ${JSON.stringify(import.meta.resolve("vue"))}`,
 );
 code = code.replace(
-  'import { invoke, isTauri } from "@tauri-apps/api/core";',
-  "const invoke = (...args) => globalThis.__nexaViewerTest.invoke(...args); const isTauri = () => globalThis.__nexaViewerTest.native;",
+  'import { invoke } from "@tauri-apps/api/core";',
+  "const invoke = (...args) => globalThis.__nexaViewerTest.invoke(...args);",
+);
+code = code.replace(
+  'import { isNativeData } from "../../runtime";',
+  "const isNativeData = () => globalThis.__nexaViewerTest.native;",
 );
 
 const { useMediaViewer } = await import(

@@ -60,8 +60,12 @@ async function fixture(invoke) {
     `from ${JSON.stringify(import.meta.resolve("vue"))}`,
   );
   code = code.replace(
-    'import { invoke, isTauri } from "@tauri-apps/api/core";',
-    "const isTauri = () => true; const invoke = (...args) => globalThis.__nexaScanTest.invoke(...args);",
+    'import { invoke } from "@tauri-apps/api/core";',
+    "const invoke = (...args) => globalThis.__nexaScanTest.invoke(...args);",
+  );
+  code = code.replace(
+    'import { isNativeData } from "../runtime";',
+    "const isNativeData = () => true;",
   );
   code = code.replace(
     'import { listen } from "@tauri-apps/api/event";',

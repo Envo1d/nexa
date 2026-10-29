@@ -23,6 +23,7 @@ import { useTagEditor } from "../features/media/useTagEditor";
 import { useMediaViewer } from "../features/media/useMediaViewer";
 import { useDesktopServices } from "./useDesktopServices";
 import { useWindowChrome } from "./useWindowChrome";
+import { isNativeData } from "../runtime";
 
 import type { MediaItem, MediaKind } from "../types/media";
 
@@ -251,7 +252,7 @@ export function useWorkspace(elements: WorkspaceElements) {
     }
 
     if (action === "Delete file") {
-      if (isTauri() && item.nativeId) {
+      if (isNativeData() && item.nativeId) {
         await stageFileAction(
           action,
           targets.length ? targets : [item],
@@ -332,7 +333,7 @@ export function useWorkspace(elements: WorkspaceElements) {
     }
 
     if (
-      isTauri() &&
+      isNativeData() &&
       item.nativeId &&
       [
         "Open",

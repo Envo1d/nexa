@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 
+import { isNativeData } from "../runtime";
 import { translateUi as ui } from "../i18n/presentation";
 import AppIcon from "./AppIcon.vue";
 import AppSelect from "./AppSelect.vue";
@@ -26,7 +27,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{ changed: []; notice: [message: string] }>();
 
-const native = isTauri();
+const native = isNativeData();
 
 const catalog = ref<TaxonomyCatalog>({
   copyrights: [],

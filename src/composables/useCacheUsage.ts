@@ -1,7 +1,8 @@
 import { computed, ref } from "vue";
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
+import { isNativeData } from "../runtime";
 interface CacheStatus {
   bytes: number;
   maxBytes: number;
@@ -22,7 +23,7 @@ let generation = 0;
 const label = computed(() =>
   status.value
     ? `${(status.value.bytes / 1024 / 1024).toLocaleString("en-US", { maximumFractionDigits: 2 })} / 512 MB`
-    : isTauri()
+    : isNativeData()
       ? "Unavailable / 512 MB"
       : "Desktop only / 512 MB",
 );
@@ -38,7 +39,7 @@ const pressure = computed(() =>
 
 export function useCacheUsage() {
   async function clear() {
-    if (!isTauri() || clearing.value) return;
+    if (!isNativeData() || clearing.value) return;
 
     clearing.value = true;
     generation += 1;
@@ -58,7 +59,7 @@ export function useCacheUsage() {
   }
 
   async function connect(notify: (message: string) => void) {
-    if (!isTauri()) return () => {};
+    if (!isNativeData()) return () => {};
 
     let stopped = false;
     let alerted = false;

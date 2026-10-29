@@ -102,6 +102,8 @@ function run(code, native, invoke = async () => ({}), props = {}) {
       if (id === "@tauri-apps/api/core")
         return { isTauri: () => native, invoke };
 
+      if (id.endsWith("runtime")) return { isNativeData: () => native };
+
       if (id.endsWith("taxonomy")) return { categoryKey: keys };
 
       return {};

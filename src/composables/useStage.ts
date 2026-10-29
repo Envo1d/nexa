@@ -1,33 +1,35 @@
 import { computed, ref, shallowRef, watch, onScopeDispose } from "vue";
+import { invoke } from "@tauri-apps/api/core";
 
+import { isNativeData } from "../runtime";
 import { useMediaSelection } from "./useMediaSelection";
 import { createMockMedia } from "../data/mockMedia";
-
-import { invoke, isTauri } from "@tauri-apps/api/core";
 
 import type { MediaItem, MediaKind } from "../types/media";
 
 export function useStage() {
-  const makeMediaRef = isTauri() ? shallowRef : ref;
+  const makeMediaRef = isNativeData() ? shallowRef : ref;
 
   const media = makeMediaRef<MediaItem[]>(
-    (isTauri() ? [] : createMockMedia()).slice(0, 96).map((item, index) => {
-      const filename = `Capture ${String(index + 1).padStart(3, "0")}.${item.extension.toLowerCase()}`;
+    (isNativeData() ? [] : createMockMedia())
+      .slice(0, 96)
+      .map((item, index) => {
+        const filename = `Capture ${String(index + 1).padStart(3, "0")}.${item.extension.toLowerCase()}`;
 
-      return {
-        ...item,
-        id: `stage-${index + 1}`,
-        filename,
-        path: `C:\\Media\\Nexa staging\\${item.kind === "video" ? "Videos" : "Images"}\\${filename}`,
-        favorite: false,
-        title: undefined,
-        videoTitle: undefined,
-        copyrights: [],
-        artist: "",
-        characters: [],
-        tags: [],
-      };
-    }),
+        return {
+          ...item,
+          id: `stage-${index + 1}`,
+          filename,
+          path: `C:\\Media\\Nexa staging\\${item.kind === "video" ? "Videos" : "Images"}\\${filename}`,
+          favorite: false,
+          title: undefined,
+          videoTitle: undefined,
+          copyrights: [],
+          artist: "",
+          characters: [],
+          tags: [],
+        };
+      }),
   );
 
   const search = ref("");
@@ -42,12 +44,14 @@ export function useStage() {
   const loading = ref(false);
   const error = ref("");
 
-  const hasMore = computed(() => isTauri() && media.value.length < total.value);
+  const hasMore = computed(
+    () => isNativeData() && media.value.length < total.value,
+  );
 
   let refreshVersion = 0;
 
   async function loadPage(append = false, reset = false) {
-    if (!isTauri()) return;
+    if (!isNativeData()) return;
 
     if (append && loading.value) return;
 
@@ -163,7 +167,7 @@ export function useStage() {
   });
 
   watch([appliedSearch, sortMode], () => {
-    if (isTauri()) {
+    if (isNativeData()) {
       void loadPage(false, true);
     }
   });
@@ -174,7 +178,7 @@ export function useStage() {
   });
 
   const results = computed(() => {
-    if (isTauri()) return media.value;
+    if (isNativeData()) return media.value;
 
     const query = appliedSearch.value.toLocaleLowerCase().replace(/\\/g, "/");
 
