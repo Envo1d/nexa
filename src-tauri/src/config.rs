@@ -212,11 +212,14 @@ pub fn get_config(store: tauri::State<'_, ConfigStore>) -> ConfigResult<ConfigSn
 }
 
 #[tauri::command]
-pub fn save_config(
+pub async fn save_config(
     app: tauri::AppHandle,
     settings: AppConfig,
     store: tauri::State<'_, ConfigStore>,
+    media: tauri::State<'_, crate::stage::StageState>,
 ) -> ConfigResult<()> {
+    let _guard = media.operation().await;
+
     if store.save(settings)? {
         crate::disk_sync::request(&app);
     }
