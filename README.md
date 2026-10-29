@@ -1,5 +1,5 @@
 <div align="center">
-  <img width="120" src="src-tauri/icons/icon.png" alt="Nexa logo">
+  <img width="120" src="public/icon.png" alt="Nexa logo">
   <h1>Nexa</h1>
   <p>A Windows desktop library for organizing images and videos.</p>
   <p>
