@@ -6,7 +6,7 @@ use std::{
 };
 
 use serde::Serialize;
-use sqlx::{Row, SqlitePool};
+use sqlx::{QueryBuilder, Row, Sqlite, SqlitePool};
 use tauri::Manager;
 
 use super::{StageState, file_actions::action_file, inspect};
@@ -133,20 +133,27 @@ pub async fn get_viewer_sequence(
 
         let root = root.map(|path| path.to_string_lossy().into_owned());
 
-        sqlx::query(concat!(
+        let order = super::queries::sort_order(&filters.sort)?;
+
+        let mut query = QueryBuilder::<Sqlite>::new(concat!(
             "SELECT m.id,m.relative_path,m.kind,m.extension FROM media m ",
             "JOIN sources s ON s.id=m.source_id WHERE ((s.kind='stage' AND s.path_key=? ",
             "AND m.availability='present' AND m.library_assignment IS NULL) OR ",
-            "m.needs_distribution=1) AND instr(m.stage_search_key,?)>0 ORDER BY m.id",
-        ))
-        .bind(root)
-        .bind(crate::naming::name_key(&search.trim().replace('\\', "/")))
-        .fetch_all(database.pool())
-        .await
-        .map_err(|_| "Cannot read viewer sequence")?
-        .into_iter()
-        .map(ViewerEntry::from_row)
-        .collect()
+            "m.needs_distribution=1) AND instr(m.stage_search_key,?)>0",
+        ));
+
+        query.push(order);
+
+        query
+            .build()
+            .bind(root)
+            .bind(crate::naming::name_key(&search.trim().replace('\\', "/")))
+            .fetch_all(database.pool())
+            .await
+            .map_err(|_| "Cannot read viewer sequence")?
+            .into_iter()
+            .map(ViewerEntry::from_row)
+            .collect()
     };
 
     tracing::debug!(count = entries.len(), "Viewer order captured");

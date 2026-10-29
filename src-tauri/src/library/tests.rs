@@ -434,7 +434,7 @@ async fn distribution_saves_logical_membership_without_moving_and_supports_main_
         .await
         .unwrap();
 
-    let staged = stage::browse(db.pool(), Some(staging), None, "")
+    let staged = stage::browse(db.pool(), Some(staging), 0, "", "newest")
         .await
         .unwrap();
     assert_eq!(staged.total, 1); // Only the existing redistribution record remains.

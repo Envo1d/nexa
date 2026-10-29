@@ -202,8 +202,9 @@ async fn replacement_retains_main_identity_annotations_order_and_refreshes_techn
                     .to_string_lossy()
                     .into_owned()
             ),
-            None,
-            ""
+            0,
+            "",
+            "newest"
         )
         .await
         .unwrap()

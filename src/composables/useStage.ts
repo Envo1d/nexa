@@ -34,6 +34,12 @@ export function useStage() {
 
   const appliedSearch = ref("");
 
+  const sortMode = ref<"newest" | "older" | "name-asc" | "name-desc">("newest");
+
+  const queryKey = computed(() =>
+    JSON.stringify([appliedSearch.value, sortMode.value]),
+  );
+
   const total = ref(0);
 
   const loading = ref(false);
@@ -41,8 +47,6 @@ export function useStage() {
   const error = ref("");
 
   const hasMore = computed(() => isTauri() && media.value.length < total.value);
-
-  let cursor: string | null = null;
 
   let refreshVersion = 0;
 
@@ -77,24 +81,21 @@ export function useStage() {
         bitrate: number | null;
       };
 
-      const readPage = (after: string | null) =>
+      const readPage = (offset: number) =>
         invoke<{ files: NativeFile[]; total: number }>("get_stage_files", {
-          after,
+          offset,
           search: appliedSearch.value,
+          sort: sortMode.value,
         });
 
       const target = append || reset ? 0 : media.value.length;
 
-      const page = await readPage(append ? cursor : null);
+      const page = await readPage(append ? media.value.length : 0);
 
       if (version !== refreshVersion) return;
 
       while (!append && page.files.length < Math.min(target, page.total)) {
-        const after = page.files[page.files.length - 1]?.id;
-
-        if (!after) break;
-
-        const next = await readPage(after);
+        const next = await readPage(page.files.length);
 
         if (version !== refreshVersion) return;
 
@@ -132,7 +133,6 @@ export function useStage() {
       }));
 
       total.value = page.total;
-      cursor = page.files[page.files.length - 1]?.id ?? null;
       media.value = append ? [...media.value, ...queued] : queued;
     } catch (cause) {
       if (version === refreshVersion)
@@ -166,9 +166,8 @@ export function useStage() {
     }, 350);
   });
 
-  watch(appliedSearch, () => {
+  watch([appliedSearch, sortMode], () => {
     if (isTauri()) {
-      cursor = null;
       void loadPage(false, true);
     }
   });
@@ -183,11 +182,31 @@ export function useStage() {
 
     const query = appliedSearch.value.toLocaleLowerCase().replace(/\\/g, "/");
 
-    return media.value.filter((item) =>
-      [item.filename, item.path].some((value) =>
-        value.toLocaleLowerCase().replace(/\\/g, "/").includes(query),
-      ),
-    );
+    return media.value
+      .filter((item) =>
+        [item.filename, item.path].some((value) =>
+          value.toLocaleLowerCase().replace(/\\/g, "/").includes(query),
+        ),
+      )
+      .sort((a, b) => {
+        if (sortMode.value === "name-asc" || sortMode.value === "name-desc") {
+          const order = a.filename.localeCompare(b.filename, "en", {
+            numeric: true,
+            sensitivity: "base",
+          });
+
+          return (
+            (sortMode.value === "name-asc" ? order : -order) ||
+            a.id.localeCompare(b.id)
+          );
+        }
+
+        return (
+          (sortMode.value === "newest"
+            ? b.modifiedAt - a.modifiedAt
+            : a.modifiedAt - b.modifiedAt) || a.id.localeCompare(b.id)
+        );
+      });
   });
 
   const selection = useMediaSelection(results);
@@ -206,6 +225,8 @@ export function useStage() {
     refreshRedistribution,
     search,
     appliedSearch,
+    sortMode,
+    queryKey,
     results,
     clearSearch,
     ...selection,
