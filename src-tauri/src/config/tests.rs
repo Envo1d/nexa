@@ -173,6 +173,127 @@ fn service_paths_are_isolated_from_legacy_application() {
 }
 
 #[test]
+fn development_storage_is_separate_and_production_paths_are_preserved() {
+    let development = AppPaths::resolve_for(true).unwrap();
+    let production = AppPaths::resolve_for(false).unwrap();
+    let dirs = ProjectDirs::from("com", "Envo1d", "NexaNew").unwrap();
+
+    for (dev, prod, root, suffix) in [
+        (
+            &development.config_path,
+            &production.config_path,
+            dirs.config_dir(),
+            "settings.json",
+        ),
+        (
+            &development.database_path,
+            &production.database_path,
+            dirs.data_local_dir(),
+            "db/vault.db",
+        ),
+        (
+            &development.cache_path,
+            &production.cache_path,
+            dirs.cache_dir(),
+            "thumbnails",
+        ),
+        (
+            &development.logs_path,
+            &production.logs_path,
+            dirs.data_local_dir(),
+            "logs",
+        ),
+    ] {
+        assert_eq!(*prod, root.join(suffix));
+        assert_eq!(*dev, root.join("dev").join(suffix));
+        assert_ne!(dev, prod);
+    }
+
+    let selected = AppPaths::resolve().unwrap();
+    let expected = if cfg!(debug_assertions) {
+        development
+    } else {
+        production
+    };
+
+    assert_eq!(selected.database_path, expected.database_path);
+    assert_eq!(selected.config_path, expected.config_path);
+    assert_eq!(selected.cache_path, expected.cache_path);
+    assert_eq!(selected.logs_path, expected.logs_path);
+}
+
+#[tokio::test]
+async fn separate_catalogs_and_settings_persist_without_inheriting_production_data() {
+    let directory = tempfile::tempdir().unwrap();
+    let production = paths(directory.path());
+    let development = paths(&directory.path().join("dev"));
+
+    let store = ConfigStore::load(production.clone()).unwrap();
+    let saved = AppConfig {
+        library_path: Some(directory.path().join("production-media")),
+        auto_scan: true,
+        sync_structure: true,
+        ..AppConfig::default()
+    };
+    store.save(saved.clone()).unwrap();
+
+    let production_database = crate::database::Database::open(&production.database_path)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO tags(name,name_key) VALUES ('Production','production')")
+        .execute(production_database.pool())
+        .await
+        .unwrap();
+
+    let development_store = ConfigStore::load(development.clone()).unwrap();
+    assert_eq!(
+        development_store.snapshot().unwrap().settings,
+        AppConfig::default()
+    );
+
+    let development_database = crate::database::Database::open(&development.database_path)
+        .await
+        .unwrap();
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tags")
+        .fetch_one(development_database.pool())
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
+
+    sqlx::query("INSERT INTO tags(name,name_key) VALUES ('Development','development')")
+        .execute(development_database.pool())
+        .await
+        .unwrap();
+    development_database.close().await;
+
+    let reopened = crate::database::Database::open(&development.database_path)
+        .await
+        .unwrap();
+    let development_name: String = sqlx::query_scalar("SELECT name FROM tags")
+        .fetch_one(reopened.pool())
+        .await
+        .unwrap();
+    let production_name: String = sqlx::query_scalar("SELECT name FROM tags")
+        .fetch_one(production_database.pool())
+        .await
+        .unwrap();
+
+    assert_eq!(development_name, "Development");
+    assert_eq!(production_name, "Production");
+    assert_eq!(
+        ConfigStore::load(production)
+            .unwrap()
+            .snapshot()
+            .unwrap()
+            .settings,
+        saved
+    );
+
+    reopened.close().await;
+    production_database.close().await;
+}
+
+#[test]
 fn all_themes_survive_save_and_reload_and_invalid_themes_are_rejected() {
     let directory = tempfile::tempdir().unwrap();
 

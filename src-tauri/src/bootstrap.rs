@@ -21,7 +21,29 @@ pub fn run() {
 
     let setup_log_guard = log_guard.clone();
 
-    tracing::info!(version = env!("CARGO_PKG_VERSION"), "Starting NexaNew");
+    let development = cfg!(debug_assertions);
+
+    tracing::info!(
+        version = env!("CARGO_PKG_VERSION"),
+        mode = if development {
+            "development"
+        } else {
+            "production"
+        },
+        "Starting NexaNew"
+    );
+
+    let mut context = tauri::generate_context!();
+
+    if development {
+        // Native single-instance locks, window state and WebView storage must
+        // remain separate even when launched alongside the installed app.
+        context.config_mut().identifier.push_str(".dev");
+
+        for window in &mut context.config_mut().app.windows {
+            window.title.push_str(" (Dev)");
+        }
+    }
 
     let builder = tauri::Builder::default();
 
@@ -128,7 +150,7 @@ pub fn run() {
             stage::get_viewer_sequence,
             stage::save_viewer_annotations
         ])
-        .build(tauri::generate_context!());
+        .build(context);
 
     let result = result.map(|app| {
         app.run(|app, event| {
