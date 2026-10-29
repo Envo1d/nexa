@@ -67,7 +67,7 @@ export function useMediaViewer(library: LibraryModel, stage: StageModel) {
           scope: library.scope.value,
           search: library.appliedSearch.value,
           kind: library.kind.value,
-          sort: library.sortMode.value,
+          sort: fromStage ? stage.sortMode.value : library.sortMode.value,
           tagged: library.taggedOnly.value || library.hideUntagged.value,
           offset: 0,
         },

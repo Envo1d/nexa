@@ -199,11 +199,7 @@ for (const name of ["useLibrary", "useStage"]) {
     let rows = items(12).map((x) => ({ ...x, filename: x.id, tags: [] }));
     let fail = false;
     const f = await model(name, async (_command, args) => {
-      const offset =
-        args.filters?.offset ??
-        (args.after === null
-          ? 0
-          : rows.findIndex((x) => x.id === args.after) + 1);
+      const offset = args.filters?.offset ?? args.offset;
       if (fail && offset > 0) throw new Error("page failed");
       return {
         files: rows.slice(offset, offset + 3),
@@ -242,6 +238,14 @@ for (const name of ["useLibrary", "useStage"]) {
       f.state.appliedSearch.value = "new query";
       await settle();
       assert.equal(f.state.media.value.length, 3);
+      await f.state.loadMore();
+      assert.equal(f.state.media.value.length, 6);
+      const key = f.state.queryKey ?? f.state.collectionKey;
+      const previousKey = key.value;
+      f.state.sortMode.value = "name-desc";
+      await settle();
+      assert.equal(f.state.media.value.length, 3);
+      assert.notEqual(key.value, previousKey);
       stop();
     } finally {
       f.scope.stop();

@@ -30,7 +30,7 @@ pub struct Filters {
     scope: String,
     search: String,
     kind: String,
-    sort: String,
+    pub(crate) sort: String,
     tagged: bool,
     offset: i64,
     #[serde(skip)]

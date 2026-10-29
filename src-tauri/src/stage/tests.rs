@@ -943,21 +943,49 @@ async fn paginates_without_duplicates_searches_unicode_and_keeps_queued_files() 
 
     let root_name = Some(root.to_string_lossy().into_owned());
 
-    let first = browse(db.pool(), root_name.clone(), None, "")
+    let first = browse(db.pool(), root_name.clone(), 0, "", "newest")
         .await
         .unwrap();
     assert_eq!(first.total, 501);
     assert_eq!(first.files.len(), 500);
 
-    let cursor = first.files.last().unwrap().id.parse().unwrap();
+    let cursor = first.files.last().unwrap().id.parse::<i64>().unwrap();
 
-    let second = browse(db.pool(), root_name.clone(), Some(cursor), "")
+    let second = browse(db.pool(), root_name.clone(), 500, "", "newest")
         .await
         .unwrap();
     assert_eq!(second.files.len(), 1);
     assert_eq!(second.total, 501);
 
-    let matched = browse(db.pool(), root_name, None, "зображення 500")
+    for sort in ["newest", "older", "name-asc", "name-desc"] {
+        let first = browse(db.pool(), root_name.clone(), 0, "", sort)
+            .await
+            .unwrap();
+
+        let second = browse(db.pool(), root_name.clone(), 500, "", sort)
+            .await
+            .unwrap();
+
+        let ids: std::collections::HashSet<_> = first
+            .files
+            .iter()
+            .chain(second.files.iter())
+            .map(|file| &file.id)
+            .collect();
+
+        assert_eq!(ids.len(), 501, "{sort}");
+
+        if sort == "name-asc" {
+            assert_eq!(first.files[0].filename, "ЗОБРАЖЕННЯ 0.mp4");
+            assert_eq!(first.files[2].filename, "ЗОБРАЖЕННЯ 2.mp4");
+            assert_eq!(second.files[0].filename, "ЗОБРАЖЕННЯ 500.mp4");
+        } else if sort == "name-desc" {
+            assert_eq!(first.files[0].filename, "ЗОБРАЖЕННЯ 500.mp4");
+            assert_eq!(second.files[0].filename, "ЗОБРАЖЕННЯ 0.mp4");
+        }
+    }
+
+    let matched = browse(db.pool(), root_name, 0, "зображення 500", "newest")
         .await
         .unwrap();
     assert_eq!(matched.total, 1);
@@ -968,10 +996,91 @@ async fn paginates_without_duplicates_searches_unicode_and_keeps_queued_files() 
     .await
     .unwrap();
 
-    let queued = browse(db.pool(), None, None, "").await.unwrap();
+    let queued = browse(db.pool(), None, 0, "", "newest").await.unwrap();
     assert_eq!(queued.total, 1);
     assert!(queued.files[0].native_redistribution);
     assert_eq!(queued.files[0].availability, "missing");
+    db.close().await;
+}
+
+#[tokio::test]
+async fn stage_sorts_dates_and_natural_names_with_stable_ties_and_search() {
+    let (_temp, db, root) = fixture().await;
+
+    let source = activate_source(db.pool(), &root, 1).await.unwrap();
+
+    for (name, modified) in [
+        ("Image 10.mp4", Some(10_i64)),
+        ("image 2.mp4", Some(20)),
+        ("IMAGE 02.mp4", Some(20)),
+        ("other.mp4", None),
+    ] {
+        save_batch(db.pool(), source, 1, vec![prepared(&root, name, 10)])
+            .await
+            .unwrap();
+        sqlx::query("UPDATE media SET file_modified_at=? WHERE relative_path=?")
+            .bind(modified)
+            .bind(name)
+            .execute(db.pool())
+            .await
+            .unwrap();
+    }
+
+    let root = Some(root.to_string_lossy().into_owned());
+
+    for (sort, expected) in [
+        (
+            "newest",
+            vec!["image 2.mp4", "IMAGE 02.mp4", "Image 10.mp4", "other.mp4"],
+        ),
+        (
+            "older",
+            vec!["other.mp4", "Image 10.mp4", "image 2.mp4", "IMAGE 02.mp4"],
+        ),
+        (
+            "name-asc",
+            vec!["image 2.mp4", "IMAGE 02.mp4", "Image 10.mp4", "other.mp4"],
+        ),
+        (
+            "name-desc",
+            vec!["other.mp4", "Image 10.mp4", "image 2.mp4", "IMAGE 02.mp4"],
+        ),
+    ] {
+        let page = browse(db.pool(), root.clone(), 0, "", sort).await.unwrap();
+
+        assert_eq!(
+            page.files
+                .iter()
+                .map(|file| file.filename.as_str())
+                .collect::<Vec<_>>(),
+            expected,
+            "{sort}"
+        );
+
+        let filtered = browse(db.pool(), root.clone(), 0, "image", sort)
+            .await
+            .unwrap();
+
+        assert_eq!(filtered.total, 3);
+        assert_eq!(
+            filtered
+                .files
+                .iter()
+                .map(|file| file.filename.as_str())
+                .collect::<Vec<_>>(),
+            expected
+                .into_iter()
+                .filter(|name| *name != "other.mp4")
+                .collect::<Vec<_>>()
+        );
+    }
+
+    assert!(
+        browse(db.pool(), root.clone(), -1, "", "newest")
+            .await
+            .is_err()
+    );
+    assert!(browse(db.pool(), root, 0, "", "invalid").await.is_err());
     db.close().await;
 }
 

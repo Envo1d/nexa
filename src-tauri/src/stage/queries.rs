@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
-use sqlx::{Row, SqlitePool};
+use sqlx::{QueryBuilder, Row, Sqlite, SqlitePool};
 
 use crate::{config::ConfigStore, database::Database};
 
@@ -35,12 +35,29 @@ pub struct StagePage {
     pub(crate) total: i64,
 }
 
+pub(super) fn sort_order(sort: &str) -> Result<&'static str, String> {
+    match sort {
+        "newest" => Ok(" ORDER BY m.file_modified_at DESC,m.id ASC"),
+        "older" => Ok(" ORDER BY m.file_modified_at ASC,m.id ASC"),
+        "name-asc" => Ok(" ORDER BY m.relative_path COLLATE NEXA_FILENAME ASC,m.id ASC"),
+        "name-desc" => Ok(" ORDER BY m.relative_path COLLATE NEXA_FILENAME DESC,m.id ASC"),
+        _ => Err("Invalid Stage sorting mode".into()),
+    }
+}
+
 pub(crate) async fn browse(
     pool: &SqlitePool,
     root: Option<String>,
-    after: Option<i64>,
+    offset: i64,
     search: &str,
+    sort: &str,
 ) -> Result<StagePage, String> {
+    let order = sort_order(sort)?;
+
+    if offset < 0 {
+        return Err("Invalid Stage offset".into());
+    }
+
     // Imported/redistribution records need searchable path keys, without filesystem reads.
     loop {
         let rows = sqlx::query(concat!(
@@ -89,30 +106,35 @@ pub(crate) async fn browse(
     .await
     .map_err(|e| e.to_string())?;
 
-    let rows = sqlx::query(concat!(
+    let mut query = QueryBuilder::<Sqlite>::new(concat!(
         "SELECT m.*,s.root_path,v.duration_ms,v.fps_num,v.fps_den,v.codec,v.bitrate_bps FROM ",
         "media m JOIN sources s ON s.id=m.source_id LEFT JOIN video_metadata v ON ",
-        "v.media_id=m.id WHERE (? IS NULL OR m.id>?) AND ((s.kind='stage' AND s.path_key=? AND ",
+        "v.media_id=m.id WHERE ((s.kind='stage' AND s.path_key=? AND ",
         "m.availability='present' AND m.library_assignment IS NULL) OR m.needs_distribution=1) ",
-        "AND instr(m.stage_search_key,?)>0 ORDER BY m.id LIMIT 500",
-    ))
-    .bind(after)
-    .bind(after)
-    .bind(root)
-    .bind(search)
-    .fetch_all(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+        "AND instr(m.stage_search_key,?)>0",
+    ));
+
+    query.push(order).push(" LIMIT 500 OFFSET ?");
+
+    let rows = query
+        .build()
+        .bind(root)
+        .bind(search)
+        .bind(offset)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| e.to_string())?;
 
     let files = rows.into_iter().map(stage_file).collect();
     Ok(StagePage { files, total })
 }
 
 #[tauri::command]
-#[tracing::instrument(level = "debug", skip_all, err)]
+#[tracing::instrument(level = "debug", skip_all, fields(offset, sort), err)]
 pub async fn get_stage_files(
-    after: Option<String>,
+    offset: i64,
     search: String,
+    sort: String,
     database: tauri::State<'_, Database>,
     config: tauri::State<'_, ConfigStore>,
 ) -> Result<StagePage, String> {
@@ -123,11 +145,16 @@ pub async fn get_stage_files(
             .into_owned()
     });
 
-    let after = after
-        .map(|value| value.parse::<i64>())
-        .transpose()
-        .map_err(|_| "Invalid Stage cursor")?;
-    browse(database.pool(), root, after, &search).await
+    tracing::debug!("Loading sorted Stage page");
+
+    let page = browse(database.pool(), root, offset, &search, &sort).await?;
+
+    tracing::debug!(
+        count = page.files.len(),
+        total = page.total,
+        "Stage page loaded"
+    );
+    Ok(page)
 }
 
 pub(crate) fn stage_file(row: sqlx::sqlite::SqliteRow) -> StageFile {

@@ -505,6 +505,10 @@ const {
               </button>
               <kbd v-else>Ctrl F</kbd>
             </div>
+            <section class="filter-section">
+              <h3>{{ t("sorting") }}</h3>
+              <SortSelect v-model="stage.sortMode.value" />
+            </section>
             <section class="filter-section additional-section">
               <h3>{{ t("additional") }}</h3>
               <ToggleSwitch v-model="showPreviews">{{
@@ -516,7 +520,7 @@ const {
         <MediaCollection
           :items="stage.results.value"
           :position="stagePosition"
-          :collection-key="stage.appliedSearch.value"
+          :collection-key="stage.queryKey.value"
           :native="isTauri()"
           :total="isTauri() ? stage.total.value : undefined"
           :has-more="stage.hasMore.value"

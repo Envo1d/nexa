@@ -33,7 +33,7 @@ function models(items) {
   library.results = computed(() => library.media.value.filter((entry) => entry.favorite));
 
   const stage = {
-    media: ref(items), total: ref(items.length), appliedSearch: ref("Stage query"),
+    media: ref(items), total: ref(items.length), appliedSearch: ref("Stage query"), sortMode: ref("name-desc"),
     refreshRedistribution: async () => { refreshes++; },
   };
 
@@ -110,6 +110,8 @@ test("Stage captures its applied search and demo retains the loaded order", asyn
   globalThis.__nexaViewerTest = { native: true, invoke: async (_command, args) => {
     assert.equal(args.library, false);
     assert.equal(args.search, "Stage query");
+    assert.equal(args.filters.sort, "name-desc");
+    assert.equal(model.library.sortMode.value, "newest");
     return [{ id: "2", filename: "2.png", kind: "image", extension: "png" }];
   } };
 
