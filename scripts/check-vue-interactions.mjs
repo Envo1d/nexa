@@ -54,6 +54,24 @@ const { useSearchSuggestions } = (
   await loadModule("../src/shared/composables/useSearchSuggestions.ts")
 ).exports;
 
+const { metadataSuggestions } = (
+  await loadModule("../src/utils/metadataSearch.ts")
+).exports;
+
+test("metadata suggestions match literal name prefixes and exclude chosen terms", () => {
+  const entries = ["atomic", "amber", "marvel", "M_hero", "100%"].map(
+    (name) => ({ name, category: "Tag" }),
+  );
+  const names = (query) =>
+    metadataSuggestions(query, entries).map((entry) => entry.name);
+
+  assert.deepEqual(names(" m "), ["M_hero", "marvel"]);
+  assert.deepEqual(names("MARVEL; m"), ["M_hero"]);
+  assert.deepEqual(names("_"), []);
+  assert.deepEqual(names("100%"), ["100%"]);
+  assert.deepEqual(names(""), []);
+});
+
 function key(key, options = {}) {
   return {
     key,

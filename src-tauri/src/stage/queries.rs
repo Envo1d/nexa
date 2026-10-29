@@ -35,6 +35,14 @@ pub struct StagePage {
     pub(crate) total: i64,
 }
 
+// The key is a normalized full path. Trimming its non-slash characters leaves
+// the parent directory including the final slash; search only the remaining name.
+// instr treats SQL wildcard characters literally and matches the empty query too.
+pub(super) const FILENAME_SEARCH: &str = concat!(
+    " AND instr(substr(m.stage_search_key,",
+    "length(rtrim(m.stage_search_key,replace(m.stage_search_key,'/','')))+1),?)=1",
+);
+
 pub(super) fn sort_order(sort: &str) -> Result<&'static str, String> {
     match sort {
         "newest" => Ok(" ORDER BY m.file_modified_at DESC,m.id ASC"),
@@ -94,27 +102,32 @@ pub(crate) async fn browse(
 
     let search = crate::naming::name_key(&search.trim().replace('\\', "/"));
 
-    let total = sqlx::query_scalar(concat!(
+    let mut count_query = QueryBuilder::<Sqlite>::new(concat!(
         "SELECT count(*) FROM media m JOIN sources s ON s.id=m.source_id WHERE ",
         "((s.kind='stage' AND s.path_key=? AND m.availability='present' AND ",
-        "m.library_assignment IS NULL) OR m.needs_distribution=1) AND instr(m.stage_search_key,",
-        "?)>0",
-    ))
-    .bind(&root)
-    .bind(&search)
-    .fetch_one(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+        "m.library_assignment IS NULL) OR m.needs_distribution=1)",
+    ));
+    count_query.push(FILENAME_SEARCH);
+
+    let total = count_query
+        .build_query_scalar()
+        .bind(&root)
+        .bind(&search)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| e.to_string())?;
 
     let mut query = QueryBuilder::<Sqlite>::new(concat!(
         "SELECT m.*,s.root_path,v.duration_ms,v.fps_num,v.fps_den,v.codec,v.bitrate_bps FROM ",
         "media m JOIN sources s ON s.id=m.source_id LEFT JOIN video_metadata v ON ",
         "v.media_id=m.id WHERE ((s.kind='stage' AND s.path_key=? AND ",
         "m.availability='present' AND m.library_assignment IS NULL) OR m.needs_distribution=1) ",
-        "AND instr(m.stage_search_key,?)>0",
     ));
 
-    query.push(order).push(" LIMIT 500 OFFSET ?");
+    query
+        .push(FILENAME_SEARCH)
+        .push(order)
+        .push(" LIMIT 500 OFFSET ?");
 
     let rows = query
         .build()
@@ -145,7 +158,10 @@ pub async fn get_stage_files(
             .into_owned()
     });
 
-    tracing::debug!("Loading sorted Stage page");
+    tracing::debug!(
+        search_match = "filename_prefix",
+        "Loading sorted Stage page"
+    );
 
     let page = browse(database.pool(), root, offset, &search, &sort).await?;
 

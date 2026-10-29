@@ -108,6 +108,7 @@ pub(super) async fn candidates(
     tracing::debug!(
         kind,
         after,
+        search_match = "metadata_prefix",
         "Loading replacement candidates using Main metadata filters"
     );
 

@@ -139,9 +139,7 @@ const entries = computed(() => {
       if (!matchesRepeatedName) return false;
     }
 
-    return `${entry.name} ${entry.copyright ?? ""}`
-      .toLocaleLowerCase()
-      .includes(query);
+    return entry.name.toLocaleLowerCase().startsWith(query);
   });
 });
 

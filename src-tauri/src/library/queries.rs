@@ -64,19 +64,27 @@ pub(super) fn filtered(root: &Option<String>, f: &Filters, prefix: &str) -> Quer
 pub(crate) fn apply_metadata_search(q: &mut QueryBuilder<Sqlite>, search: &str) {
     for value in search.split(';').map(str::trim).filter(|v| !v.is_empty()) {
         let key = name_key(value);
-        q.push(" AND (EXISTS(SELECT 1 FROM artists d WHERE d.id=m.artist_id AND d.name_key=").push_bind(key.clone())
+        q.push(concat!(
+                " AND (EXISTS(SELECT 1 FROM artists d WHERE d.id=m.artist_id ",
+                "AND instr(d.name_key,",
+            ))
+            .push_bind(key.clone())
             .push(concat!(
-                ") OR EXISTS(SELECT 1 FROM media_copyrights l JOIN copyrights d ON d.id=l.copyright_id ",
-                "WHERE l.media_id=m.id AND d.name_key=",
-            )).push_bind(key.clone())
+                ")=1) OR EXISTS(SELECT 1 FROM media_copyrights l JOIN copyrights d ON d.id=l.copyright_id ",
+                "WHERE l.media_id=m.id AND instr(d.name_key,",
+            ))
+            .push_bind(key.clone())
             .push(concat!(
-                ") OR EXISTS(SELECT 1 FROM media_characters l JOIN characters d ON d.id=l.character_id ",
-                "WHERE l.media_id=m.id AND d.name_key=",
-            )).push_bind(key.clone())
+                ")=1) OR EXISTS(SELECT 1 FROM media_characters l JOIN characters d ON d.id=l.character_id ",
+                "WHERE l.media_id=m.id AND instr(d.name_key,",
+            ))
+            .push_bind(key.clone())
             .push(concat!(
-                ") OR EXISTS(SELECT 1 FROM media_tags l JOIN tags d ON d.id=l.tag_id WHERE ",
-                "l.media_id=m.id AND d.name_key=",
-            )).push_bind(key).push("))");
+                ")=1) OR EXISTS(SELECT 1 FROM media_tags l JOIN tags d ON d.id=l.tag_id WHERE ",
+                "l.media_id=m.id AND instr(d.name_key,",
+            ))
+            .push_bind(key)
+            .push(")=1))");
     }
 }
 
@@ -288,7 +296,16 @@ pub async fn get_library_files(
     config: tauri::State<'_, ConfigStore>,
 ) -> Result<Page, String> {
     configure_stage_prefix(&mut filters, &config)?;
-    browse(database.pool(), configured_root(&config)?, filters).await
+    tracing::debug!(search_match = "metadata_prefix", "Loading Main page");
+
+    let page = browse(database.pool(), configured_root(&config)?, filters).await?;
+
+    tracing::debug!(
+        count = page.files.len(),
+        total = page.total,
+        "Main page loaded"
+    );
+    Ok(page)
 }
 
 fn configure_stage_prefix(filters: &mut Filters, config: &ConfigStore) -> Result<(), String> {

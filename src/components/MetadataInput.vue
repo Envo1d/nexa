@@ -70,7 +70,7 @@ const matches = computed(() => {
       (value) =>
         (props.textInput ||
           !props.modelValue.some((selected) => selected.id === value.id)) &&
-        value.name.toLocaleLowerCase().includes(name),
+        value.name.toLocaleLowerCase().startsWith(name),
     )
     .slice(0, 30);
 });

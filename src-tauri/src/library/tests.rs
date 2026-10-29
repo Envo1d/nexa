@@ -83,6 +83,40 @@ fn draft() -> Draft {
 }
 
 #[tokio::test]
+async fn search_matches_prefixes_across_metadata_and_viewer_with_literal_punctuation() {
+    let (_temp, db, root) = fixture().await;
+    save(db.pool(), Some(root.clone()), vec!["1".into()], draft())
+        .await
+        .unwrap();
+
+    for (search, expected) in [
+        (" STRASS ; CAFÉ; Al; Ser ", 1),
+        ("traße", 0),
+        ("lice", 0),
+        ("fé", 0),
+        ("ther", 0),
+        ("%", 0),
+        ("_", 0),
+    ] {
+        let mut query = filters();
+        query.search = search.into();
+
+        let page = browse(db.pool(), Some(root.clone()), query).await.unwrap();
+        assert_eq!(page.total, expected, "{search}");
+
+        let mut query = filters();
+        query.search = search.into();
+
+        let sequence =
+            super::queries::capture_viewer_sequence(db.pool(), Some(root.clone()), query)
+                .await
+                .unwrap();
+        assert_eq!(sequence.len() as i64, expected, "viewer: {search}");
+    }
+    db.close().await;
+}
+
+#[tokio::test]
 async fn viewer_order_matches_filters_beyond_one_page_and_survives_annotation_changes() {
     use super::queries::capture_viewer_sequence;
 
