@@ -33,11 +33,8 @@ const emit = defineEmits<{ ready: []; failed: [] }>();
 const { t } = useI18n();
 
 const player = ref<HTMLElement | null>(null);
-
 const video = ref<HTMLVideoElement | null>(null);
-
 const fullscreenButton = ref<HTMLButtonElement | null>(null);
-
 const controlsVisible = ref(false);
 
 const { trapFocus } = useFocusTrap(player);
@@ -47,17 +44,11 @@ const playing = ref(false);
 const toolbarVisible = computed(() => controlsVisible.value || !playing.value);
 
 const waiting = ref(false);
-
 const duration = ref(0);
-
 const position = ref(0);
-
 const volume = ref(1);
-
 const muted = ref(false);
-
 const repeat = ref(false);
-
 const speed = ref(1);
 
 const speedOptions = [0.5, 0.75, 1, 1.25, 1.5, 2].map((rate) => ({
@@ -78,17 +69,11 @@ const {
 const feedback = ref("");
 
 const diagnostics = ref(false);
-
 const submittedFps = ref<number | null>(null);
-
 const callbackFps = ref<number | null>(null);
-
 const droppedFrames = ref<number | null>(null);
-
 const totalFrames = ref<number | null>(null);
-
 const buffer = ref(0);
-
 const decodeMs = ref<number | null>(null);
 
 const progress = computed(() =>
@@ -100,17 +85,12 @@ const timeLabel = computed(
 );
 
 let frameCallback: number | null = null;
-
 let sampleTimer: ReturnType<typeof setInterval> | undefined;
-
 let previousSample: FrameSample | null = null;
-
 let latestFrame: { time: number; frames: number } | null = null;
-
 let callbacks = 0;
 
 let disposed = false;
-
 let lastPositionUpdate = -Infinity;
 
 let latestDecodeMs: number | null = null;

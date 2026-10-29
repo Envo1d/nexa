@@ -12,7 +12,6 @@ export function useWindowChrome(notify: (message: string) => void) {
     isTauri() && usesSystemWindowCorners(platform(), version());
 
   let disposed = false;
-
   let unlistenResize: (() => void) | undefined;
 
   async function windowAction(action: "minimize" | "maximize" | "close") {
@@ -29,6 +28,7 @@ export function useWindowChrome(notify: (message: string) => void) {
       else if (action === "close") await appWindow.close();
       else {
         await appWindow.toggleMaximize();
+
         maximized.value = await appWindow.isMaximized();
       }
     } catch {
@@ -80,5 +80,10 @@ export function useWindowChrome(notify: (message: string) => void) {
     unlistenResize?.();
   });
 
-  return { maximized, systemWindowCorners, windowAction, startDrag };
+  return {
+    maximized,
+    systemWindowCorners,
+    windowAction,
+    startDrag,
+  };
 }

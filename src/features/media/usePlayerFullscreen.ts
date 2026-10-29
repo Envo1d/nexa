@@ -9,7 +9,6 @@ export function usePlayerFullscreen(
   failed: () => void,
 ) {
   const fullscreen = ref(false);
-
   const fullscreenBusy = ref(false);
 
   const nativeFullscreen = isTauri();
@@ -17,9 +16,7 @@ export function usePlayerFullscreen(
   const session = crypto.randomUUID();
 
   let disposed = false;
-
   let nativeLease = false;
-
   let ownedElement: HTMLElement | null = null;
 
   function publishState() {
@@ -36,6 +33,7 @@ export function usePlayerFullscreen(
 
   async function releaseNative() {
     await invoke("set_viewer_fullscreen", { session, enabled: false });
+
     nativeLease = false;
   }
 
@@ -69,6 +67,7 @@ export function usePlayerFullscreen(
 
     if (nativeFullscreen) {
       await invoke("set_viewer_fullscreen", { session, enabled: true });
+
       nativeLease = true;
     }
 

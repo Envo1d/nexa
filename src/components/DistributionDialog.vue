@@ -55,15 +55,10 @@ const resolution = computed(() =>
 const remaining = computed(() => props.items.length - position.value);
 
 const retain = ref(false);
-
 const copyrights = ref<MetadataValue[]>([]);
-
 const artist = ref("");
-
 const characters = ref<MetadataValue[]>([]);
-
 const tags = ref<MetadataValue[]>([]);
-
 const title = ref("");
 
 const presetMetadata = computed<PresetMetadata>(() => ({
@@ -79,7 +74,6 @@ const presetMetadata = computed<PresetMetadata>(() => ({
 const presetsControl = ref<InstanceType<typeof StageMetadataPresets> | null>(
   null,
 );
-
 const managingPresets = ref(false);
 
 function applyPreset(metadata: PresetMetadata) {
@@ -99,7 +93,6 @@ function applyPreset(metadata: PresetMetadata) {
 }
 
 const error = ref("");
-
 const dialog = ref<HTMLElement | null>(null);
 
 const { trapFocus } = useFocusTrap(dialog);
@@ -114,11 +107,8 @@ const steps = [
 ];
 
 const step = ref(0);
-
 const allFiles = ref(false);
-
 const completedCount = ref(0);
-
 const done = ref(false);
 
 const completionMessage = computed(() => {
@@ -317,7 +307,11 @@ const characterOptions = computed(() => {
         name.toLocaleLowerCase(),
       ]);
 
-      entries.set(id, { id, name, copyright });
+      entries.set(id, {
+        id,
+        name,
+        copyright,
+      });
     }
   }
 

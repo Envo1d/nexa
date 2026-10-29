@@ -43,7 +43,11 @@ const attribution = computed(() => [
     category: "characters",
     values: props.item.characters,
   },
-  { label: t("tags"), category: "tags", values: props.item.tags },
+  {
+    label: t("tags"),
+    category: "tags",
+    values: props.item.tags,
+  },
 ]);
 
 const metadata = computed(() => [

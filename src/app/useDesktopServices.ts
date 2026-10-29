@@ -20,9 +20,7 @@ export function useDesktopServices(
   const updater = useUpdater();
 
   let disposed = false;
-
   let stopCacheUsage: (() => void) | undefined;
-
   let stopDiskSync: (() => void) | undefined;
 
   const diskSync = ref<{
@@ -30,7 +28,12 @@ export function useDesktopServices(
     completed: number;
     total: number;
     error: string | null;
-  }>({ running: false, completed: 0, total: 0, error: null });
+  }>({
+    running: false,
+    completed: 0,
+    total: 0,
+    error: null,
+  });
 
   async function retryDiskSync() {
     try {

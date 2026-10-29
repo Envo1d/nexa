@@ -61,6 +61,7 @@ export async function initializeInterface() {
     const snapshot = await invoke<ConfigSnapshot>("get_config");
 
     applyTheme(snapshot.settings.theme);
+
     await applyLocale(snapshot.settings.locale);
   } catch (cause) {
     // ConfigStore owns native error tracing; keep the UI usable for recovery.

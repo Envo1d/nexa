@@ -4,9 +4,7 @@ import type { MediaItem } from "../types/media";
 
 export function useMediaSelection(results: ComputedRef<MediaItem[]>) {
   const selectedId = ref<string | null>(null);
-
   const selectedIds = ref<string[]>([]);
-
   const anchorId = ref<string | null>(null);
 
   const selected = computed(

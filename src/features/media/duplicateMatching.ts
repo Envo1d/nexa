@@ -22,7 +22,6 @@ interface Node {
 
 export function hamming(left: bigint, right: bigint): number {
   let bits = left ^ right;
-
   let count = 0;
 
   while (bits) {
@@ -52,9 +51,7 @@ export function createDuplicateMatcher(
   rejected = new Set<string>(),
 ) {
   const exact = new Map<string, DuplicateFile>();
-
   const pairs: DuplicatePair[] = [];
-
   let root: Node | undefined;
 
   function add(file: DuplicateFile) {
@@ -65,7 +62,13 @@ export function createDuplicateMatcher(
     const anchor = exact.get(key);
 
     if (anchor) {
-      pairs.push({ left: anchor, right: file, exact: true, distance: 0 });
+      pairs.push({
+        left: anchor,
+        right: file,
+        exact: true,
+        distance: 0,
+      });
+
       return;
     }
 
@@ -88,7 +91,12 @@ export function createDuplicateMatcher(
             comparable(previous.item, file.item) &&
             !rejected.has(duplicatePairKey(previous.sha256, file.sha256))
           ) {
-            pairs.push({ left: previous, right: file, exact: false, distance });
+            pairs.push({
+              left: previous,
+              right: file,
+              exact: false,
+              distance,
+            });
           }
 
           if (pairs.length >= limit) break;
@@ -101,13 +109,18 @@ export function createDuplicateMatcher(
     }
 
     if (!root) {
-      root = { hash, files: [file], children: new Map() };
+      root = {
+        hash,
+        files: [file],
+        children: new Map(),
+      };
+
       return;
     }
 
     let node = root;
 
-    for (;;) {
+    while (true) {
       const distance = hamming(hash, node.hash);
 
       if (!distance) {

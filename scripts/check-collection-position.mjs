@@ -24,12 +24,15 @@ async function collection(options = {}) {
     native: true,
     ...options,
   });
+
   const scope = effectScope();
+
   globalThis.__collectionProps = props;
   let source = await readFile(
     new URL("../src/components/MediaCollection.vue", import.meta.url),
     "utf8",
   );
+
   source = source.match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1];
   source = source.replace(
     /import \{[\s\S]*?\} from "vue";/,
@@ -46,46 +49,64 @@ async function collection(options = {}) {
   const code = transpileModule(source, {
     compilerOptions: { module: ModuleKind.ESNext },
   }).outputText;
+
   const create = await import(
     `data:text/javascript;base64,${Buffer.from(`export function setup() { ${code.replace(/import .*?;\s*/, "").replace(/export \{([^}]+)\};/, "return {$1};")} }\nimport { computed, nextTick, ref, watch } from ${vueUrl};\n// ${serial++}`).toString("base64")}`
   );
+
   const state = scope.run(() => create.setup());
+
   const viewport = {
     scrollTop: options.position ? 0 : 8807,
     scrollTo({ top }) {
       this.scrollTop = top;
     },
   };
+
   state.viewport.value = viewport;
+
   if (!options.position) {
     state.loaded.value = 250;
     state.updateScroll();
   }
-  return { props, scope, state, viewport };
+
+  return {
+    props,
+    scope,
+    state,
+    viewport,
+  };
 }
 
 test("view navigation restores independent positions and reads pending scroll before unmount", async () => {
   const main = await collection();
+
   const stage = await collection({ collectionKey: "stage" });
+
   const scopes = [main.scope, stage.scope];
   const previousObserver = globalThis.ResizeObserver;
+
   globalThis.ResizeObserver = class {
     observe() {}
     disconnect() {}
   };
+
   try {
     // No animation frame has consumed these final native scroll positions.
     main.viewport.scrollTop = 12019;
     stage.viewport.scrollTop = 4403;
+
     for (const f of [main, stage]) {
       f.state.unmounting.forEach((fn) => fn());
       const position = f.state.events.find(
         ([name]) => name === "savePosition",
       )[1];
+
       const restored = await collection({
         position,
         collectionKey: f.props.collectionKey,
       });
+
       scopes.push(restored.scope);
       restored.state.mounted.forEach((fn) => fn());
       assert.equal(restored.viewport.scrollTop, f.viewport.scrollTop);
@@ -95,6 +116,7 @@ test("view navigation restores independent positions and reads pending scroll be
 
       for (const change of [{ collectionKey: "other" }, { mode: "grid" }]) {
         const reset = await collection({ position, ...change });
+
         scopes.push(reset.scope);
         reset.state.mounted.forEach((fn) => fn());
         assert.equal(reset.state.scrollTop.value, 0);
@@ -120,6 +142,7 @@ for (const scenario of [
 ]) {
   test(`collection retains a valid visible position after ${scenario}`, async () => {
     const f = await collection();
+
     try {
       if (scenario === "insert")
         f.props.items = [{ id: "new" }, ...f.props.items];
@@ -133,10 +156,14 @@ for (const scenario of [
       else if (scenario === "empty") f.props.items = [];
       else if (scenario === "query") {
         f.props.collectionKey = "new-sort";
+
         await settle();
+
         f.props.items = [...f.props.items].reverse();
       } else f.props.items = f.props.items.map((x) => ({ ...x }));
+
       await settle();
+
       const expected = {
         refresh: 8807,
         insert: 8895,
@@ -147,8 +174,10 @@ for (const scenario of [
         empty: 0,
         query: 0,
       }[scenario];
+
       assert.equal(f.viewport.scrollTop, expected);
       assert.equal(f.state.scrollTop.value, expected);
+
       if (f.props.items.length)
         assert.ok(f.state.visibleItems.value.length > 0);
     } finally {
@@ -165,6 +194,7 @@ async function model(name, invoke) {
     ),
     { compilerOptions: { module: ModuleKind.ESNext } },
   ).outputText;
+
   code = code.replace('from "vue"', `from ${vueUrl}`);
   code = code.replace(
     /import \{ useI18n \} from "vue-i18n";/,
@@ -190,17 +220,27 @@ async function model(name, invoke) {
   const exports = await import(
     `data:text/javascript;base64,${Buffer.from(`${code}\n// ${serial++}`).toString("base64")}`
   );
+
   const scope = effectScope();
+
   return { scope, state: scope.run(() => exports[name]()) };
 }
 
 for (const name of ["useLibrary", "useStage"]) {
   test(`${name} refresh publishes all previously loaded pages atomically and resets for a query`, async () => {
-    let rows = items(12).map((x) => ({ ...x, filename: x.id, tags: [] }));
+    let rows = items(12).map((x) => ({
+      ...x,
+      filename: x.id,
+      tags: [],
+    }));
+
     let fail = false;
+
     const f = await model(name, async (_command, args) => {
       const offset = args.filters?.offset ?? args.offset;
+
       if (fail && offset > 0) throw new Error("page failed");
+
       return {
         files: rows.slice(offset, offset + 3),
         total: rows.length,
@@ -210,40 +250,59 @@ for (const name of ["useLibrary", "useStage"]) {
         characters: [],
       };
     });
+
     try {
       const refresh = () =>
         name === "useLibrary"
           ? f.state.refresh()
           : f.state.refreshRedistribution();
+
       await refresh();
+
       await f.state.loadMore();
+
       await f.state.loadMore();
+
       assert.equal(f.state.media.value.length, 9);
       const publications = [];
+
       const stop = watch(
         f.state.media,
         (value) => publications.push(value.length),
         { flush: "sync" },
       );
+
       rows = rows.filter((x) => x.id !== "1");
+
       await refresh();
+
       assert.deepEqual(publications, [9]);
       assert.equal(f.state.media.value[1].nativeId, "2");
       const previous = f.state.media.value;
+
       fail = true;
+
       await refresh();
+
       assert.equal(f.state.media.value, previous);
       assert.match(f.state.error.value, /page failed/);
       fail = false;
       f.state.appliedSearch.value = "new query";
+
       await settle();
+
       assert.equal(f.state.media.value.length, 3);
+
       await f.state.loadMore();
+
       assert.equal(f.state.media.value.length, 6);
       const key = f.state.queryKey ?? f.state.collectionKey;
       const previousKey = key.value;
+
       f.state.sortMode.value = "name-desc";
+
       await settle();
+
       assert.equal(f.state.media.value.length, 3);
       assert.notEqual(key.value, previousKey);
       stop();
@@ -255,22 +314,30 @@ for (const name of ["useLibrary", "useStage"]) {
 
 test("grid refresh and insertion of a complete row preserve the visible anchor", async () => {
   const f = await collection();
+
   try {
     f.props.mode = "grid";
+
     await settle();
+
     f.state.loaded.value = 250;
     const height = f.state.rowHeight.value;
     const columns = f.state.columns.value;
+
     f.viewport.scrollTop = height * 40 + 7;
     f.state.updateScroll();
     f.props.items = f.props.items.map((x) => ({ ...x }));
+
     await settle();
+
     assert.equal(f.viewport.scrollTop, height * 40 + 7);
     f.props.items = [
       ...items(columns).map((x) => ({ id: "insert-" + x.id })),
       ...f.props.items,
     ];
+
     await settle();
+
     assert.ok(Math.abs(f.viewport.scrollTop - (height * 41 + 7)) < 0.001);
     assert.ok(f.state.visibleItems.value.length > 0);
   } finally {

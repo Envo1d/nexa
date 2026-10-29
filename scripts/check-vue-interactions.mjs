@@ -35,7 +35,6 @@ async function loadModule(relativePath) {
   }
 
   const url = `data:text/javascript;base64,${Buffer.from(code).toString("base64")}`;
-
   const result = { url, exports: await import(url) };
 
   modules.set(path.href, result);
@@ -75,11 +74,9 @@ function searchFixture() {
   const scope = effectScope();
 
   const search = ref("");
-
   const suggestions = ref([{ name: "A" }, { name: "B" }, { name: "C" }]);
 
   const chosen = [];
-
   let commits = 0;
 
   const state = scope.run(() =>
@@ -92,7 +89,14 @@ function searchFixture() {
     ),
   );
 
-  return { scope, search, suggestions, chosen, state, commits: () => commits };
+  return {
+    scope,
+    search,
+    suggestions,
+    chosen,
+    state,
+    commits: () => commits,
+  };
 }
 
 test("search starts ArrowUp at the last match and wraps both directions", () => {
@@ -142,7 +146,9 @@ test("catalog changes reset active matches and empty catalogs remain safe", asyn
 
   fixture.state.searchKeydown(key("ArrowDown"));
   fixture.suggestions.value = [];
+
   await nextTick();
+
   assert.equal(fixture.state.suggestionIndex.value, -1);
   fixture.state.searchKeydown(key("ArrowUp"));
   fixture.state.searchKeydown(key("Enter"));
@@ -186,9 +192,7 @@ globalThis.document = { activeElement: null };
 
 function focusFixture() {
   const first = new Control();
-
   const last = new Control();
-
   const excluded = [new Control(), new Control(), new Control(), new Control()];
 
   excluded[0].disabled = true;
@@ -205,7 +209,12 @@ function focusFixture() {
     ...excluded.slice(1),
   ];
 
-  return { first, last, root, ...useFocusTrap(shallowRef(root)) };
+  return {
+    first,
+    last,
+    root,
+    ...useFocusTrap(shallowRef(root)),
+  };
 }
 
 test("Tab wraps only through visible enabled controls", () => {
@@ -255,14 +264,17 @@ test("disposing a modal cancels its pending initial focus", async () => {
   const open = ref(false);
 
   const target = new Control();
-
   const trigger = new Control();
 
   trigger.focus();
   scope.run(() => useModalFocus(open, shallowRef(target), shallowRef(null)));
   open.value = true;
+
   await nextTick();
+
   scope.stop();
+
   await nextTick();
+
   assert.equal(document.activeElement, trigger);
 });

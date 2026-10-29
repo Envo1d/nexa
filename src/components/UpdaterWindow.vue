@@ -24,7 +24,6 @@ const state = ref<Snapshot>({
   locale: "en",
   theme: "midnight-violet",
 });
-
 const connectionLost = ref(false);
 
 const title = computed(() => {
@@ -50,7 +49,6 @@ const step = computed(() => {
 });
 
 let timer: ReturnType<typeof setTimeout> | undefined;
-
 let disposed = false;
 
 async function refresh() {

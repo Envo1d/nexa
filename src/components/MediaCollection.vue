@@ -59,11 +59,8 @@ const savedPosition =
     : undefined;
 
 const viewport = ref<HTMLElement | null>(null);
-
 const width = ref(savedPosition?.width ?? 660);
-
 const height = ref(savedPosition?.height ?? 600);
-
 const scrollTop = ref(savedPosition?.scrollTop ?? 0);
 
 const showBackToTop = computed(
@@ -71,7 +68,6 @@ const showBackToTop = computed(
 );
 
 const loaded = ref(savedPosition?.loaded ?? 36);
-
 const remSize = ref(savedPosition?.remSize ?? 13);
 
 const cardWidth = computed(() => 17.5 * remSize.value);
@@ -123,7 +119,6 @@ const visibleItems = computed(() =>
 );
 
 let observer: ResizeObserver | undefined;
-
 let scrollFrame: number | undefined;
 
 const drag = ref<{
@@ -136,11 +131,8 @@ const drag = ref<{
 } | null>(null);
 
 let dragFrame: number | undefined;
-
 let pointerY = 0;
-
 let pointerX = 0;
-
 let gesturePointer: number | undefined;
 
 const selectionBox = computed(() =>
@@ -156,7 +148,6 @@ const selectionBox = computed(() =>
 
 function updateDrag() {
   const area = viewport.value;
-
   const current = drag.value;
 
   if (!area || !current) return;
@@ -179,7 +170,6 @@ function updateDrag() {
 
   const gridWidth =
     columns.value * cardWidth.value + (columns.value - 1) * gap.value;
-
   const offset = props.mode === "grid" ? (width.value - gridWidth) / 2 : 0;
 
   const ids = props.items
@@ -187,9 +177,7 @@ function updateDrag() {
     .filter((_, index) => {
       const x =
         offset + (index % columns.value) * (cardWidth.value + gap.value);
-
       const y = Math.floor(index / columns.value) * rowHeight.value;
-
       const w = props.mode === "grid" ? cardWidth.value : width.value;
 
       return (
@@ -253,7 +241,6 @@ async function startSelection(event: PointerEvent) {
   const bounds = area.getBoundingClientRect();
 
   const x = event.clientX - bounds.left;
-
   const y = event.clientY - bounds.top + area.scrollTop;
 
   drag.value = {
@@ -438,6 +425,7 @@ watch(
           columns.value,
       );
       scrollTop.value = nextTop;
+
       await nextTick();
 
       if (stale || !viewport.value) return;
@@ -457,7 +445,9 @@ watch(
     endSelection();
     cancelScrollFrame();
     scrollTop.value = 0;
+
     await nextTick();
+
     viewport.value?.scrollTo({ top: 0 });
   },
 );

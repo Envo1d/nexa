@@ -32,7 +32,11 @@ const props = withDefaults(
     panel?: boolean;
     single?: boolean;
   }>(),
-  { modelValue: () => [], textValue: "", customCopyrights: undefined },
+  {
+    modelValue: () => [],
+    textValue: "",
+    customCopyrights: undefined,
+  },
 );
 
 const emit = defineEmits<{
@@ -51,9 +55,7 @@ const query = computed({
 });
 
 const focused = ref(false);
-
 const active = ref(-1);
-
 const input = ref<HTMLInputElement | null>(null);
 
 const assignment = ref<MetadataValue[]>([]);
@@ -89,13 +91,9 @@ const canCreate = computed(
 );
 
 const entry = ref<HTMLElement | null>(null);
-
 const popup = ref<HTMLElement | null>(null);
-
 const popupTarget = ref<HTMLElement | null>(null);
-
 const anchorVisible = ref(true);
-
 const popupStyle = ref({
   left: "0px",
   top: "0px",
@@ -105,7 +103,6 @@ const popupStyle = ref({
 });
 
 let observer: ResizeObserver | undefined;
-
 let frame: number | undefined;
 
 const popupOpen = computed(
@@ -114,7 +111,6 @@ const popupOpen = computed(
 
 function positionPopup() {
   const anchor = entry.value;
-
   const target = popupTarget.value;
 
   if (!anchor || !target || !popupOpen.value) return;
@@ -163,6 +159,7 @@ function dismissAssignment(event: PointerEvent) {
 
 watch([popupOpen, query, () => props.modelValue.length], async () => {
   await nextTick();
+
   positionPopup();
 });
 
@@ -246,9 +243,13 @@ function choose(value: MetadataValue) {
 async function assign(choices: MetadataValue[]) {
   assignment.value = choices;
   focused.value = false;
+
   await nextTick();
+
   positionPopup();
+
   await nextTick();
+
   popup.value?.querySelector<HTMLButtonElement>("button")?.focus();
 }
 

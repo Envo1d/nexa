@@ -13,11 +13,8 @@ interface CacheClearResult {
 }
 
 const status = ref<CacheStatus | null>(null);
-
 const error = ref("");
-
 const limitReached = ref(false);
-
 const clearing = ref(false);
 
 let generation = 0;
@@ -64,7 +61,6 @@ export function useCacheUsage() {
     if (!isTauri()) return () => {};
 
     let stopped = false;
-
     let alerted = false;
 
     const alert = () => {
@@ -128,5 +124,13 @@ export function useCacheUsage() {
     };
   }
 
-  return { status, label, pressure, error, clearing, clear, connect };
+  return {
+    status,
+    label,
+    pressure,
+    error,
+    clearing,
+    clear,
+    connect,
+  };
 }

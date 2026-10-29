@@ -46,7 +46,9 @@ export async function inspectRelease({ api, version, sha }) {
   }
 
   const tag = `v${version}`;
+
   const reference = await api(`git/ref/tags/${tag}`, { optional: true });
+
   let object = reference?.object;
 
   // Annotated tags point to tag objects; compare their final commit, not the tag SHA.
@@ -92,7 +94,9 @@ export async function inspectRelease({ api, version, sha }) {
       .match(/^v(\d+)\.(\d+)\.(\d+)$/)
       ?.slice(1)
       .map(BigInt);
+
     const nextVersion = version.split(".").map(BigInt);
+
     const differingPart = nextVersion.findIndex(
       (part, index) => part !== latestVersion?.[index],
     );
@@ -113,12 +117,17 @@ export async function inspectRelease({ api, version, sha }) {
     }
   }
 
-  return { tag, reference, release };
+  return {
+    tag,
+    reference,
+    release,
+  };
 }
 
 export async function prepareRelease({ log = console.log, ...context }) {
   try {
     await inspectRelease(context);
+
     log(`New release version: v${context.version} at ${context.sha}.`);
     return true;
   } catch (error) {
@@ -146,6 +155,7 @@ export async function publishRelease({
 
   if (!reference) {
     log(`Creating ${tag} on built commit ${sha}.`);
+
     await api("git/refs", {
       method: "POST",
       body: { ref: `refs/tags/${tag}`, sha },
@@ -172,7 +182,12 @@ export async function publishRelease({
   run(["release", "upload", tag, ...assets, "--clobber"]);
 
   // An upload failure throws before this point; incomplete releases stay unpublished.
-  await inspectRelease({ api, version, sha });
+  await inspectRelease({
+    api,
+    version,
+    sha,
+  });
+
   run([
     "release",
     "edit",
@@ -219,6 +234,7 @@ async function main() {
   });
 
   const { version } = JSON.parse(readFileSync("package.json", "utf8"));
+
   const api = githubApi({ token, repository });
 
   if (mode === "prepare") {
@@ -226,14 +242,24 @@ async function main() {
       throw new Error("Release preparation requires GITHUB_OUTPUT.");
     }
 
-    const eligible = await prepareRelease({ api, version, sha });
+    const eligible = await prepareRelease({
+      api,
+      version,
+      sha,
+    });
 
     appendFileSync(process.env.GITHUB_OUTPUT, `release=${eligible}\n`);
+
     return;
   }
 
   if (mode === "check") {
-    await inspectRelease({ api, version, sha });
+    await inspectRelease({
+      api,
+      version,
+      sha,
+    });
+
     console.log(`Release preflight passed: v${version} at ${sha}.`);
     return;
   }

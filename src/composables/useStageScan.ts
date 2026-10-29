@@ -19,7 +19,6 @@ const status = ref<ScanStatus>({
 });
 
 let listening: Promise<void> | undefined;
-
 let revision = 0;
 
 async function refreshStatus() {
@@ -58,9 +57,15 @@ export function useStageScan() {
 
   async function start(library = false) {
     await connect();
+
     await invoke(library ? "start_library_scan" : "start_stage_scan");
+
     await refreshStatus();
   }
 
-  return { status, connect, start };
+  return {
+    status,
+    connect,
+    start,
+  };
 }

@@ -4,8 +4,8 @@ import { invoke } from "@tauri-apps/api/core";
 import UpdaterWindow from "./components/UpdaterWindow.vue";
 import { applyLocale, i18n } from "./i18n";
 import { applyTheme } from "./themes";
-import "./themes.css";
 
+import "./themes.css";
 import type { InterfaceLocale } from "./types/config";
 import type { AppTheme } from "./themes";
 
@@ -15,6 +15,7 @@ try {
   );
 
   applyTheme(snapshot.theme);
+
   await applyLocale(snapshot.locale);
 } catch {
   // The mounted helper owns reconnection and continues to report its status.

@@ -47,9 +47,7 @@ export function translateUi(message: string, depth = 0): string {
   const text = message.trim();
 
   const leading = message.match(/^\s*/)?.[0] ?? "";
-
   const trailing = message.match(/\s*$/)?.[0] ?? "";
-
   const key = exact.get(text) ?? exact.get(text.replace(/\s+/g, " "));
 
   if (key) return `${leading}${i18n.global.t(key)}${trailing}`;

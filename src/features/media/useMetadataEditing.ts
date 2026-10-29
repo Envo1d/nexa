@@ -12,12 +12,13 @@ export function useMetadataEditing(
   notify: Notify,
 ) {
   const distributionQueue = ref<MediaItem[]>([]);
-
   const replacementTarget = ref<MediaItem | null>(null);
 
   async function replacementCompleted() {
     stage.clearSelection();
+
     await refreshAll();
+
     notify("File replaced. Old version deleted.");
   }
 
@@ -46,6 +47,7 @@ export function useMetadataEditing(
         editingMetadata.value ? "save_library_metadata" : "distribute_files",
         { ids: nativeIds, draft },
       );
+
       await refreshAll();
 
       return;

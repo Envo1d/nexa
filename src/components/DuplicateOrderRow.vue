@@ -18,7 +18,6 @@ const props = defineProps<{
 const emit = defineEmits<{ move: [offset: number] }>();
 
 const row = ref<HTMLElement | null>(null);
-
 const visible = ref(false);
 
 const previewEnabled = computed(() => props.showPreviews && visible.value);

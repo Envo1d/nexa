@@ -20,9 +20,7 @@ export function useFocusTrap(element: Readonly<Ref<HTMLElement | null>>) {
     );
 
     const first = controls[0];
-
     const last = controls[controls.length - 1];
-
     const active = document.activeElement;
 
     if (!first || !last) {

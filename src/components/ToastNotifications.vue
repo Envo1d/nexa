@@ -30,7 +30,6 @@ const emit = defineEmits<{
 const { t } = useI18n();
 
 const hovered = ref(false);
-
 const focused = ref(false);
 
 function setInteraction(kind: "hover" | "focus", value: boolean) {

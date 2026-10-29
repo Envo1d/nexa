@@ -5,14 +5,24 @@ import { resolve, join } from "node:path";
 import { verifyUpdateSignature } from "./verify-update-signature.mjs";
 
 const directory = resolve(process.argv[2]);
-const expectedVersion = JSON.parse(readFileSync("package.json", "utf8")).version;
+
+const expectedVersion = JSON.parse(
+  readFileSync("package.json", "utf8"),
+).version;
+
 const feedBytes = readFileSync(join(directory, "releases.win-x64.json"));
-const signature = readFileSync(join(directory, "releases.win-x64.json.sig"), "utf8");
+
+const signature = readFileSync(
+  join(directory, "releases.win-x64.json.sig"),
+  "utf8",
+);
+
 const publicKey = readFileSync("src-tauri/updater.pub", "utf8");
 
 verifyUpdateSignature(feedBytes, signature, publicKey);
 
 const feed = JSON.parse(feedBytes.toString("utf8"));
+
 const entries = feed.Assets ?? feed.assets;
 
 if (!Array.isArray(entries) || entries.length !== 1) {
@@ -20,9 +30,15 @@ if (!Array.isArray(entries) || entries.length !== 1) {
 }
 
 for (const entry of entries) {
-  const asset = Object.fromEntries(Object.entries(entry).map(([key, value]) => [key.toLowerCase(), value]));
+  const asset = Object.fromEntries(
+    Object.entries(entry).map(([key, value]) => [key.toLowerCase(), value]),
+  );
 
-  if (asset.packageid !== "Nexa" || asset.version !== expectedVersion || asset.type !== "Full") {
+  if (
+    asset.packageid !== "Nexa" ||
+    asset.version !== expectedVersion ||
+    asset.type !== "Full"
+  ) {
     throw new Error("Velopack identity, version or package type mismatch.");
   }
 
@@ -31,6 +47,7 @@ for (const entry of entries) {
   }
 
   const bytes = readFileSync(join(directory, asset.filename));
+
   const checksum = createHash("sha256").update(bytes).digest("hex");
 
   if (bytes.length !== asset.size || checksum !== asset.sha256?.toLowerCase()) {

@@ -11,13 +11,9 @@ interface UpdateInfo {
 }
 
 const available = ref<UpdateInfo | null>(null);
-
 const busy = ref(false);
-
 const status = ref("Not checked");
-
 const percent = ref<number | null>(null);
-
 const confirmation = ref<UpdateInfo | null>(null);
 
 let startupChecked = false;
@@ -85,6 +81,7 @@ async function confirmInstall() {
       progress,
       locale: i18n.global.locale.value,
     });
+
     status.value = "Restarting Nexa to apply the update…";
   } catch (error) {
     status.value = String(error);

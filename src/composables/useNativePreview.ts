@@ -13,11 +13,8 @@ type Job = {
 };
 
 const cache = new Map<string, Entry>();
-
 const failed = new Set<string>();
-
 const jobs: Job[] = [];
-
 let running = 0;
 
 function trim() {
@@ -85,7 +82,6 @@ export function useNativePreview(
   const url = ref("");
 
   let current: Entry | undefined;
-
   let generation = 0;
 
   function release() {
@@ -152,7 +148,12 @@ export function useNativePreview(
 
       if (jobs.length >= 64) jobs.pop()?.done(null);
 
-      const job: Job = { key, id: media.nativeId, active, done };
+      const job: Job = {
+        key,
+        id: media.nativeId,
+        active,
+        done,
+      };
 
       if (priority) jobs.unshift(job);
       else jobs.push(job);

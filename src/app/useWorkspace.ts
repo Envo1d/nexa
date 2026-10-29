@@ -14,7 +14,6 @@ import { useI18n } from "vue-i18n";
 import { useDemoTaxonomy } from "../composables/useDemoTaxonomy";
 import { useLibrary } from "../composables/useLibrary";
 import { useStage } from "../composables/useStage";
-
 import { useToast } from "../shared/composables/useToast";
 import { useSearchSuggestions } from "../shared/composables/useSearchSuggestions";
 import { useModalFocus } from "../shared/composables/useModalFocus";
@@ -86,7 +85,6 @@ export function useWorkspace(elements: WorkspaceElements) {
   } = library;
 
   const view = ref<"main" | "stage" | "settings" | "tags">("main");
-
   const settingsSection = ref<{ id: string } | null>(null);
 
   watch(view, (next) => {
@@ -100,11 +98,8 @@ export function useWorkspace(elements: WorkspaceElements) {
   });
 
   const mode = ref<"grid" | "list">("grid");
-
   const showPreviews = ref(true);
-
   const sidebarExpanded = ref(false);
-
   const detailsOpen = ref(false);
 
   const detailsSelection = computed(() =>
@@ -136,7 +131,6 @@ export function useWorkspace(elements: WorkspaceElements) {
   }
 
   const showAllTags = ref(false);
-
   const context = ref<{
     item: MediaItem;
     x: number;
@@ -226,9 +220,7 @@ export function useWorkspace(elements: WorkspaceElements) {
 
   async function contextAction(action: string) {
     const item = context.value?.item;
-
     const stageContext = context.value?.stage;
-
     const selection = context.value?.stage ? stage : library;
 
     const targets = selection.results.value.filter((entry) =>
@@ -303,9 +295,21 @@ export function useWorkspace(elements: WorkspaceElements) {
       icon: string;
     }[]
   >(() => [
-    { value: "all", label: t("allFiles"), icon: "files" },
-    { value: "video", label: t("videos"), icon: "video" },
-    { value: "image", label: t("images"), icon: "image" },
+    {
+      value: "all",
+      label: t("allFiles"),
+      icon: "files",
+    },
+    {
+      value: "video",
+      label: t("videos"),
+      icon: "video",
+    },
+    {
+      value: "image",
+      label: t("images"),
+      icon: "image",
+    },
   ]);
 
   function navigate(nextScope: "gallery" | "favorites") {

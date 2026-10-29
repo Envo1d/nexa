@@ -40,7 +40,6 @@ test("diagnostic arguments preserve main window settings and leave production co
 
 test("baseline omits the workaround and uses a separate profile", () => {
   const baseline = videoDiagnosticConfig(config, "baseline").app.windows[0];
-
   const diagnostic = videoDiagnosticConfig(config).app.windows[0];
 
   assert.ok(!baseline.additionalBrowserArgs.includes(overlayArgument));

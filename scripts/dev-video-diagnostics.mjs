@@ -3,7 +3,6 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 export const overlayArgument = "--disable_direct_composition_video_overlays=1";
-
 const defaultBrowserArguments =
   "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection";
 
@@ -73,7 +72,11 @@ async function main() {
   );
 
   console.info(
-    JSON.stringify({ operation: "video_diagnostics", event: "starting", mode }),
+    JSON.stringify({
+      operation: "video_diagnostics",
+      event: "starting",
+      mode,
+    }),
   );
   console.info(
     "Close any existing Nexa instance before starting. Compare the same file, fullscreen and hover actions in both modes.",

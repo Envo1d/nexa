@@ -21,13 +21,9 @@ const emit = defineEmits<{ working: [value: boolean]; restored: [] }>();
 const native = isTauri();
 
 const busy = ref(false);
-
 const message = ref("");
-
 const error = ref("");
-
 const selected = ref<{ path: string; preview: BackupPreview } | null>(null);
-
 const confirmed = ref(false);
 
 function working(value: boolean) {
@@ -52,6 +48,7 @@ async function exportCatalog(portable: boolean) {
     if (!path) return;
 
     await invoke("export_catalog", { path, portable });
+
     message.value = t("catalogExported", { path });
   } catch (cause) {
     error.value = t("catalogOperationError", { error: ui(String(cause)) });

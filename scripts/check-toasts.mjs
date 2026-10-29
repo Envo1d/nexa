@@ -5,7 +5,10 @@ import vm from "node:vm";
 import { effectScope, onScopeDispose, ref } from "vue";
 import { transpileModule, ModuleKind } from "typescript";
 
-const source = await readFile(new URL("../src/shared/composables/useToast.ts", import.meta.url), "utf8");
+const source = await readFile(
+  new URL("../src/shared/composables/useToast.ts", import.meta.url),
+  "utf8",
+);
 
 const code = transpileModule(source, {
   compilerOptions: { module: ModuleKind.CommonJS },
@@ -16,6 +19,7 @@ function fixture() {
   let sequence = 0;
   const pending = new Map();
   const exports = {};
+
   const scope = effectScope();
 
   vm.runInNewContext(code, {
@@ -24,6 +28,7 @@ function fixture() {
     Date: { now: () => now },
     setTimeout: (run, delay) => {
       const id = ++sequence;
+
       pending.set(id, { run, at: now + delay });
       return id;
     },
@@ -38,6 +43,7 @@ function fixture() {
     stop: () => scope.stop(),
     advance: (elapsed) => {
       now += elapsed;
+
       for (const [id, entry] of pending) {
         if (entry.at <= now) {
           pending.delete(id);
@@ -50,13 +56,16 @@ function fixture() {
 
 test("notifications coexist, expire independently and stay bounded", () => {
   const state = fixture();
+
   state.notify("First");
   state.advance(1000);
   state.notify("Second");
   state.advance(3500);
   assert.equal(state.toasts.value.length, 1);
   assert.equal(state.toasts.value[0].message, "Second");
+
   for (let index = 0; index < 8; index++) state.notify(`Message ${index}`);
+
   assert.equal(state.toasts.value.length, 5);
   assert.equal(state.toasts.value[0].message, "Message 3");
   assert.equal(state.pending.size, 5);
@@ -65,6 +74,7 @@ test("notifications coexist, expire independently and stay bounded", () => {
 
 test("interaction pauses remaining time and newly arriving notifications", () => {
   const state = fixture();
+
   state.notify("First");
   state.advance(2000);
   state.pauseToasts(true);
@@ -84,12 +94,19 @@ test("interaction pauses remaining time and newly arriving notifications", () =>
 
 test("persistent actions survive expiration and run only when activated", () => {
   const state = fixture();
+
   let actions = 0;
-  state.notify("Update", { id: "update", duration: 0, action: { label: "View", run: () => actions++ } });
+
+  state.notify("Update", {
+    id: "update",
+    duration: 0,
+    action: { label: "View", run: () => actions++ },
+  });
   state.advance(60000);
   assert.equal(actions, 0);
   assert.equal(state.toasts.value.length, 1);
   const notification = state.toasts.value[0];
+
   state.runToastAction(notification);
   state.runToastAction(notification);
   assert.equal(actions, 1);
@@ -99,6 +116,7 @@ test("persistent actions survive expiration and run only when activated", () => 
 
 test("replacement, dismissal and disposal release timers and reject late notices", () => {
   const state = fixture();
+
   state.notify("Old", { id: "same" });
   state.advance(3000);
   state.notify("New", { id: "same" });

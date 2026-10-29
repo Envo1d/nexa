@@ -17,9 +17,7 @@ const props = defineProps<{
 const emit = defineEmits<{ answer: [accepted: boolean] }>();
 
 const dialog = ref<HTMLElement | null>(null);
-
 const cancelButton = ref<HTMLButtonElement | null>(null);
-
 const open = ref(true);
 
 const visibleItems = computed(() => props.items.slice(0, 5));
