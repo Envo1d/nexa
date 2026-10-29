@@ -59,7 +59,7 @@ const visiblePresets = computed(() =>
   presets.value.filter((preset) =>
     preset.name
       .toLocaleLowerCase()
-      .includes(query.value.trim().toLocaleLowerCase()),
+      .startsWith(query.value.trim().toLocaleLowerCase()),
   ),
 );
 

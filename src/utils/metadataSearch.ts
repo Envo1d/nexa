@@ -44,7 +44,7 @@ export function metadataSuggestions(
   for (const value of entries) {
     const normalized = value.name.toLocaleLowerCase();
 
-    if (normalized.includes(query) && !existing.includes(normalized)) {
+    if (normalized.startsWith(query) && !existing.includes(normalized)) {
       values.set(
         JSON.stringify([value.category, normalized, value.copyright ?? ""]),
         value,

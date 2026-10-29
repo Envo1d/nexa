@@ -358,6 +358,10 @@ test("preset search filters names and Escape dismisses only an open picker", asy
     plain(state.visiblePresets.value.map((preset) => preset.id)),
     ["1"],
   );
+
+  state.query.value = "gular";
+  assert.equal(state.visiblePresets.value.length, 0);
+
   let stopped = 0;
   const event = {
     key: "Escape",

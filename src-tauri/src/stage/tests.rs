@@ -923,6 +923,56 @@ async fn batch_failure_rolls_back_and_switching_roots_keeps_history() {
 }
 
 #[tokio::test]
+async fn search_matches_literal_unicode_filename_prefixes_independent_of_directories() {
+    let (_temp, db, root) = fixture().await;
+    let source = activate_source(db.pool(), &root, 1).await.unwrap();
+    std::fs::create_dir(root.join("marvel")).unwrap();
+
+    let names = [
+        "marvel/atomic.mp4",
+        "amber.mp4",
+        "marvel/marvel.mp4",
+        "Straße.mp4",
+        "100%.mp4",
+        "under_score.mp4",
+    ];
+    let batch = names.iter().map(|name| prepared(&root, name, 10)).collect();
+    save_batch(db.pool(), source, 1, batch).await.unwrap();
+
+    // Exercise lazy key recovery as well as keys produced during indexing.
+    sqlx::query("UPDATE media SET stage_search_key=NULL WHERE relative_path='marvel/marvel.mp4'")
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+    let root = Some(root.to_string_lossy().into_owned());
+
+    for (search, expected) in [
+        (" M ", vec!["marvel.mp4"]),
+        ("ar", vec![]),
+        ("STRASS", vec!["Straße.mp4"]),
+        ("100%", vec!["100%.mp4"]),
+        ("under_", vec!["under_score.mp4"]),
+        ("%", vec![]),
+        ("_", vec![]),
+    ] {
+        let page = browse(db.pool(), root.clone(), 0, search, "name-asc")
+            .await
+            .unwrap();
+        assert_eq!(page.total, expected.len() as i64, "{search}");
+        assert_eq!(
+            page.files
+                .iter()
+                .map(|file| file.filename.as_str())
+                .collect::<Vec<_>>(),
+            expected,
+            "{search}"
+        );
+    }
+    db.close().await;
+}
+
+#[tokio::test]
 async fn paginates_without_duplicates_searches_unicode_and_keeps_queued_files() {
     let (_temp, db, root) = fixture().await;
 

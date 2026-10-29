@@ -31,7 +31,7 @@ async function compile(path, expose, component = false) {
 
 const panelCode = await compile(
   "../src/components/TagsPanel.vue",
-  "begin, apply, category, catalog, copyright, copyrightOptions, name, pending, error, busy",
+  "begin, apply, category, catalog, copyright, copyrightOptions, name, pending, error, busy, search, entries",
   true,
 );
 
@@ -42,9 +42,40 @@ const demoCode = await compile(
 
 const inputCode = await compile(
   "../src/components/MetadataInput.vue",
-  "keydown, focused, showSuggestions",
+  "keydown, focused, showSuggestions, query, matches",
   true,
 );
+
+test("taxonomy and metadata inputs match name prefixes without matching parent copyrights", () => {
+  const names = ["atomic", "amber", "marvel", "M_hero"];
+  const characters = names.map((name) => ({
+    name,
+    copyright: "marvel world",
+    count: 0,
+  }));
+  const panel = run(panelCode, true);
+
+  panel.catalog.value.characters = characters;
+  panel.category.value = "character";
+  panel.search.value = " M ";
+  assert.deepEqual(
+    Array.from(panel.entries.value, (entry) => entry.name),
+    ["marvel", "M_hero"],
+  );
+
+  const input = run(inputCode, false, undefined, {
+    options: names.map((name) => ({ id: name, name })),
+    modelValue: [{ id: "marvel", name: "marvel" }],
+  });
+
+  input.query.value = "m";
+  assert.deepEqual(
+    Array.from(input.matches.value, (entry) => entry.name),
+    ["M_hero"],
+  );
+  input.query.value = "_";
+  assert.equal(input.matches.value.length, 0);
+});
 
 function run(code, native, invoke = async () => ({}), props = {}) {
   const events = [];

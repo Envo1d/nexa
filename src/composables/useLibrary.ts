@@ -206,7 +206,7 @@ export function useLibrary() {
               ...(item.artists ?? [item.artist]),
               ...item.characters,
               ...item.tags,
-            ].some((value) => value.toLocaleLowerCase() === query),
+            ].some((value) => value.toLocaleLowerCase().startsWith(query)),
           ),
       )
       .sort((a, b) => {

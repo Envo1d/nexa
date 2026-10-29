@@ -179,11 +179,7 @@ export function useStage() {
     const query = appliedSearch.value.toLocaleLowerCase().replace(/\\/g, "/");
 
     return media.value
-      .filter((item) =>
-        [item.filename, item.path].some((value) =>
-          value.toLocaleLowerCase().replace(/\\/g, "/").includes(query),
-        ),
-      )
+      .filter((item) => item.filename.toLocaleLowerCase().startsWith(query))
       .sort((a, b) => {
         if (sortMode.value === "name-asc" || sortMode.value === "name-desc") {
           const order = a.filename.localeCompare(b.filename, "en", {
