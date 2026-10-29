@@ -57,8 +57,18 @@ Windows development requires Node.js/npm, Rust stable, Microsoft C++ Build Tools
 git clone https://github.com/Envo1d/nexa.git
 cd nexa
 npm install
-npm run tauri dev
+npm run tauri:dev
 ```
+
+`tauri:dev` uses debug builds and an independent persistent catalog at `%LOCALAPPDATA%\Envo1d\NexaNew\data\dev\db\vault.db`. Settings, thumbnails, logs and catalog safety backups are isolated too. The first launch creates an empty database with the normal migrations and default settings; production data and configured media roots are not copied. Debug builds always select dev storage, including the existing `npm run tauri dev` command and video diagnostics. A separate native app identity isolates window state, WebView data and single-instance activation from production.
+
+To explicitly launch against the real production catalog:
+
+```powershell
+npm run tauri:prod
+```
+
+This runs `tauri dev --release`: an optimized native build connected to the Vite development server, using the existing production paths. Installer/release builds also retain production storage. Dev storage persists between runs. Use dedicated test media folders in dev settings: file operations still act on the originals in the folders you select.
 
 For the browser demo:
 

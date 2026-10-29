@@ -88,13 +88,26 @@ pub struct AppPaths {
 
 impl AppPaths {
     pub fn resolve() -> ConfigResult<Self> {
+        Self::resolve_for(cfg!(debug_assertions))
+    }
+
+    fn resolve_for(development: bool) -> ConfigResult<Self> {
         let dirs = ProjectDirs::from("com", "Envo1d", "NexaNew")
             .ok_or("Unable to locate application system folders")?;
+
+        let scoped = |root: &std::path::Path| {
+            if development {
+                root.join("dev")
+            } else {
+                root.to_path_buf()
+            }
+        };
+
         Ok(Self {
-            config_path: dirs.config_dir().join("settings.json"),
-            database_path: dirs.data_local_dir().join("db/vault.db"),
-            cache_path: dirs.cache_dir().join("thumbnails"),
-            logs_path: dirs.data_local_dir().join("logs"),
+            config_path: scoped(dirs.config_dir()).join("settings.json"),
+            database_path: scoped(dirs.data_local_dir()).join("db/vault.db"),
+            cache_path: scoped(dirs.cache_dir()).join("thumbnails"),
+            logs_path: scoped(dirs.data_local_dir()).join("logs"),
         })
     }
 }
