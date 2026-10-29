@@ -134,8 +134,8 @@ body:has(.nexa-video-player:fullscreen) .app-shell {
   align-self: stretch;
 }
 .brand-mark {
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   display: block;
   object-fit: contain;
   flex-shrink: 0;
