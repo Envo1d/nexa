@@ -9,6 +9,7 @@ import { defaultConfig } from "../types/config";
 import { version } from "../../package.json";
 import ToggleSwitch from "./ToggleSwitch.vue";
 import SettingsRow from "./SettingsRow.vue";
+import CatalogSettings from "./CatalogSettings.vue";
 import AppIcon from "./AppIcon.vue";
 import UpdateConfirmDialog from "./UpdateConfirmDialog.vue";
 import AppSelect from "./AppSelect.vue";
@@ -287,6 +288,12 @@ const sections = computed(() => [
     description: t("cacheDescription"),
   },
   {
+    id: "catalog",
+    label: t("catalogSection"),
+    icon: "copy",
+    description: t("catalogDescription"),
+  },
+  {
     id: "logs",
     label: t("logs"),
     icon: "logs",
@@ -559,6 +566,11 @@ function resetDrafts() {
                   <p v-if="importError" role="alert">{{ ui(importError) }}</p>
                 </div>
               </template>
+              <CatalogSettings
+                v-else-if="section.id === 'catalog'"
+                @working="busy = $event"
+                @restored="emit('saved')"
+              />
               <template v-else-if="section.id === 'cache'">
                 <div class="settings-card-row settings-cache-row">
                   <div class="settings-summary">

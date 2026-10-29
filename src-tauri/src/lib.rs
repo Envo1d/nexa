@@ -1,4 +1,5 @@
 mod bootstrap;
+mod catalog;
 mod config;
 pub mod database;
 mod disk_sync;

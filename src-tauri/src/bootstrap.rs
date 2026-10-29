@@ -3,8 +3,8 @@
 #[cfg(desktop)]
 use crate::updater;
 use crate::{
-    config, database, disk_sync, duplicates, legacy_import, library, logging, metadata_presets,
-    replacement, stage, taxonomy,
+    catalog, config, database, disk_sync, duplicates, legacy_import, library, logging,
+    metadata_presets, replacement, stage, taxonomy,
 };
 
 pub fn run() {
@@ -80,6 +80,9 @@ pub fn run() {
             result
         })
         .invoke_handler(tauri::generate_handler![
+            catalog::export_catalog,
+            catalog::inspect_catalog_backup,
+            catalog::restore_catalog,
             duplicates::fingerprint_duplicate_batch,
             duplicates::prepare_duplicate_scan,
             duplicates::set_duplicate_rejection,
