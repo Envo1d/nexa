@@ -60,7 +60,7 @@ npm install
 npm run tauri:dev
 ```
 
-`tauri:dev` uses debug builds and an independent persistent catalog at `%LOCALAPPDATA%\Envo1d\NexaNew\data\dev\db\vault.db`. Settings, thumbnails, logs and catalog safety backups are isolated too. The first launch creates an empty database with the normal migrations and default settings; production data and configured media roots are not copied. Debug builds always select dev storage, including the existing `npm run tauri dev` command and video diagnostics. A separate native app identity isolates window state, WebView data and single-instance activation from production.
+`tauri:dev` opens the native window with the same ready-made demo library as the browser: 480 Main files and 96 Stage files with bundled previews. Tag, favorite, taxonomy, preset and appearance edits use the existing in-memory demo behavior and reset when the app restarts. Native window controls still work. Debug startup does not load application settings, open SQLite, initialize thumbnail/file-log storage or run scanning, disk synchronization and updates. This also applies to direct `npm run tauri dev` and other debug launches. The former separate development database/settings/cache routing has been removed; existing files in old `dev` directories are not deleted or migrated.
 
 To explicitly launch against the real production catalog:
 
@@ -68,7 +68,7 @@ To explicitly launch against the real production catalog:
 npm run tauri:prod
 ```
 
-This runs `tauri dev --release`: an optimized native build connected to the Vite development server, using the existing production paths. Installer/release builds also retain production storage. Dev storage persists between runs. Use dedicated test media folders in dev settings: file operations still act on the originals in the folders you select.
+This runs `tauri dev --release`: an optimized native build connected to the Vite development server, using the existing production catalog, settings and media operations. Installer/release builds also retain production storage.
 
 For the browser demo:
 

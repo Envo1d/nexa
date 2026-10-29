@@ -7,10 +7,12 @@ import {
   ref,
   watch,
 } from "vue";
-import { convertFileSrc, invoke, isTauri } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { useI18n } from "vue-i18n";
 
+import { isNativeData } from "../runtime";
 import AppIcon from "./AppIcon.vue";
+import MetadataInput from "./MetadataInput.vue";
 import NexaVideoPlayer from "./NexaVideoPlayer.vue";
 import { useFocusTrap } from "../shared/composables/useFocusTrap";
 import { translateUi as ui } from "../i18n/presentation";
@@ -19,6 +21,7 @@ import type { MediaItem } from "../types/media";
 
 const props = defineProps<{
   item: MediaItem;
+  tagNames: string[];
   stage: boolean;
   index: number;
   total: number;
@@ -54,6 +57,18 @@ const annotationsReady = ref(false);
 const favorite = ref(false);
 const tags = ref<string[]>([]);
 const newTag = ref("");
+
+const tagOptions = computed(() =>
+  props.tagNames
+    .filter(
+      (name) =>
+        !tags.value.some(
+          (selected) =>
+            selected.toLocaleLowerCase() === name.toLocaleLowerCase(),
+        ),
+    )
+    .map((name) => ({ id: name.toLocaleLowerCase(), name })),
+);
 
 const zoom = ref(1);
 const pan = ref({ x: 0, y: 0 });
@@ -187,7 +202,7 @@ async function loadSource() {
   sourceFps.value = props.item.fps;
 
   try {
-    if (isTauri() && props.item.nativeId) {
+    if (isNativeData() && props.item.nativeId) {
       const result = await invoke<{
         path: string;
         favorite: boolean;
@@ -258,7 +273,7 @@ async function saveAnnotations(
   saveError.value = "";
 
   try {
-    if (isTauri())
+    if (isNativeData())
       await invoke("save_viewer_annotations", {
         id: props.item.nativeId,
         library: !props.stage,
@@ -414,7 +429,7 @@ onBeforeUnmount(() => {
           </div>
           <button
             class="secondary-button"
-            :disabled="!isTauri()"
+            :disabled="!isNativeData()"
             @click="emit('external', item)"
           >
             {{ t("viewerExternal") }}
@@ -569,19 +584,26 @@ onBeforeUnmount(() => {
               <p v-if="!tags.length" class="muted">{{ t("noTags") }}</p>
             </div>
             <form class="viewer-tag-form" @submit.prevent="addTag">
-              <input
-                v-model="newTag"
-                :disabled="saving || paging || !annotationsReady"
-                :aria-label="t('newTag')"
+              <MetadataInput
+                :key="item.id"
+                v-model:text-value="newTag"
+                label="Tags"
+                hide-label
                 :placeholder="t('addTagPlaceholder')"
+                :options="tagOptions"
+                text-input
+                :disabled="saving || paging || !annotationsReady"
+                @keydown.enter="!$event.isComposing && addTag()"
               /><button
-                class="secondary-button"
+                class="secondary-button viewer-tag-add"
+                :aria-label="t('add')"
+                :title="t('add')"
                 :disabled="
                   saving || paging || !annotationsReady || !newTag.trim()
                 "
                 type="submit"
               >
-                {{ t("add") }}
+                <AppIcon name="plus" :size="18" />
               </button>
             </form>
             <p v-if="saving" role="status">{{ t("viewerSaving") }}</p>
@@ -589,7 +611,9 @@ onBeforeUnmount(() => {
               {{ saveError }}
             </p>
             <p class="viewer-help">{{ t("viewerHelp") }}</p>
-            <p v-if="!isTauri()" class="viewer-help">{{ t("viewerDemo") }}</p>
+            <p v-if="!isNativeData()" class="viewer-help">
+              {{ t("viewerDemo") }}
+            </p>
           </aside>
         </div>
       </section>
@@ -742,18 +766,19 @@ onBeforeUnmount(() => {
 }
 .viewer-tag-form {
   display: flex;
-  flex-wrap: wrap;
+  align-items: stretch;
   gap: 8px;
   margin-top: 16px;
 }
-.viewer-tag-form input {
-  width: 100%;
+.viewer-tag-form .metadata-input {
+  flex: 1;
   min-width: 0;
-  background: var(--surface-input);
-  color: var(--text);
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  padding: 9px;
+}
+.viewer-tag-add {
+  display: grid;
+  place-items: center;
+  flex: 0 0 38px;
+  padding: 0;
 }
 .viewer-help {
   color: var(--muted);

@@ -1,6 +1,8 @@
 import { onScopeDispose, ref, shallowRef } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 
+import { isNativeData } from "../../runtime";
+
 import type { MediaItem } from "../../types/media";
 import type { LibraryModel, StageModel, Notify } from "./model";
 
@@ -36,6 +38,13 @@ export function useFileActions(
     verifyRevision = false,
   ) {
     if (fileActionBusy.value || !items.length) return;
+
+    if (!isNativeData()) {
+      closeContext();
+      notify(`${action} is available in the production desktop application.`);
+
+      return;
+    }
 
     items = [...items];
 

@@ -60,6 +60,8 @@ function fixture(code, props, invoke = async () => []) {
 
       if (id === "@tauri-apps/api/core") return { isTauri: () => true, invoke };
 
+      if (id.endsWith("runtime")) return { isNativeData: () => true };
+
       if (id.endsWith("presentation")) return { translateUi: (value) => value };
 
       if (id.endsWith("useFocusTrap"))

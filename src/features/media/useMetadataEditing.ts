@@ -1,6 +1,7 @@
 import { ref } from "vue";
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 
+import { isNativeData } from "../../runtime";
 import type { MediaItem, MediaMetadataDraft } from "../../types/media";
 import type { LibraryModel, StageModel, Notify } from "./model";
 
@@ -37,7 +38,7 @@ export function useMetadataEditing(
   }
 
   async function saveMetadata(ids: string[], draft: MediaMetadataDraft) {
-    if (isTauri()) {
+    if (isNativeData()) {
       const nativeIds = ids.map(
         (id) =>
           distributionQueue.value.find((item) => item.id === id)?.nativeId,

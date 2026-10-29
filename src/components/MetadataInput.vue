@@ -26,6 +26,8 @@ const props = withDefaults(
     required?: boolean;
     options: MetadataValue[];
     label: string;
+    hideLabel?: boolean;
+    placeholder?: string;
     disabled?: boolean;
     allowCustom?: boolean;
     customCopyrights?: string[];
@@ -35,6 +37,7 @@ const props = withDefaults(
   {
     modelValue: () => [],
     textValue: "",
+    placeholder: undefined,
     customCopyrights: undefined,
   },
 );
@@ -120,7 +123,9 @@ function positionPopup() {
   const parent = target.getBoundingClientRect();
 
   const scroll = anchor
-    .closest(".distribution-scroll, .preset-manager-body")
+    .closest(
+      ".distribution-scroll, .preset-manager-body, .modal, .viewer-sidebar",
+    )
     ?.getBoundingClientRect();
 
   anchorVisible.value =
@@ -166,7 +171,7 @@ watch([popupOpen, query, () => props.modelValue.length], async () => {
 onMounted(() => {
   popupTarget.value =
     entry.value?.closest<HTMLElement>(
-      ".distribution-dialog, .preset-manager",
+      ".distribution-dialog, .preset-manager, .modal-backdrop, .viewer-backdrop",
     ) ?? null;
   document.addEventListener("scroll", schedulePosition, true);
   document.addEventListener("pointerdown", dismissAssignment, true);
@@ -349,7 +354,7 @@ function keydown(event: KeyboardEvent) {
 
 <template>
   <div class="metadata-input" :class="{ 'metadata-panel': panel }">
-    <div class="metadata-label">
+    <div v-if="!hideLabel" class="metadata-label">
       <label :for="`distribute-${label}`">{{ ui(label) }}</label>
       <small v-if="!textInput && modelValue.length"
         >{{ modelValue.length }} {{ ui("selected") }}</small
@@ -393,6 +398,7 @@ function keydown(event: KeyboardEvent) {
         :id="`distribute-${label}`"
         ref="input"
         v-model="query"
+        :aria-label="hideLabel ? ui(label) : undefined"
         :disabled="disabled"
         :required="textInput && required"
         role="combobox"
@@ -405,6 +411,7 @@ function keydown(event: KeyboardEvent) {
             : undefined
         "
         :placeholder="
+          placeholder ??
           ui(
             disabled
               ? 'Choose a copyright first'

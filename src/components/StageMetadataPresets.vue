@@ -7,8 +7,9 @@ import {
   ref,
   useId,
 } from "vue";
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 
+import { isNativeData } from "../runtime";
 import { translateUi as ui } from "../i18n/presentation";
 import AppIcon from "./AppIcon.vue";
 import MetadataPresetManager from "./MetadataPresetManager.vue";
@@ -161,7 +162,7 @@ async function load() {
   error.value = "";
 
   try {
-    presets.value = isTauri()
+    presets.value = isNativeData()
       ? await invoke<MetadataPreset[]>("get_metadata_presets")
       : [];
     loaded.value = true;
@@ -205,7 +206,7 @@ async function save(update: boolean, source = props.metadata) {
     const metadata = JSON.parse(JSON.stringify(source)) as PresetMetadata;
 
     if (
-      !isTauri() &&
+      !isNativeData() &&
       presets.value.some(
         (preset) =>
           preset.id !== id &&
@@ -214,7 +215,7 @@ async function save(update: boolean, source = props.metadata) {
     )
       throw new Error(ui("A preset with this name already exists."));
 
-    const preset = isTauri()
+    const preset = isNativeData()
       ? await invoke<MetadataPreset>("save_metadata_preset", {
           id,
           name: presetName,
@@ -248,7 +249,7 @@ async function remove() {
   notice.value = "";
 
   try {
-    if (isTauri())
+    if (isNativeData())
       await invoke("delete_metadata_preset", { id: selected.value });
 
     presets.value = presets.value.filter(
@@ -374,7 +375,7 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", dismiss));
       :error="error"
       :notice="notice"
       :catalog="catalog"
-      :demo="!isTauri()"
+      :demo="!isNativeData()"
       @close="closeManager"
       @save="saveManaged"
       @delete="deleteManaged"

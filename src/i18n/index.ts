@@ -7,6 +7,7 @@ import en from "./en.json";
 import ru from "./ru.json";
 import { resolveInterfaceLocale } from "./locale";
 import { applyTheme } from "../themes";
+import { isNativeData } from "../runtime";
 
 import type { AppLocale, ConfigSnapshot } from "../types/config";
 
@@ -51,7 +52,7 @@ watch(
 );
 
 export async function initializeInterface() {
-  if (!isTauri()) {
+  if (!isNativeData()) {
     await applyLocale("system");
 
     return;

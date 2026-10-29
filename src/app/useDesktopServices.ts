@@ -1,7 +1,8 @@
 import { onMounted, onBeforeUnmount, ref, watch } from "vue";
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
+import { isNativeData } from "../runtime";
 import { useCacheUsage } from "../composables/useCacheUsage";
 import { useStageScan } from "../composables/useStageScan";
 import { useUpdater } from "../composables/useUpdater";
@@ -36,6 +37,8 @@ export function useDesktopServices(
   });
 
   async function retryDiskSync() {
+    if (!isNativeData()) return;
+
     try {
       await invoke("retry_disk_sync");
     } catch {
@@ -82,7 +85,7 @@ export function useDesktopServices(
 
     void refreshAll();
 
-    if (isTauri()) void connectDiskSync();
+    if (isNativeData()) void connectDiskSync();
   });
 
   async function connectDiskSync() {

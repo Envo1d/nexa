@@ -1,6 +1,7 @@
 import { nextTick, ref, type Ref } from "vue";
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 
+import { isNativeData } from "../../runtime";
 import type { MediaItem } from "../../types/media";
 import type { LibraryModel, Notify } from "./model";
 
@@ -55,7 +56,7 @@ export function useTagEditor(
 
     if (tagError.value || !tagTarget.value) return;
 
-    if (isTauri()) {
+    if (isNativeData()) {
       tagSaving.value = true;
 
       try {

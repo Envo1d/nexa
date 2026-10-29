@@ -1,6 +1,7 @@
 import { computed, ref } from "vue";
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 
+import { isNativeData } from "../../runtime";
 import type { MediaItem } from "../../types/media";
 import type { LibraryModel, StageModel } from "./model";
 
@@ -41,14 +42,14 @@ export function useMediaViewer(library: LibraryModel, stage: StageModel) {
       viewerIndex.value = 0;
     }
 
-    viewerTotal.value = isTauri()
+    viewerTotal.value = isNativeData()
       ? Math.max(model.total.value, viewerItems.value.length)
       : viewerItems.value.length;
     viewerError.value = "";
     viewerPaging.value = false;
     viewerOpen.value = true;
 
-    if (!isTauri()) return;
+    if (!isNativeData()) return;
 
     viewerPaging.value = true;
 
@@ -118,7 +119,7 @@ export function useMediaViewer(library: LibraryModel, stage: StageModel) {
     viewerOpen.value = false;
     viewerItems.value = [];
 
-    if (isTauri()) {
+    if (isNativeData()) {
       if (viewerStage.value) void stage.refreshRedistribution();
       else void library.refresh();
     }
