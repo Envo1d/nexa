@@ -11,13 +11,9 @@ export function useTagEditor(
   tagInput: Readonly<Ref<HTMLInputElement | null>>,
 ) {
   const tagTarget = ref<MediaItem | null>(null);
-
   const draftTags = ref<string[]>([]);
-
   const newTag = ref("");
-
   const tagError = ref("");
-
   const tagSaving = ref(false);
 
   async function editTags(item: MediaItem) {
@@ -26,7 +22,9 @@ export function useTagEditor(
     newTag.value = "";
     tagError.value = "";
     closeContext();
+
     await nextTick();
+
     tagInput.value?.focus();
   }
 
@@ -65,6 +63,7 @@ export function useTagEditor(
           id: tagTarget.value.nativeId,
           tags: draftTags.value,
         });
+
         await library.refresh();
       } catch (cause) {
         tagError.value = `Could not save tags: ${String(cause)}`;

@@ -12,7 +12,6 @@ export function useFileActions(
   notify: Notify,
 ) {
   const fileActionBusy = ref(false);
-
   const deletionRequest = shallowRef<{
     items: MediaItem[];
     trigger: HTMLElement | null;
@@ -101,5 +100,10 @@ export function useFileActions(
     }
   }
 
-  return { fileActionBusy, deletionRequest, answerDeletion, stageFileAction };
+  return {
+    fileActionBusy,
+    deletionRequest,
+    answerDeletion,
+    stageFileAction,
+  };
 }

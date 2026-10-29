@@ -13,6 +13,7 @@ import {
 } from "./github-release.mjs";
 
 const sha = "a".repeat(40);
+
 const version = "2.8.0";
 
 function fixture({
@@ -55,7 +56,11 @@ function fixture({
     operations.push(args);
 
     if (args[1] === "create") {
-      currentRelease = { draft: true, assets: [], target_commitish: sha };
+      currentRelease = {
+        draft: true,
+        assets: [],
+        target_commitish: sha,
+      };
     }
 
     if (failUpload && args[1] === "upload") {
@@ -97,6 +102,7 @@ test("upload failure leaves the release unpublished and permits resuming its dra
   const context = fixture({ failUpload: true });
 
   await assert.rejects(publishRelease(context), /Upload failed/);
+
   assert.equal(
     context.operations.some(
       (operation) => Array.isArray(operation) && operation[1] === "edit",
@@ -106,10 +112,15 @@ test("upload failure leaves the release unpublished and permits resuming its dra
 
   const retry = fixture({
     reference: { object: { type: "commit", sha } },
-    release: { draft: true, assets: [], target_commitish: sha },
+    release: {
+      draft: true,
+      assets: [],
+      target_commitish: sha,
+    },
   });
 
   await publishRelease(retry);
+
   assert.deepEqual(
     retry.operations.map((args) => args[1]),
     ["upload", "edit"],
@@ -123,6 +134,7 @@ test("rejects a published version without any mutation", async () => {
   });
 
   await assert.rejects(publishRelease(context), /already published/);
+
   assert.deepEqual(context.operations, []);
 });
 
@@ -132,6 +144,7 @@ test("never moves an existing version tag from a different commit", async () => 
   });
 
   await assert.rejects(publishRelease(context), /another commit/);
+
   assert.deepEqual(context.operations, []);
 });
 
@@ -145,10 +158,15 @@ test("accepts an annotated version tag resolving to the built commit", async () 
 
 test("refuses unrelated tagless drafts and legacy NSIS drafts", async () => {
   const unrelated = fixture({
-    release: { draft: true, assets: [], target_commitish: "main" },
+    release: {
+      draft: true,
+      assets: [],
+      target_commitish: "main",
+    },
   });
 
   await assert.rejects(publishRelease(unrelated), /does not identify/);
+
   assert.deepEqual(unrelated.operations, []);
 
   for (const name of [
@@ -162,6 +180,7 @@ test("refuses unrelated tagless drafts and legacy NSIS drafts", async () => {
     });
 
     await assert.rejects(publishRelease(legacy), /legacy NSIS/);
+
     assert.deepEqual(legacy.operations, []);
   }
 });
@@ -180,6 +199,7 @@ test("prevents older queued builds from replacing a newer stable release", async
     const context = fixture({ latest: { tag_name } });
 
     await assert.rejects(publishRelease(context), /higher than latest stable/);
+
     assert.deepEqual(context.operations, []);
   }
 
@@ -213,7 +233,11 @@ test("version gate skips used versions without mutation and allows a fresh versi
     fixture({ latest: { tag_name: "v2.7.2" } }),
     fixture({
       reference: { object: { type: "commit", sha } },
-      release: { draft: true, assets: [], target_commitish: sha },
+      release: {
+        draft: true,
+        assets: [],
+        target_commitish: sha,
+      },
     }),
   ]) {
     assert.equal(await prepareRelease(context), true);
@@ -231,10 +255,12 @@ test("version gate fails on API errors, invalid identities and ambiguous latest 
     }),
     /HTTP 403/,
   );
+
   await assert.rejects(
     prepareRelease({ ...fixture(), version: "broken" }),
     /Stable release requires/,
   );
+
   await assert.rejects(
     prepareRelease(fixture({ latest: { tag_name: "unknown" } })),
     /Cannot compare/,
@@ -247,7 +273,9 @@ test("prepare CLI writes the job output for a new version or a published version
   try {
     for (const published of [false, true]) {
       const output = join(directory, `output-${published}`);
+
       const preload = `globalThis.fetch = async (url) => url.includes('/releases/tags/') && ${published} ? Response.json({ draft: false, assets: [] }) : new Response('', { status: 404 });`;
+
       const result = spawnSync(
         process.execPath,
         [
@@ -328,6 +356,7 @@ test("only HTTP 404 means optional absence; authorization and server failures ab
   });
 
   assert.equal(await api("releases/tags/v2.8.0", { optional: true }), null);
+
   await assert.rejects(
     api("git/refs", { method: "POST", body: {} }),
     /HTTP 404/,

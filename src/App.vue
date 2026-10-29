@@ -20,18 +20,15 @@ import ReplacementDialog from "./components/ReplacementDialog.vue";
 import ContentDuplicatesDialog from "./components/ContentDuplicatesDialog.vue";
 import DeleteFilesDialog from "./components/DeleteFilesDialog.vue";
 import { useWorkspace } from "./app/useWorkspace";
-import "./styles.css";
 
+import "./styles.css";
 import type { CollectionPosition } from "./types/media";
 
 const { t } = useI18n();
 
 const contentDuplicatesOpen = ref(false);
-
 const duplicateReplacementMain = ref<string>();
-
 const mainPosition = shallowRef<CollectionPosition>();
-
 const stagePosition = shallowRef<CollectionPosition>();
 
 const searchInput = useTemplateRef<HTMLInputElement>("searchInput");
@@ -125,7 +122,11 @@ const {
   startDrag,
   modalOpen,
   trapFocus,
-} = useWorkspace({ searchInput, tagInput, modalElement });
+} = useWorkspace({
+  searchInput,
+  tagInput,
+  modalElement,
+});
 </script>
 
 <template>

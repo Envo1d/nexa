@@ -3,7 +3,6 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 
 import { formatDate } from "../types/media";
-
 import MediaPreview from "./MediaPreview.vue";
 import AppIcon from "./AppIcon.vue";
 

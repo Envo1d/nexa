@@ -21,6 +21,7 @@ export function useModalFocus(
         document.activeElement instanceof HTMLElement
           ? document.activeElement
           : null;
+
       await nextTick();
 
       if (cancelled || !modalOpen.value) return;

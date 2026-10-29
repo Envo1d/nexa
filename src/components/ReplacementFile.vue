@@ -21,7 +21,6 @@ const props = withDefaults(
 const emit = defineEmits<{ open: [] }>();
 
 const element = ref<HTMLElement | null>(null);
-
 const visible = ref(false);
 
 const previewEnabled = computed(() => props.showPreviews && visible.value);

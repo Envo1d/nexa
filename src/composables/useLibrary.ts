@@ -4,7 +4,6 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 
 import { useMediaSelection } from "./useMediaSelection";
 import { createMockMedia } from "../data/mockMedia";
-
 import {
   chooseMetadataSuggestion,
   metadataSuggestions,
@@ -20,19 +19,16 @@ export function useLibrary() {
   const native = isTauri();
 
   const media = ref<MediaItem[]>(native ? [] : createMockMedia());
-
   const total = ref(0);
-
   const loading = ref(false);
-
   const error = ref("");
-
-  const nativeCounts = ref({ all: 0, video: 0, image: 0 });
-
+  const nativeCounts = ref({
+    all: 0,
+    video: 0,
+    image: 0,
+  });
   const nativeTags = ref<{ name: string; count: number }[]>([]);
-
   const characterCatalog = ref<{ name: string; copyright: string }[]>([]);
-
   const nativeSuggestions = ref<{ name: string; category: string }[]>([]);
 
   const hasMore = computed(() => native && media.value.length < total.value);
@@ -155,17 +151,11 @@ export function useLibrary() {
   });
 
   const scope = ref<"gallery" | "favorites">("gallery");
-
   const search = ref("");
-
   const appliedSearch = ref("");
-
   const kind = ref<"all" | MediaKind>("all");
-
   const sortMode = ref<"newest" | "older" | "name-asc" | "name-desc">("newest");
-
   const taggedOnly = ref(false);
-
   const hideUntagged = ref(false);
 
   const scopedMedia = computed(() =>
@@ -347,6 +337,7 @@ export function useLibrary() {
         id: item.nativeId,
         favorite: !item.favorite,
       });
+
       await refresh();
     } catch (cause) {
       error.value = `Could not save favorite: ${String(cause)}`;

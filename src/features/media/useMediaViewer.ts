@@ -6,17 +6,11 @@ import type { LibraryModel, StageModel } from "./model";
 
 export function useMediaViewer(library: LibraryModel, stage: StageModel) {
   const viewerItems = ref<MediaItem[]>([]);
-
   const viewerIndex = ref(0);
-
   const viewerStage = ref(false);
-
   const viewerOpen = ref(false);
-
   const viewerPaging = ref(false);
-
   const viewerTotal = ref(0);
-
   const viewerError = ref("");
 
   let generation = 0;
@@ -29,6 +23,7 @@ export function useMediaViewer(library: LibraryModel, stage: StageModel) {
 
   async function openViewer(item: MediaItem, fromStage: boolean) {
     const request = ++generation;
+
     viewerStage.value = fromStage;
 
     const model = fromStage ? stage : library;

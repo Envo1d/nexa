@@ -34,18 +34,32 @@ const catalog = ref<TaxonomyCatalog>({
   tags: [],
   characters: [],
 });
-
 const category = ref<TaxonomyCategory>("copyright");
 
 const categories = [
-  { id: "copyright", label: "Copyrights", key: "copyrights" },
-  { id: "artist", label: "Artists", key: "artists" },
-  { id: "character", label: "Characters", key: "characters" },
-  { id: "tag", label: "Tags", key: "tags" },
+  {
+    id: "copyright",
+    label: "Copyrights",
+    key: "copyrights",
+  },
+  {
+    id: "artist",
+    label: "Artists",
+    key: "artists",
+  },
+  {
+    id: "character",
+    label: "Characters",
+    key: "characters",
+  },
+  {
+    id: "tag",
+    label: "Tags",
+    key: "tags",
+  },
 ] as const;
 
 const repeatedOnly = ref(false);
-
 const linkedCount = ref<"all" | 0 | 1>("all");
 
 const linkedCountOptions = [
@@ -55,7 +69,6 @@ const linkedCountOptions = [
 ] as const;
 
 const search = ref("");
-
 const searchInput = ref<HTMLInputElement | null>(null);
 
 function clearSearch() {
@@ -64,17 +77,12 @@ function clearSearch() {
 }
 
 const loading = ref(false);
-
 const busy = ref(false);
-
 const error = ref("");
-
 const pending = ref<{ entry: TaxonomyEntry; action: "edit" | "delete" } | null>(
   null,
 );
-
 const name = ref("");
-
 const copyright = ref("");
 
 const data = computed(() => (native ? catalog.value : props.demoCatalog));

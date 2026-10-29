@@ -22,11 +22,8 @@ const props = defineProps<{
 const id = useId();
 
 const root = ref<HTMLElement | null>(null);
-
 const trigger = ref<HTMLButtonElement | null>(null);
-
 const open = ref(false);
-
 const active = ref(0);
 
 const label = computed(
@@ -40,6 +37,7 @@ async function show(
 
   active.value = Math.max(0, index);
   open.value = true;
+
   await nextTick();
 
   if (!open.value || props.disabled) return;
@@ -74,24 +72,29 @@ function onKey(event: KeyboardEvent) {
           props.options.length) %
         props.options.length;
       break;
+
     case "Home":
     case "End":
       event.preventDefault();
       active.value = event.key === "Home" ? 0 : props.options.length - 1;
       break;
+
     case "Enter":
     case " ":
       event.preventDefault();
       choose(active.value);
       break;
+
     case "Escape":
       event.preventDefault();
       event.stopPropagation();
       close();
       break;
+
     case "Tab":
       open.value = false;
       break;
+
     default: {
       const index = props.options.findIndex((option) =>
         option.label.toLowerCase().startsWith(event.key.toLowerCase()),

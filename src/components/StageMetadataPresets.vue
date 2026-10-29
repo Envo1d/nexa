@@ -34,33 +34,21 @@ const emit = defineEmits<{
 const id = useId();
 
 const root = ref<HTMLElement | null>(null);
-
 const trigger = ref<HTMLButtonElement | null>(null);
-
 const search = ref<HTMLInputElement | null>(null);
-
 const open = ref(false);
-
 const managing = ref(false);
-
 const creating = ref(false);
-
 const query = ref("");
 
 let returnFocus: HTMLElement | null = null;
 
 const presets = ref<MetadataPreset[]>([]);
-
 const selected = ref("");
-
 const name = ref("");
-
 const busy = ref(false);
-
 const loaded = ref(false);
-
 const error = ref("");
-
 const notice = ref("");
 
 const blocked = computed(() => props.disabled || busy.value || !loaded.value);
@@ -82,7 +70,9 @@ async function toggle() {
 
   if (open.value) {
     query.value = "";
+
     await nextTick();
+
     search.value?.focus();
   }
 }
@@ -133,6 +123,7 @@ async function closeManager() {
 
   managing.value = false;
   emit("managing", false);
+
   await nextTick();
 
   if (returnFocus?.isConnected && !returnFocus.closest("[inert]"))
@@ -149,6 +140,7 @@ async function saveManaged(
 
   selected.value = id ?? "";
   name.value = presetName;
+
   await save(id !== null, metadata);
 
   if (!error.value) await closeManager();
@@ -158,6 +150,7 @@ async function deleteManaged(id: string) {
   if (blocked.value) return;
 
   selected.value = id;
+
   await remove();
 }
 
@@ -209,7 +202,6 @@ async function save(update: boolean, source = props.metadata) {
       throw new Error(ui("Enter a preset name and an artist."));
 
     const id = update ? selected.value : null;
-
     const metadata = JSON.parse(JSON.stringify(source)) as PresetMetadata;
 
     if (
@@ -228,7 +220,11 @@ async function save(update: boolean, source = props.metadata) {
           name: presetName,
           metadata,
         })
-      : { id: id ?? crypto.randomUUID(), name: presetName, metadata };
+      : {
+          id: id ?? crypto.randomUUID(),
+          name: presetName,
+          metadata,
+        };
 
     presets.value = [
       ...presets.value.filter((entry) => entry.id !== preset.id),

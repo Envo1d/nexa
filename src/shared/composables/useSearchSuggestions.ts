@@ -8,7 +8,6 @@ export function useSearchSuggestions(
   searchInput: Readonly<Ref<HTMLInputElement | null>>,
 ) {
   const searchFocused = ref(false);
-
   const suggestionIndex = ref(-1);
 
   watch(search, () => {

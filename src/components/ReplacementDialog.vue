@@ -72,17 +72,11 @@ function choice(file: NativeFile): Choice {
 }
 
 const dialog = ref<HTMLElement | null>(null);
-
 const searchInput = ref<HTMLInputElement | null>(null);
-
 const source = ref<Choice | null>(null);
-
 const selected = ref<Choice | null>(null);
-
 const files = ref<Choice[]>([]);
-
 const query = ref("");
-
 const appliedQuery = ref("");
 
 const suggestions = computed(() =>
@@ -90,27 +84,18 @@ const suggestions = computed(() =>
 );
 
 const cursor = ref<string | null>(null);
-
 const syncWithDisk = ref(false);
-
 const hasAnnotations = ref(false);
-
 const loading = ref(false);
-
 const saving = ref(false);
-
 const error = ref("");
-
 const needsReload = ref(false);
-
 const acknowledged = ref(false);
 
 const busy = computed(() => loading.value || saving.value || props.opening);
 
 let version = 0;
-
 let disposed = false;
-
 let trigger: HTMLElement | null = null;
 
 const { trapFocus } = useFocusTrap(dialog);
@@ -201,6 +186,7 @@ async function reload() {
     hasAnnotations.value = result.hasAnnotations;
     needsReload.value = false;
     selected.value = result.preferred ? choice(result.preferred) : null;
+
     await load();
   } catch (cause) {
     if (!disposed && request === version) {
@@ -256,6 +242,7 @@ async function save() {
         syncWithDisk: syncWithDisk.value,
       },
     });
+
     emit("replaced");
     emit("close");
   } catch (cause) {
@@ -282,7 +269,9 @@ onMounted(async () => {
       ? document.activeElement
       : null;
   dialog.value?.querySelector<HTMLButtonElement>("button")?.focus();
+
   await reload();
+
   await nextTick();
 
   if (!disposed) searchInput.value?.focus();
@@ -291,6 +280,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   disposed = true;
   ++version;
+
   if (trigger?.isConnected) trigger.focus();
 });
 </script>

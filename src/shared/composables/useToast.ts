@@ -28,9 +28,7 @@ export function useToast() {
   >();
 
   let sequence = 0;
-
   let paused = false;
-
   let disposed = false;
 
   function dismissToast(id: string) {
@@ -54,7 +52,11 @@ export function useToast() {
     const id = options.id ?? `toast-${++sequence}`;
 
     dismissToast(id);
-    toasts.value.push({ ...options, id, message });
+    toasts.value.push({
+      ...options,
+      id,
+      message,
+    });
 
     if (toasts.value.length > 5) dismissToast(toasts.value[0]!.id);
 
@@ -98,5 +100,11 @@ export function useToast() {
     timers.clear();
   });
 
-  return { toasts, notify, dismissToast, pauseToasts, runToastAction };
+  return {
+    toasts,
+    notify,
+    dismissToast,
+    pauseToasts,
+    runToastAction,
+  };
 }

@@ -62,7 +62,6 @@ export function useDemoTaxonomy(
 
     for (const category of ["copyright", "artist", "tag"] as const) {
       const key = categoryKey[category];
-
       const items = [...library.value, ...stage.value];
 
       // Read refs to refresh counts even if the dictionary itself has no new entries.
@@ -153,7 +152,13 @@ export function useDemoTaxonomy(
         item.characterCopyrights = assignments.flatMap((entry) =>
           entry.name === old && entry.copyright === copyright
             ? next
-              ? [{ ...entry, name: next, copyright: targetCopyright }]
+              ? [
+                  {
+                    ...entry,
+                    name: next,
+                    copyright: targetCopyright,
+                  },
+                ]
               : []
             : [entry],
         );

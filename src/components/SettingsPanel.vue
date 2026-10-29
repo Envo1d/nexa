@@ -96,23 +96,15 @@ const themeOptions = computed(() =>
 );
 
 const paths = ref<ConfigSnapshot["paths"] | null>(null);
-
 const loading = ref(native);
-
 const ready = ref(!native);
-
 const busy = ref(false);
-
 const error = ref("");
-
 const saved = ref(false);
 
 const legacyFound = ref(false);
-
 const importing = ref(false);
-
 const importMessage = ref("");
-
 const importError = ref("");
 
 async function checkLegacyDatabase() {
@@ -143,6 +135,7 @@ async function importLegacyDatabase() {
   } catch (cause) {
     importMessage.value = "";
     importError.value = t("importError", { error: ui(String(cause)) });
+
     await checkLegacyDatabase();
   } finally {
     importing.value = false;
@@ -215,7 +208,9 @@ async function browse(section: string) {
 async function saveChanges() {
   if (!native) {
     applyTheme(draft.value.theme);
+
     await applyLocale(draft.value.locale);
+
     saved.value = true;
 
     return;
@@ -227,8 +222,11 @@ async function saveChanges() {
 
   try {
     await invoke("save_config", { settings: { ...draft.value } });
+
     applyTheme(draft.value.theme);
+
     await applyLocale(draft.value.locale);
+
     saved.value = true;
     emit("saved");
   } catch (cause) {
@@ -253,7 +251,6 @@ async function openLogs() {
 }
 
 const scrollArea = ref<HTMLElement | null>(null);
-
 const activeSection = ref("library");
 
 const sections = computed(() => [
@@ -354,6 +351,7 @@ watch(
     if (!request || isLoading) return;
 
     await nextTick();
+
     goToSection(request.id);
     scrollArea.value
       ?.querySelector<HTMLElement>(`#settings-${request.id} button`)

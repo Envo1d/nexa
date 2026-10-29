@@ -31,9 +31,7 @@ export function useStage() {
   );
 
   const search = ref("");
-
   const appliedSearch = ref("");
-
   const sortMode = ref<"newest" | "older" | "name-asc" | "name-desc">("newest");
 
   const queryKey = computed(() =>
@@ -41,9 +39,7 @@ export function useStage() {
   );
 
   const total = ref(0);
-
   const loading = ref(false);
-
   const error = ref("");
 
   const hasMore = computed(() => isTauri() && media.value.length < total.value);

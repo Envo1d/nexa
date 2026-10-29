@@ -37,19 +37,12 @@ const dialog = ref<HTMLElement | null>(null);
 const { trapFocus } = useFocusTrap(dialog);
 
 const selected = ref<string | null>(null);
-
 const name = ref("");
-
 const artist = ref("");
-
 const copyrights = ref<MetadataValue[]>([]);
-
 const characters = ref<MetadataValue[]>([]);
-
 const tags = ref<MetadataValue[]>([]);
-
 const query = ref("");
-
 const confirmingDelete = ref(false);
 
 const visiblePresets = computed(() =>
@@ -169,6 +162,7 @@ onMounted(async () => {
   else createFromCurrent();
 
   await nextTick();
+
   dialog.value?.focus();
 });
 </script>

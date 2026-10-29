@@ -55,26 +55,16 @@ const artists = ["Mira", "Sora", "Aster", "Yuki"];
 export function createMockMedia(): MediaItem[] {
   return Array.from({ length: 480 }, (_, index) => {
     const scene = index % scenes.length;
-
     const source = scenes[scene]!;
-
     const kind = [1, 4, 7, 10, 11].includes(scene) ? "video" : "image";
-
     const extension = kind === "video" ? "MP4" : scene === 8 ? "PNG" : "JPG";
-
     const groupIndex =
       (index + Math.floor(index / scenes.length)) % characterGroups.length;
-
     const characters = [...characterGroups[groupIndex]!];
-
     const artist = `${artists[Math.floor(index / scenes.length) % artists.length]} ${String(index + 1).padStart(3, "0")}`;
-
     const videoTitle = source.title ?? source.name.replace(/_/g, " ");
-
     const name = `${characters.join(" х ")}${kind === "video" ? ` - ${videoTitle}` : ""} [${artist}]`;
-
     const filename = `${name}.${extension.toLowerCase()}`;
-
     const modifiedAt =
       new Date(2026, 9, 7, 19, 45).getTime() - index * 5_760_000;
 

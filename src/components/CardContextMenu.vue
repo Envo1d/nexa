@@ -24,9 +24,7 @@ const props = defineProps<{
 const emit = defineEmits<{ close: []; action: [action: string] }>();
 
 const menu = ref<HTMLElement | null>(null);
-
 const left = ref(props.x);
-
 const top = ref(props.y);
 
 let trigger: HTMLElement | null = null;

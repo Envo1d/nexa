@@ -28,19 +28,12 @@ const dialog = ref<HTMLElement | null>(null);
 const { trapFocus } = useFocusTrap(dialog);
 
 const files = ref<MediaItem[]>([]);
-
 const originalIds = ref<string[]>([]);
-
 const key = ref("");
-
 const loading = ref(false);
-
 const saving = ref(false);
-
 const error = ref("");
-
 const dragging = ref<string | null>(null);
-
 const dropTarget = ref<string | null>(null);
 
 const busy = computed(() => loading.value || saving.value);
@@ -50,7 +43,6 @@ const changed = computed(() =>
 );
 
 let trigger: HTMLElement | null = null;
-
 let disposed = false;
 
 async function load() {
@@ -104,6 +96,7 @@ async function move(id: string, destination: number) {
   const [file] = files.value.splice(source, 1);
 
   files.value.splice(destination, 0, file!);
+
   await nextTick();
 
   const row = dialog.value?.querySelector<HTMLElement>(
@@ -175,6 +168,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   disposed = true;
+
   if (trigger?.isConnected) trigger.focus();
 });
 </script>

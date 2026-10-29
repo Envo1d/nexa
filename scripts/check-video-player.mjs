@@ -7,7 +7,10 @@ import { nextTick } from "vue";
 // Run real script-setup operations against DOM/media contract doubles.
 // This does not launch a browser or claim native decoding/rendering validation.
 const metricsCode = transpileModule(
-  await readFile(new URL("../src/features/media/playbackMetrics.ts", import.meta.url), "utf8"),
+  await readFile(
+    new URL("../src/features/media/playbackMetrics.ts", import.meta.url),
+    "utf8",
+  ),
   { compilerOptions: { module: ModuleKind.ESNext } },
 ).outputText;
 
@@ -16,21 +19,72 @@ const metricsUrl = `data:text/javascript;base64,${Buffer.from(metricsCode).toStr
 const { frameRates, seekPosition, bufferedSeconds } = await import(metricsUrl);
 
 let fullscreenCode = transpileModule(
-  await readFile(new URL("../src/features/media/usePlayerFullscreen.ts", import.meta.url), "utf8"),
+  await readFile(
+    new URL("../src/features/media/usePlayerFullscreen.ts", import.meta.url),
+    "utf8",
+  ),
   { compilerOptions: { module: ModuleKind.ESNext } },
 ).outputText;
 
-fullscreenCode = fullscreenCode.replace('from "vue"', `from ${JSON.stringify(import.meta.resolve("vue"))}`);
-fullscreenCode = fullscreenCode.replace('import { invoke, isTauri } from "@tauri-apps/api/core";', 'const isTauri = () => globalThis.__nexaFullscreenTest?.native ?? false; const invoke = (...args) => globalThis.__nexaFullscreenTest.invoke(...args);');
+fullscreenCode = fullscreenCode.replace(
+  'from "vue"',
+  `from ${JSON.stringify(import.meta.resolve("vue"))}`,
+);
+fullscreenCode = fullscreenCode.replace(
+  'import { invoke, isTauri } from "@tauri-apps/api/core";',
+  "const isTauri = () => globalThis.__nexaFullscreenTest?.native ?? false; const invoke = (...args) => globalThis.__nexaFullscreenTest.invoke(...args);",
+);
 
 const fullscreenUrl = `data:text/javascript;base64,${Buffer.from(fullscreenCode).toString("base64")}`;
 
 const { usePlayerFullscreen } = await import(fullscreenUrl);
 
 test("submitted frame rate and callback cadence remain distinct at 120/60 Hz", () => {
-  assert.deepEqual(frameRates({ time: 1000, frames: 30, callbacks: 20 }, { time: 2000, frames: 150, callbacks: 80 }), { submitted: 120, callbacks: 60 });
-  assert.equal(frameRates({ time: 1000, frames: 30, callbacks: 20 }, { time: 1000, frames: 150, callbacks: 80 }), null);
-  assert.equal(frameRates({ time: 1000, frames: 30, callbacks: 20 }, { time: 2000, frames: 1, callbacks: 21 }), null);
+  assert.deepEqual(
+    frameRates(
+      {
+        time: 1000,
+        frames: 30,
+        callbacks: 20,
+      },
+      {
+        time: 2000,
+        frames: 150,
+        callbacks: 80,
+      },
+    ),
+    { submitted: 120, callbacks: 60 },
+  );
+  assert.equal(
+    frameRates(
+      {
+        time: 1000,
+        frames: 30,
+        callbacks: 20,
+      },
+      {
+        time: 1000,
+        frames: 150,
+        callbacks: 80,
+      },
+    ),
+    null,
+  );
+  assert.equal(
+    frameRates(
+      {
+        time: 1000,
+        frames: 30,
+        callbacks: 20,
+      },
+      {
+        time: 2000,
+        frames: 1,
+        callbacks: 21,
+      },
+    ),
+    null,
+  );
 });
 
 test("seeking is bounded and buffering counts only the current contiguous range", () => {
@@ -38,8 +92,28 @@ test("seeking is bounded and buffering counts only the current contiguous range"
   assert.equal(seekPosition(105, 100), 100);
   assert.equal(seekPosition(5, Infinity), null);
   assert.equal(seekPosition(NaN, 100), null);
-  assert.equal(bufferedSeconds({ length: 2, start: (i) => [0, 20][i], end: (i) => [10, 30][i] }, 5), 5);
-  assert.equal(bufferedSeconds({ length: 2, start: (i) => [0, 20][i], end: (i) => [10, 30][i] }, 15), 0);
+  assert.equal(
+    bufferedSeconds(
+      {
+        length: 2,
+        start: (i) => [0, 20][i],
+        end: (i) => [10, 30][i],
+      },
+      5,
+    ),
+    5,
+  );
+  assert.equal(
+    bufferedSeconds(
+      {
+        length: 2,
+        start: (i) => [0, 20][i],
+        end: (i) => [10, 30][i],
+      },
+      15,
+    ),
+    0,
+  );
 });
 
 let fixtureNumber = 0;
@@ -48,60 +122,124 @@ async function playerFixture() {
   globalThis.__nexaFullscreenTest = { native: false };
 
   const hooks = { mounted: [], unmounted: [] };
-
   const events = new Map();
 
   const documentDouble = {
-    fullscreenElement: null, hidden: false,
+    fullscreenElement: null,
+    hidden: false,
     addEventListener: (type, handler) => events.set(type, handler),
     removeEventListener: (type) => events.delete(type),
-    exitFullscreen: async () => { documentDouble.fullscreenElement = null; events.get("fullscreenchange")?.(); },
+    exitFullscreen: async () => {
+      documentDouble.fullscreenElement = null;
+      events.get("fullscreenchange")?.();
+    },
   };
 
   globalThis.document = documentDouble;
   globalThis.__nexaVideoPlayerTest = hooks;
 
-  const source = await readFile(new URL("../src/components/NexaVideoPlayer.vue", import.meta.url), "utf8");
+  const source = await readFile(
+    new URL("../src/components/NexaVideoPlayer.vue", import.meta.url),
+    "utf8",
+  );
 
   const setup = source.match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1];
+  let code = transpileModule(
+    setup +
+      "\nexport { player, video, diagnostics, duration, position, playing, togglePlayback, seek, toggleFullscreen, fullscreen, keyboard, stop, feedback, timeUpdate, sync, controlsVisible, toolbarVisible, setVolume, toggleMute, setSpeed, speed, repeat, toggleRepeat };",
+    { compilerOptions: { module: ModuleKind.ESNext } },
+  ).outputText;
 
-  let code = transpileModule(setup + "\nexport { player, video, diagnostics, duration, position, playing, togglePlayback, seek, toggleFullscreen, fullscreen, keyboard, stop, feedback, timeUpdate, sync, controlsVisible, toolbarVisible, setVolume, toggleMute, setSpeed, speed, repeat, toggleRepeat };", { compilerOptions: { module: ModuleKind.ESNext } }).outputText;
-
-  code = code.replace(/import \{[\s\S]*?\} from "vue";/, `import { computed, nextTick, ref, watch } from ${JSON.stringify(import.meta.resolve("vue"))}; const onMounted = (hook) => globalThis.__nexaVideoPlayerTest.mounted.push(hook); const onBeforeUnmount = (hook) => globalThis.__nexaVideoPlayerTest.unmounted.push(hook);`);
-  code = code.replace(/import \{ useI18n \} from "vue-i18n";/, 'const useI18n = () => ({ t: (key) => key });');
+  code = code.replace(
+    /import \{[\s\S]*?\} from "vue";/,
+    `import { computed, nextTick, ref, watch } from ${JSON.stringify(import.meta.resolve("vue"))}; const onMounted = (hook) => globalThis.__nexaVideoPlayerTest.mounted.push(hook); const onBeforeUnmount = (hook) => globalThis.__nexaVideoPlayerTest.unmounted.push(hook);`,
+  );
+  code = code.replace(
+    /import \{ useI18n \} from "vue-i18n";/,
+    "const useI18n = () => ({ t: (key) => key });",
+  );
   code = code.replace(/import AppIcon from .*?;\n/, "");
   code = code.replace(/import AppSelect from .*?;\n/, "");
-  code = code.replace(/import \{ useFocusTrap \} from .*?;/, 'const useFocusTrap = () => ({ trapFocus: () => {} });');
-  code = code.replace(/from "\.\.\/features\/media\/playbackMetrics"/, `from ${JSON.stringify(metricsUrl)}`);
-  code = code.replace(/from "\.\.\/features\/media\/usePlayerFullscreen"/, `from ${JSON.stringify(fullscreenUrl)}`);
-  code = code.replace(/import \{ formatDuration \} from .*?;/, 'const formatDuration = (value) => String(value);');
-  code = 'const defineProps = () => ({ source: "asset://test", filename: "test.mp4" }); const defineEmits = () => () => {}; const defineExpose = () => {};\n' + code + `\n// fixture ${fixtureNumber++}`;
+  code = code.replace(
+    /import \{ useFocusTrap \} from .*?;/,
+    "const useFocusTrap = () => ({ trapFocus: () => {} });",
+  );
+  code = code.replace(
+    /from "\.\.\/features\/media\/playbackMetrics"/,
+    `from ${JSON.stringify(metricsUrl)}`,
+  );
+  code = code.replace(
+    /from "\.\.\/features\/media\/usePlayerFullscreen"/,
+    `from ${JSON.stringify(fullscreenUrl)}`,
+  );
+  code = code.replace(
+    /import \{ formatDuration \} from .*?;/,
+    "const formatDuration = (value) => String(value);",
+  );
+  code =
+    'const defineProps = () => ({ source: "asset://test", filename: "test.mp4" }); const defineEmits = () => () => {}; const defineExpose = () => {};\n' +
+    code +
+    `\n// fixture ${fixtureNumber++}`;
 
-  const module = await import(`data:text/javascript;base64,${Buffer.from(code).toString("base64")}`);
+  const module = await import(
+    `data:text/javascript;base64,${Buffer.from(code).toString("base64")}`
+  );
 
   let loads = 0;
-
   let cancelled = 0;
 
   const media = {
-    paused: true, ended: false, duration: 100, currentTime: 10,
-    volume: 1, muted: false, playbackRate: 1,
-    buffered: { length: 0, start: () => 0, end: () => 0 },
+    paused: true,
+    ended: false,
+    duration: 100,
+    currentTime: 10,
+    volume: 1,
+    muted: false,
+    playbackRate: 1,
+    buffered: {
+      length: 0,
+      start: () => 0,
+      end: () => 0,
+    },
     getAttribute: () => "asset://test",
-    play: async function () { this.paused = false; },
-    pause: function () { this.paused = true; },
-    load: () => { loads++; }, removeAttribute: () => {},
+    play: async function () {
+      this.paused = false;
+    },
+    pause: function () {
+      this.paused = true;
+    },
+    load: () => {
+      loads++;
+    },
+    removeAttribute: () => {},
     requestVideoFrameCallback: () => 7,
-    cancelVideoFrameCallback: () => { cancelled++; },
-    getVideoPlaybackQuality: () => ({ droppedVideoFrames: 2, totalVideoFrames: 120 }),
+    cancelVideoFrameCallback: () => {
+      cancelled++;
+    },
+    getVideoPlaybackQuality: () => ({
+      droppedVideoFrames: 2,
+      totalVideoFrames: 120,
+    }),
   };
 
   module.video.value = media;
-  module.player.value = { focus: () => {}, requestFullscreen: async function () { documentDouble.fullscreenElement = this; events.get("fullscreenchange")?.(); } };
+  module.player.value = {
+    focus: () => {},
+    requestFullscreen: async function () {
+      documentDouble.fullscreenElement = this;
+      events.get("fullscreenchange")?.();
+    },
+  };
 
   for (const mounted of hooks.mounted) mounted();
 
-  return { module, documentDouble, hooks, loads: () => loads, cancelled: () => cancelled };
+  return {
+    module,
+    documentDouble,
+    hooks,
+    loads: () => loads,
+    cancelled: () => cancelled,
+  };
 }
 
 test("fullscreen keeps the same playing media without source reload", async () => {
@@ -111,15 +249,20 @@ test("fullscreen keeps the same playing media without source reload", async () =
 
   try {
     await module.togglePlayback();
+
     module.video.value.currentTime = 42;
     const media = module.video.value;
+
     await module.toggleFullscreen();
+
     assert.equal(module.fullscreen.value, true);
     assert.equal(module.video.value, media);
     assert.equal(module.video.value.currentTime, 42);
     assert.equal(module.video.value.paused, false);
     assert.equal(fixture.loads(), 0);
+
     await module.toggleFullscreen();
+
     assert.equal(module.fullscreen.value, false);
     assert.equal(fixture.loads(), 0);
   } finally {
@@ -136,13 +279,24 @@ test("keyboard seek is owned by the player and unmount cancels diagnostics/unloa
     module.duration.value = 100;
     module.position.value = 10;
 
-    const event = { key: "ArrowRight", target: { closest: () => null }, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; }, stopPropagation() { this.stopped = true; } };
+    const event = {
+      key: "ArrowRight",
+      target: { closest: () => null },
+      defaultPrevented: false,
+      preventDefault() {
+        this.defaultPrevented = true;
+      },
+      stopPropagation() {
+        this.stopped = true;
+      },
+    };
 
     module.keyboard(event);
     assert.equal(module.video.value.currentTime, 15);
     assert.equal(event.defaultPrevented, true);
     assert.equal(event.stopped, true);
     module.diagnostics.value = true;
+
     await nextTick();
   } finally {
     for (const unmount of fixture.hooks.unmounted) unmount();
@@ -156,15 +310,25 @@ test("keyboard seek is owned by the player and unmount cancels diagnostics/unloa
 function nativeFixture(invoke) {
   const documentDouble = {
     fullscreenElement: null,
-    exitFullscreen: async () => { documentDouble.fullscreenElement = null; },
+    exitFullscreen: async () => {
+      documentDouble.fullscreenElement = null;
+    },
   };
 
-  const element = { requestFullscreen: async () => { documentDouble.fullscreenElement = element; } };
+  const element = {
+    requestFullscreen: async () => {
+      documentDouble.fullscreenElement = element;
+    },
+  };
 
   globalThis.document = documentDouble;
   globalThis.__nexaFullscreenTest = { native: true, invoke };
 
-  return { documentDouble, element, player: { value: element } };
+  return {
+    documentDouble,
+    element,
+    player: { value: element },
+  };
 }
 
 test("native fullscreen enters the DOM top layer and restores its session-owned window", async () => {
@@ -178,44 +342,78 @@ test("native fullscreen enters the DOM top layer and restores its session-owned 
 
   let changed = 0;
 
-  const state = usePlayerFullscreen(fixture.player, () => { changed++; }, () => assert.fail("Unexpected failure"));
+  const state = usePlayerFullscreen(
+    fixture.player,
+    () => {
+      changed++;
+    },
+    () => assert.fail("Unexpected failure"),
+  );
+
   await state.toggleFullscreen();
+
   assert.equal(state.fullscreen.value, true);
   assert.equal(fixture.documentDouble.fullscreenElement, fixture.element);
+
   await state.toggleFullscreen();
+
   assert.equal(state.fullscreen.value, false);
   assert.equal(fixture.documentDouble.fullscreenElement, null);
   assert.equal(changed, 2);
-  assert.deepEqual(calls.map((call) => call.enabled), [true, false]);
+  assert.deepEqual(
+    calls.map((call) => call.enabled),
+    [true, false],
+  );
   assert.equal(calls[0].session, calls[1].session);
   assert.ok(calls[0].session.length);
+
   await state.disposeFullscreen();
 });
 
 test("late native entry after disposal restores its own window lease", async () => {
   const calls = [];
-
   let resolve;
 
   const fixture = nativeFixture(async (_command, args) => {
     calls.push(args);
-    if (args.enabled) await new Promise((done) => { resolve = done; });
+
+    if (args.enabled)
+      await new Promise((done) => {
+        resolve = done;
+      });
+
     return args.enabled;
   });
 
-  fixture.element.requestFullscreen = () => assert.fail("Disposed player must not enter DOM fullscreen");
+  fixture.element.requestFullscreen = () =>
+    assert.fail("Disposed player must not enter DOM fullscreen");
 
   let changed = 0;
 
-  const state = usePlayerFullscreen(fixture.player, () => { changed++; }, () => assert.fail("Unexpected failure"));
+  const state = usePlayerFullscreen(
+    fixture.player,
+    () => {
+      changed++;
+    },
+    () => assert.fail("Unexpected failure"),
+  );
 
   const pending = state.toggleFullscreen();
+
   await state.toggleFullscreen();
+
   assert.equal(calls.length, 1);
+
   await state.disposeFullscreen();
+
   resolve();
+
   await pending;
-  assert.deepEqual(calls.map((call) => call.enabled), [true, false]);
+
+  assert.deepEqual(
+    calls.map((call) => call.enabled),
+    [true, false],
+  );
   assert.equal(calls[0].session, calls[1].session);
   assert.equal(state.fullscreen.value, false);
   assert.equal(state.fullscreenBusy.value, false);
@@ -224,25 +422,38 @@ test("late native entry after disposal restores its own window lease", async () 
 
 test("native failures preserve the previous UI mode and allow restoration retry", async () => {
   let reject = true;
-
   let failures = 0;
 
   const fixture = nativeFixture(async () => {
     if (reject) throw new Error("Window operation failed");
   });
 
-  const state = usePlayerFullscreen(fixture.player, () => {}, () => { failures++; });
+  const state = usePlayerFullscreen(
+    fixture.player,
+    () => {},
+    () => {
+      failures++;
+    },
+  );
+
   await state.toggleFullscreen();
+
   assert.equal(state.fullscreen.value, false);
   assert.equal(state.fullscreenBusy.value, false);
   reject = false;
+
   await state.toggleFullscreen();
+
   assert.equal(state.fullscreen.value, true);
   reject = true;
+
   await state.toggleFullscreen();
+
   assert.equal(state.fullscreen.value, true);
   reject = false;
+
   await state.disposeFullscreen();
+
   assert.equal(state.fullscreen.value, false);
   assert.equal(failures, 2);
 });
@@ -250,63 +461,104 @@ test("native failures preserve the previous UI mode and allow restoration retry"
 test("browser-controlled DOM exit restores native fullscreen without a second toggle", async () => {
   const calls = [];
 
-  const fixture = nativeFixture(async (_command, args) => { calls.push(args.enabled); });
+  const fixture = nativeFixture(async (_command, args) => {
+    calls.push(args.enabled);
+  });
 
-  const state = usePlayerFullscreen(fixture.player, () => {}, () => assert.fail("Unexpected failure"));
+  const state = usePlayerFullscreen(
+    fixture.player,
+    () => {},
+    () => assert.fail("Unexpected failure"),
+  );
+
   await state.toggleFullscreen();
+
   fixture.documentDouble.fullscreenElement = null;
+
   await state.fullscreenChanged();
+
   assert.equal(state.fullscreen.value, false);
   assert.deepEqual(calls, [true, false]);
 });
 
 test("DOM entry rejection rolls back the native window and allows another attempt", async () => {
   const calls = [];
-
   let failures = 0;
 
-  const fixture = nativeFixture(async (_command, args) => { calls.push(args.enabled); });
+  const fixture = nativeFixture(async (_command, args) => {
+    calls.push(args.enabled);
+  });
 
   const request = fixture.element.requestFullscreen;
-  fixture.element.requestFullscreen = async () => { throw new Error("Activation expired"); };
 
-  const state = usePlayerFullscreen(fixture.player, () => {}, () => { failures++; });
+  fixture.element.requestFullscreen = async () => {
+    throw new Error("Activation expired");
+  };
+
+  const state = usePlayerFullscreen(
+    fixture.player,
+    () => {},
+    () => {
+      failures++;
+    },
+  );
+
   await state.toggleFullscreen();
+
   assert.deepEqual(calls, [true, false]);
   assert.equal(state.fullscreen.value, false);
   assert.equal(state.fullscreenBusy.value, false);
   assert.equal(failures, 1);
   fixture.element.requestFullscreen = request;
+
   await state.toggleFullscreen();
+
   assert.equal(state.fullscreen.value, true);
+
   await state.disposeFullscreen();
 });
 
 test("unmount during DOM entry cleans the captured element after its ref is cleared", async () => {
   const calls = [];
 
-  const fixture = nativeFixture(async (_command, args) => { calls.push(args.enabled); });
+  const fixture = nativeFixture(async (_command, args) => {
+    calls.push(args.enabled);
+  });
 
   let entered;
-
   let complete;
-
-  const requested = new Promise((resolve) => { entered = resolve; });
+  const requested = new Promise((resolve) => {
+    entered = resolve;
+  });
 
   fixture.element.requestFullscreen = async () => {
     entered();
-    await new Promise((resolve) => { complete = resolve; });
+
+    await new Promise((resolve) => {
+      complete = resolve;
+    });
+
     fixture.documentDouble.fullscreenElement = fixture.element;
   };
 
-  const state = usePlayerFullscreen(fixture.player, () => {}, () => assert.fail("Unexpected failure"));
+  const state = usePlayerFullscreen(
+    fixture.player,
+    () => {},
+    () => assert.fail("Unexpected failure"),
+  );
 
   const pending = state.toggleFullscreen();
+
   await requested;
+
   fixture.player.value = null;
+
   await state.disposeFullscreen();
+
   complete();
+
   await pending;
+
   assert.equal(fixture.documentDouble.fullscreenElement, null);
   assert.equal(state.fullscreen.value, false);
   assert.deepEqual(calls, [true, false]);
@@ -315,37 +567,61 @@ test("unmount during DOM entry cleans the captured element after its ref is clea
 test("external DOM exit during entry releases native state without entering it again", async () => {
   const calls = [];
 
-  const fixture = nativeFixture(async (_command, args) => { calls.push(args.enabled); });
+  const fixture = nativeFixture(async (_command, args) => {
+    calls.push(args.enabled);
+  });
 
   fixture.element.requestFullscreen = async () => {
     fixture.documentDouble.fullscreenElement = fixture.element;
     fixture.documentDouble.fullscreenElement = null;
   };
 
-  const state = usePlayerFullscreen(fixture.player, () => {}, () => assert.fail("Unexpected failure"));
+  const state = usePlayerFullscreen(
+    fixture.player,
+    () => {},
+    () => assert.fail("Unexpected failure"),
+  );
+
   await state.toggleFullscreen();
+
   assert.equal(state.fullscreen.value, false);
   assert.deepEqual(calls, [true, false]);
 });
 
 test("DOM exit failure keeps ownership and retry does not exit another fullscreen element", async () => {
   const calls = [];
-
   let failures = 0;
 
-  const fixture = nativeFixture(async (_command, args) => { calls.push(args.enabled); });
+  const fixture = nativeFixture(async (_command, args) => {
+    calls.push(args.enabled);
+  });
 
-  const state = usePlayerFullscreen(fixture.player, () => {}, () => { failures++; });
+  const state = usePlayerFullscreen(
+    fixture.player,
+    () => {},
+    () => {
+      failures++;
+    },
+  );
+
   await state.toggleFullscreen();
-  fixture.documentDouble.exitFullscreen = async () => { throw new Error("Exit failed"); };
+
+  fixture.documentDouble.exitFullscreen = async () => {
+    throw new Error("Exit failed");
+  };
+
   await state.toggleFullscreen();
+
   assert.equal(state.fullscreen.value, true);
   assert.equal(failures, 1);
   assert.deepEqual(calls, [true]);
 
   const other = {};
+
   fixture.documentDouble.fullscreenElement = other;
+
   await state.fullscreenChanged();
+
   assert.equal(fixture.documentDouble.fullscreenElement, other);
   assert.equal(state.fullscreen.value, false);
   assert.deepEqual(calls, [true, false]);
@@ -357,7 +633,6 @@ test("playback position publication is bounded while seek and pause updates stay
   const fixture = await playerFixture();
 
   const { module } = fixture;
-
   let now = 1000;
 
   const clock = mock.method(performance, "now", () => now);
@@ -391,6 +666,7 @@ test("playback position publication is bounded while seek and pause updates stay
     assert.equal(module.position.value, 75.1);
   } finally {
     clock.mock.restore();
+
     for (const unmount of fixture.hooks.unmounted) unmount();
   }
 });
@@ -408,8 +684,12 @@ test("shared speed selection updates media rate and preserves listbox arrow owne
     module.setSpeed("-1");
     assert.equal(module.video.value.playbackRate, 1.5);
     const event = keyEvent("ArrowRight", {
-      target: { closest: (selector) => selector.includes("[role='listbox']") ? {} : null },
+      target: {
+        closest: (selector) =>
+          selector.includes("[role='listbox']") ? {} : null,
+      },
     });
+
     module.keyboard(event);
     assert.equal(event.defaultPrevented, false);
     assert.equal(module.video.value.currentTime, 10);
@@ -421,10 +701,23 @@ test("shared speed selection updates media rate and preserves listbox arrow owne
 function keyEvent(key, { control = false, editable = false, ...options } = {}) {
   return {
     key,
-    target: { closest: (selector) => selector.includes("input:not") ? (editable ? {} : null) : (control ? {} : null) },
+    target: {
+      closest: (selector) =>
+        selector.includes("input:not")
+          ? editable
+            ? {}
+            : null
+          : control
+            ? {}
+            : null,
+    },
     defaultPrevented: false,
-    preventDefault() { this.defaultPrevented = true; },
-    stopPropagation() { this.stopped = true; },
+    preventDefault() {
+      this.defaultPrevented = true;
+    },
+    stopPropagation() {
+      this.stopped = true;
+    },
     ...options,
   };
 }
@@ -436,6 +729,7 @@ test("Space and physical F/M shortcuts override focused controls without repeat 
 
   try {
     const space = keyEvent(" ", { control: true });
+
     module.keyboard(space);
     assert.equal(module.video.value.paused, false);
     assert.equal(space.defaultPrevented, true);
@@ -446,17 +740,27 @@ test("Space and physical F/M shortcuts override focused controls without repeat 
 
     module.keyboard(keyEvent("ь", { code: "KeyM", control: true }));
     assert.equal(module.video.value.muted, true);
-    module.keyboard(keyEvent("ь", { code: "KeyM", control: true, repeat: true }));
+    module.keyboard(
+      keyEvent("ь", {
+        code: "KeyM",
+        control: true,
+        repeat: true,
+      }),
+    );
     assert.equal(module.video.value.muted, true);
     module.keyboard(keyEvent("m", { control: true }));
     assert.equal(module.video.value.muted, false);
 
     module.keyboard(keyEvent("а", { code: "KeyF", control: true }));
+
     await new Promise((resolve) => setImmediate(resolve));
+
     assert.equal(module.fullscreen.value, true);
     assert.equal(module.controlsVisible.value, false);
     module.keyboard(keyEvent("f", { control: true }));
+
     await new Promise((resolve) => setImmediate(resolve));
+
     assert.equal(module.fullscreen.value, false);
   } finally {
     for (const unmount of fixture.hooks.unmounted) unmount();
@@ -470,27 +774,43 @@ test("T toggles diagnostics in both modes, preserves editing and cancels metrics
 
   try {
     const event = keyEvent("t", { control: true });
+
     module.keyboard(event);
+
     await nextTick();
+
     assert.equal(module.diagnostics.value, true);
     assert.equal(event.defaultPrevented, true);
     module.keyboard(keyEvent("t", { repeat: true }));
     assert.equal(module.diagnostics.value, true);
     module.keyboard(keyEvent("t"));
+
     await nextTick();
+
     assert.equal(module.diagnostics.value, false);
     assert.equal(fixture.cancelled(), 1);
+
     await module.toggleFullscreen();
+
     module.keyboard(keyEvent("е", { code: "KeyT" }));
+
     await nextTick();
+
     assert.equal(module.diagnostics.value, true);
-    for (const ignored of [keyEvent("t", { editable: true }), keyEvent("t", { ctrlKey: true })]) {
+
+    for (const ignored of [
+      keyEvent("t", { editable: true }),
+      keyEvent("t", { ctrlKey: true }),
+    ]) {
       module.keyboard(ignored);
       assert.equal(ignored.defaultPrevented, false);
       assert.equal(module.diagnostics.value, true);
     }
+
     module.keyboard(keyEvent("е", { code: "KeyT" }));
+
     await nextTick();
+
     assert.equal(module.diagnostics.value, false);
     assert.equal(fixture.cancelled(), 2);
   } finally {
@@ -505,7 +825,9 @@ test("fullscreen arrows seek actual media time, bound volume and reveal temporar
 
   try {
     module.duration.value = 100;
+
     await module.toggleFullscreen();
+
     module.video.value.currentTime = 42;
     module.position.value = 10;
     module.keyboard(keyEvent("ArrowRight"));
@@ -539,7 +861,6 @@ test("fullscreen arrows seek actual media time, bound volume and reveal temporar
 
 test("fullscreen controls hide after two seconds and timers reset on activity, exit and disposal", async () => {
   const pending = new Map();
-
   let id = 0;
 
   const timeout = mock.method(globalThis, "setTimeout", (callback, delay) => {
@@ -548,7 +869,9 @@ test("fullscreen controls hide after two seconds and timers reset on activity, e
     return id;
   });
 
-  const clear = mock.method(globalThis, "clearTimeout", (timer) => pending.delete(timer));
+  const clear = mock.method(globalThis, "clearTimeout", (timer) =>
+    pending.delete(timer),
+  );
 
   const fixture = await playerFixture();
 
@@ -556,12 +879,15 @@ test("fullscreen controls hide after two seconds and timers reset on activity, e
 
   try {
     module.duration.value = 100;
+
     await module.toggleFullscreen();
+
     module.keyboard(keyEvent(" "));
     assert.equal(module.controlsVisible.value, false);
     assert.equal(pending.size, 0);
     module.keyboard(keyEvent("ArrowRight"));
     const first = id;
+
     module.keyboard(keyEvent("ArrowUp"));
     assert.equal(pending.has(first), false);
     assert.equal(pending.size, 1);
@@ -571,14 +897,19 @@ test("fullscreen controls hide after two seconds and timers reset on activity, e
     assert.equal(pending.size, 0);
     module.toggleMute();
     assert.equal(module.controlsVisible.value, true);
+
     await module.toggleFullscreen();
+
     assert.equal(module.controlsVisible.value, false);
     assert.equal(pending.size, 0);
+
     await module.toggleFullscreen();
+
     module.keyboard(keyEvent("ArrowLeft"));
     assert.equal(pending.size, 1);
   } finally {
     for (const unmount of fixture.hooks.unmounted) unmount();
+
     timeout.mock.restore();
     clear.mock.restore();
   }
@@ -589,7 +920,6 @@ test("fullscreen controls hide after two seconds and timers reset on activity, e
 
 test("fullscreen pause pins the toolbar through feedback expiry and resume clears stale activity", async () => {
   const pending = new Map();
-
   let id = 0;
 
   const timeout = mock.method(globalThis, "setTimeout", (callback) => {
@@ -597,7 +927,9 @@ test("fullscreen pause pins the toolbar through feedback expiry and resume clear
     return id;
   });
 
-  const clear = mock.method(globalThis, "clearTimeout", (timer) => pending.delete(timer));
+  const clear = mock.method(globalThis, "clearTimeout", (timer) =>
+    pending.delete(timer),
+  );
 
   const fixture = await playerFixture();
 
@@ -605,7 +937,9 @@ test("fullscreen pause pins the toolbar through feedback expiry and resume clear
 
   try {
     module.duration.value = 100;
+
     await module.toggleFullscreen();
+
     assert.equal(module.toolbarVisible.value, true);
     module.video.value.paused = false;
     module.sync();
@@ -628,6 +962,7 @@ test("fullscreen pause pins the toolbar through feedback expiry and resume clear
     assert.equal(module.toolbarVisible.value, false);
   } finally {
     for (const unmount of fixture.hooks.unmounted) unmount();
+
     timeout.mock.restore();
     clear.mock.restore();
   }
@@ -668,12 +1003,29 @@ test("speed listbox owns Space, arrows, Escape and typeahead without changing pl
   const { module } = fixture;
 
   try {
-    for (const key of [" ", "ArrowRight", "ArrowDown", "Escape", "f", "m", "t", "r", "k"]) {
+    for (const key of [
+      " ",
+      "ArrowRight",
+      "ArrowDown",
+      "Escape",
+      "f",
+      "m",
+      "t",
+      "r",
+      "k",
+    ]) {
       const event = keyEvent(key);
 
-      event.target = { closest: (selector) => selector.includes("[role='listbox']") ? {} : null };
+      event.target = {
+        closest: (selector) =>
+          selector.includes("[role='listbox']") ? {} : null,
+      };
       module.keyboard(event);
-      assert.equal(event.defaultPrevented, false, `${key} belongs to the listbox`);
+      assert.equal(
+        event.defaultPrevented,
+        false,
+        `${key} belongs to the listbox`,
+      );
     }
 
     assert.equal(module.video.value.paused, true);
@@ -686,13 +1038,14 @@ test("speed listbox owns Space, arrows, Escape and typeahead without changing pl
   }
 });
 
-
 test("repeat toggles the same media in windowed/fullscreen, ignores held keys and editing", async () => {
   const fixture = await playerFixture();
+
   const { module } = fixture;
 
   try {
     const media = module.video.value;
+
     module.toggleRepeat();
     assert.equal(media.loop, true);
     assert.equal(module.repeat.value, true);
@@ -702,13 +1055,22 @@ test("repeat toggles the same media in windowed/fullscreen, ignores held keys an
     assert.equal(media.loop, true);
     module.keyboard(keyEvent("к", { code: "KeyR", control: true }));
     assert.equal(media.loop, false);
+
     await module.toggleFullscreen();
+
     module.keyboard(keyEvent("r"));
     assert.equal(media.loop, true);
     assert.equal(module.controlsVisible.value, true);
 
-    for (const options of [{ editable: true }, { ctrlKey: true }, { altKey: true }, { metaKey: true }, { isComposing: true }]) {
+    for (const options of [
+      { editable: true },
+      { ctrlKey: true },
+      { altKey: true },
+      { metaKey: true },
+      { isComposing: true },
+    ]) {
       const event = keyEvent("r", options);
+
       module.keyboard(event);
       assert.equal(event.defaultPrevented, false);
       assert.equal(media.loop, true);

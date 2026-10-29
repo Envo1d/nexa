@@ -104,19 +104,15 @@ const dialog = ref<HTMLElement | null>(null);
 const { trapFocus } = useFocusTrap(dialog);
 
 const pairs = shallowRef<DuplicatePair[]>([]);
-
 const selected = shallowRef<DuplicatePair>();
 
 const running = ref(false);
-
 const loadingSaved = ref(false);
 
 const savedAt = ref<number | null>(null);
-
 const savedStale = ref(0);
 
 const reused = ref(0);
-
 const hashed = ref(0);
 
 let activeInventory: ScanInventory | null = null;
@@ -124,11 +120,9 @@ let activeInventory: ScanInventory | null = null;
 const savingReview = ref(false);
 
 const processed = ref(0);
-
 const total = ref<number | null>(null);
 
 const rejectedCount = ref(0);
-
 const lastRejected = shallowRef<DuplicatePair>();
 
 const rejections = new Set<string>();
@@ -143,17 +137,13 @@ const progress = computed(() =>
 );
 
 const checked = ref(0);
-
 const skipped = ref(0);
-
 const visualUnavailable = ref(0);
 
 const error = ref("");
-
 const status = ref("duplicatesReady");
 
 const mode = ref("exact");
-
 const shown = ref(50);
 
 const filtered = computed(() =>
@@ -188,9 +178,7 @@ const replacement = computed(() => {
 const stopped = ref(false);
 
 let disposed = false;
-
 let scanVersion = 0;
-
 let trigger: HTMLElement | null = null;
 
 function convert(file: NativeFile): DuplicateFile {
@@ -219,7 +207,6 @@ async function scan() {
   if (running.value || savingReview.value || loadingSaved.value) return;
 
   const version = ++scanVersion;
-
   let after = "0";
 
   stopped.value = false;
@@ -259,7 +246,9 @@ async function scan() {
 
     if (stopped.value || !inventory.total) {
       status.value = stopped.value ? "duplicatesStopped" : "duplicatesComplete";
+
       await checkpoint(stopped.value ? "stopped" : "complete");
+
       return;
     }
 
@@ -267,7 +256,6 @@ async function scan() {
 
     for (;;) {
       const base = processed.value;
-
       const onProgress = new Channel<{ completed: number }>();
 
       onProgress.onmessage = (message) => {
@@ -406,7 +394,14 @@ async function loadSaved() {
         const right = files.get(pair.rightId);
 
         return left && right
-          ? [{ left, right, exact: pair.exact, distance: pair.distance }]
+          ? [
+              {
+                left,
+                right,
+                exact: pair.exact,
+                distance: pair.distance,
+              },
+            ]
           : [];
       });
 
@@ -479,6 +474,7 @@ async function reviewPair(rejected: boolean) {
 
     rejectedCount.value = rejections.size;
     savingReview.value = false;
+
     await nextTick();
 
     if (!disposed) {
@@ -498,6 +494,7 @@ async function reviewPair(rejected: boolean) {
 function keyboard(event: KeyboardEvent) {
   if (event.key === "Escape") {
     event.preventDefault();
+
     if (!savingReview.value) emit("close");
   }
 

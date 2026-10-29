@@ -14,9 +14,11 @@ const keys = {
 
 async function compile(path, expose, component = false) {
   const source = await readFile(new URL(path, import.meta.url), "utf8");
+
   const script = component
     ? source.match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]
     : source;
+
   return (
     transpileModule(script, {
       compilerOptions: { module: ModuleKind.CommonJS },
@@ -32,6 +34,7 @@ const panelCode = await compile(
   "begin, apply, category, catalog, copyright, copyrightOptions, name, pending, error, busy",
   true,
 );
+
 const demoCode = await compile(
   "../src/composables/useDemoTaxonomy.ts",
   "useDemoTaxonomy",
@@ -45,6 +48,7 @@ const inputCode = await compile(
 
 function run(code, native, invoke = async () => ({}), props = {}) {
   const events = [];
+
   const context = {
     exports: {},
     defineProps: () => props,
@@ -63,41 +67,68 @@ function run(code, native, invoke = async () => ({}), props = {}) {
           onMounted: () => {},
           onBeforeUnmount: () => {},
         };
+
       if (id === "@tauri-apps/api/core")
         return { isTauri: () => native, invoke };
+
       if (id.endsWith("taxonomy")) return { categoryKey: keys };
+
       return {};
     },
   };
+
   vm.runInNewContext(code, context);
+
   return { ...context.state, events };
 }
 
 const catalog = () => ({
   copyrights: [
-    { id: "1", name: "World", count: 1 },
-    { id: "2", name: "Other", count: 0 },
+    {
+      id: "1",
+      name: "World",
+      count: 1,
+    },
+    {
+      id: "2",
+      name: "Other",
+      count: 0,
+    },
   ],
-  characters: [{ id: "10", name: "Alice", copyright: "World", count: 1 }],
+  characters: [
+    {
+      id: "10",
+      name: "Alice",
+      copyright: "World",
+      count: 1,
+    },
+  ],
   artists: [],
   tags: [],
 });
 
 test("character editor submits name and target copyright together and refreshes", async () => {
   const calls = [];
+
   const data = catalog();
+
   const state = run(panelCode, true, async (command, args) => {
     calls.push([command, args]);
     return data;
   });
+
   state.catalog.value = data;
   state.category.value = "character";
+
   await nextTick();
+
   state.begin(data.characters[0], "edit");
   assert.equal(state.copyright.value, "World");
   state.copyright.value = "Other";
   state.name.value = "Hero";
+
   await state.apply();
+
   assert.equal(calls[0][0], "update_taxonomy_character");
   assert.deepEqual(JSON.parse(JSON.stringify(calls[0][1])), {
     id: 10,
@@ -111,38 +142,60 @@ test("character editor submits name and target copyright together and refreshes"
 
 test("failed update preserves draft and missing target makes no write", async () => {
   const data = catalog();
+
   let calls = 0;
+
   const state = run(panelCode, true, async () => {
     calls++;
     throw new Error("collision");
   });
+
   state.catalog.value = data;
   state.category.value = "character";
+
   await nextTick();
+
   state.begin(data.characters[0], "edit");
   state.copyright.value = "Other";
+
   await state.apply();
+
   assert.match(state.error.value, /collision/);
   assert.equal(state.copyright.value, "Other");
   assert.ok(state.pending.value);
   assert.equal(state.busy.value, false);
   assert.equal(state.events.length, 0);
   state.copyright.value = "Missing";
+
   await state.apply();
+
   assert.equal(calls, 1);
 });
 
 test("other categories retain the rename command", async () => {
   const calls = [];
+
   const state = run(panelCode, true, async (command) => {
     calls.push(command);
     return catalog();
   });
+
   state.category.value = "tag";
+
   await nextTick();
-  state.begin({ id: "5", name: "Tag", count: 0 }, "edit");
+
+  state.begin(
+    {
+      id: "5",
+      name: "Tag",
+      count: 0,
+    },
+    "edit",
+  );
   state.name.value = "Renamed";
+
   await state.apply();
+
   assert.equal(calls[0], "rename_taxonomy");
 });
 
@@ -155,8 +208,11 @@ test("demo reassigns qualified links, cleans old copyright, and rejects collisio
     tags: [],
     artist: "Artist",
   };
+
   const library = ref([item]);
+
   const state = run(demoCode, false).useDemoTaxonomy(library, ref([]));
+
   state.change("character", "Alice", "Hero", "World", "Other");
   assert.equal(library.value[0].characterCopyrights[0].copyright, "Other");
   assert.deepEqual([...library.value[0].copyrights], ["Other"]);
@@ -172,7 +228,9 @@ test("demo reassigns qualified links, cleans old copyright, and rejects collisio
     characters: ["Hero"],
     characterCopyrights: [{ name: "Hero", copyright: "Other" }],
   });
+
   await nextTick();
+
   assert.throws(
     () => state.change("character", "Hero", "HERO", "World", "Other"),
     /already exists/,
@@ -197,7 +255,9 @@ test("demo adds a new copyright without changing inferred old character identity
       artist: "Artist",
     },
   ]);
+
   const state = run(demoCode, false).useDemoTaxonomy(library, ref([]));
+
   state.change("character", "Alice", "Alice", "World", "Another");
   assert.deepEqual([...library.value[0].copyrights], ["Another"]);
   assert.equal(library.value[0].characterCopyrights[0].copyright, "Another");
@@ -211,10 +271,12 @@ test("plain name input keeps form keys and hides suggestions; metadata search st
     textValue: "Alice",
     modelValue: [],
   });
+
   state.focused.value = true;
   assert.equal(state.showSuggestions.value, false);
   let prevented = 0;
   const enter = { key: "Enter", preventDefault: () => prevented++ };
+
   state.keydown(enter);
   state.keydown({
     key: "Escape",
@@ -227,6 +289,7 @@ test("plain name input keeps form keys and hides suggestions; metadata search st
     textValue: "Alice",
     modelValue: [],
   });
+
   searchable.focused.value = true;
   assert.equal(searchable.showSuggestions.value, true);
   searchable.keydown(enter);
@@ -262,7 +325,9 @@ test("demo keeps previous copyright only where another character uses it", () =>
       artist: "Artist",
     },
   ]);
+
   const state = run(demoCode, false).useDemoTaxonomy(library, ref([]));
+
   state.change("character", "Alice", "Alice", "World", "Other");
   assert.deepEqual(
     [...library.value[0].copyrights],

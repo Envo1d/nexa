@@ -37,41 +37,26 @@ const emit = defineEmits<{
 const { t } = useI18n();
 
 const dialog = ref<HTMLElement | null>(null);
-
 const closeButton = ref<HTMLButtonElement | null>(null);
-
 const canvas = ref<HTMLElement | null>(null);
-
 const image = ref<HTMLImageElement | null>(null);
-
 const videoPlayer = ref<InstanceType<typeof NexaVideoPlayer> | null>(null);
 
 const sourceFps = ref<number | undefined>(props.item.fps);
-
 const source = ref("");
-
 const loading = ref(true);
-
 const mediaReady = ref(false);
-
 const mediaError = ref("");
 
 const saveError = ref("");
-
 const saving = ref(false);
-
 const annotationsReady = ref(false);
-
 const favorite = ref(false);
-
 const tags = ref<string[]>([]);
-
 const newTag = ref("");
 
 const zoom = ref(1);
-
 const pan = ref({ x: 0, y: 0 });
-
 const dragging = ref(false);
 
 const imageStyle = computed(() => ({
@@ -84,9 +69,7 @@ const trigger =
 const { trapFocus } = useFocusTrap(dialog);
 
 let requestGeneration = 0;
-
 let observer: ResizeObserver | undefined;
-
 let pointer: {
   id: number;
   x: number;
@@ -387,6 +370,7 @@ watch(() => [props.item.id, props.item.nativeRevision], loadSource, {
 
 onMounted(async () => {
   await nextTick();
+
   closeButton.value?.focus();
   observer = new ResizeObserver(clampPan);
 
