@@ -13,6 +13,10 @@ use crate::{
     stage::StageState,
 };
 
+pub(crate) fn distribution_order_key(root: &str) -> Result<String, String> {
+    serde_json::to_string(&(root, "distribution")).map_err(|error| error.to_string())
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OrderFile {

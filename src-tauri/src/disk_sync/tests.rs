@@ -368,6 +368,98 @@ async fn lower_id_newcomers_append_after_existing_managed_files() {
 }
 
 #[tokio::test]
+async fn distribution_order_survives_restart_and_appends_after_managed_files() {
+    let (temp, db, root, _) = fixture().await;
+
+    let settings = AppConfig::default();
+
+    sqlx::query("UPDATE media SET needs_distribution=1 WHERE id<>4")
+        .execute(db.pool())
+        .await
+        .unwrap();
+    run(db.pool(), &root, &settings).await;
+
+    let key = distribution_order_key(&root).unwrap();
+
+    // Two batches can wait for synchronization; IDs must not override their order.
+    for (position, id) in [3, 1, 2].into_iter().enumerate() {
+        sqlx::query(concat!(
+            "UPDATE media SET needs_distribution=0,naming_order_key=?,naming_order=? ",
+            "WHERE id=?",
+        ))
+        .bind(&key)
+        .bind(position as i64)
+        .bind(id)
+        .execute(db.pool())
+        .await
+        .unwrap();
+    }
+    db.close().await;
+
+    let db = Database::open(&temp.path().join("vault.db")).await.unwrap();
+    run(db.pool(), &root, &settings).await;
+
+    for (index, id) in [4, 3, 1, 2].into_iter().enumerate() {
+        assert_eq!(
+            fs::read(indexed(&root, index as i64 + 1)).unwrap(),
+            format!("independent content {id}").as_bytes()
+        );
+    }
+    run(db.pool(), &root, &settings).await;
+
+    let (group_key, group) = find_order_group(db.pool(), &root, &settings, 4)
+        .await
+        .unwrap();
+
+    let expected: Vec<String> = group.iter().map(|file| file.id.to_string()).collect();
+    assert_eq!(expected, ["4", "3", "1", "2"]);
+
+    let reversed: Vec<String> = expected.iter().rev().cloned().collect();
+    persist_order(
+        db.pool(),
+        &root,
+        &settings,
+        &group_key,
+        &expected,
+        &reversed,
+    )
+    .await
+    .unwrap();
+    run(db.pool(), &root, &settings).await;
+    assert_eq!(
+        fs::read(indexed(&root, 1)).unwrap(),
+        b"independent content 2"
+    );
+    db.close().await;
+}
+
+#[tokio::test]
+async fn new_naming_group_uses_distribution_order_instead_of_scan_ids() {
+    let (_temp, db, root, _) = fixture().await;
+
+    let key = distribution_order_key(&root).unwrap();
+
+    for (position, id) in [3, 1, 4, 2].into_iter().enumerate() {
+        sqlx::query("UPDATE media SET naming_order_key=?,naming_order=? WHERE id=?")
+            .bind(&key)
+            .bind(position as i64)
+            .bind(id)
+            .execute(db.pool())
+            .await
+            .unwrap();
+    }
+    run(db.pool(), &root, &AppConfig::default()).await;
+
+    for (index, id) in [3, 1, 4, 2].into_iter().enumerate() {
+        assert_eq!(
+            fs::read(indexed(&root, index as i64 + 1)).unwrap(),
+            format!("independent content {id}").as_bytes()
+        );
+    }
+    db.close().await;
+}
+
+#[tokio::test]
 async fn mixed_extensions_share_indices_and_persistent_order_for_images_and_videos() {
     for (kind, extensions, stem, folder) in [
         (

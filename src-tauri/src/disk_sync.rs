@@ -3,6 +3,8 @@ mod changes;
 mod moves;
 mod ordering;
 mod planning;
+pub(crate) use ordering::distribution_order_key;
+
 pub use ordering::{
     __cmd__get_duplicate_order, __cmd__save_duplicate_order,
     __tauri_command_name_get_duplicate_order, __tauri_command_name_save_duplicate_order,
