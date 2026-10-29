@@ -110,11 +110,34 @@ pub(super) async fn save_mode(
         return Err("Choose exactly one artist and 1–500 files".into());
     }
 
-    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+    let mut tx = pool
+        .begin_with("BEGIN IMMEDIATE")
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let incoming_order = if stage_root.is_some() {
+        let key = crate::disk_sync::distribution_order_key(
+            root.as_deref().ok_or("Library is not configured")?,
+        )?;
+
+        let last: i64 = sqlx::query_scalar(
+            "SELECT COALESCE(MAX(naming_order),-1) FROM media WHERE naming_order_key=?",
+        )
+        .bind(&key)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|error| error.to_string())?;
+
+        Some((key, last))
+    } else {
+        None
+    };
 
     let artist = dictionary(&mut tx, "artists", &draft.artists[0]).await?;
 
-    for raw in ids {
+    let count = ids.len();
+
+    for (index, raw) in ids.into_iter().enumerate() {
         let id = raw.parse::<i64>().map_err(|_| "Invalid media ID")?;
 
         let kind: String = if let Some(stage_root) = &stage_root {
@@ -192,6 +215,20 @@ pub(super) async fn save_mode(
         .await
         .map_err(|e| e.to_string())?;
 
+        if let Some((key, last)) = &incoming_order {
+            let position = last
+                .checked_add(index as i64 + 1)
+                .ok_or("Distribution order is exhausted")?;
+
+            sqlx::query("UPDATE media SET naming_order_key=?,naming_order=? WHERE id=?")
+                .bind(key)
+                .bind(position)
+                .bind(id)
+                .execute(&mut *tx)
+                .await
+                .map_err(|error| error.to_string())?;
+        }
+
         if kind == "video" {
             sqlx::query(concat!(
                 "INSERT INTO video_metadata(media_id,title) VALUES(?,?) ON CONFLICT(media_id) DO ",
@@ -204,7 +241,16 @@ pub(super) async fn save_mode(
             .map_err(|e| e.to_string())?;
         }
     }
-    tx.commit().await.map_err(|e| e.to_string())
+    tx.commit().await.map_err(|e| e.to_string())?;
+
+    if incoming_order.is_some() {
+        tracing::debug!(
+            files = count,
+            "Stage distribution order saved atomically with metadata"
+        );
+    }
+
+    Ok(())
 }
 
 #[tauri::command]

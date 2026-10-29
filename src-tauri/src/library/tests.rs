@@ -459,3 +459,65 @@ async fn distribution_saves_logical_membership_without_moving_and_supports_main_
     assert_eq!(row.get::<String, _>("original_filename"), "original.png");
     db.close().await;
 }
+
+#[tokio::test]
+async fn distribution_persists_batch_order_and_rolls_back_failed_batches() {
+    let (temp, db, root) = fixture().await;
+
+    sqlx::query("UPDATE media SET needs_distribution=1 WHERE id IN (1,2,3,4)")
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+    for ids in [vec!["3", "1"], vec!["4", "missing"]] {
+        let valid = ids[1] != "missing";
+
+        let result = save_mode(
+            db.pool(),
+            Some(root.clone()),
+            Some(None),
+            ids.into_iter().map(String::from).collect(),
+            draft(),
+        )
+        .await;
+        assert_eq!(result.is_ok(), valid);
+    }
+
+    let failed: (i64, Option<i64>, Option<String>) = sqlx::query_as(
+        "SELECT needs_distribution,naming_order,library_assignment FROM media WHERE id=4",
+    )
+    .fetch_one(db.pool())
+    .await
+    .unwrap();
+    assert_eq!(failed, (1, None, None));
+
+    save_mode(
+        db.pool(),
+        Some(root.clone()),
+        Some(None),
+        vec!["4".into(), "2".into()],
+        draft(),
+    )
+    .await
+    .unwrap();
+
+    // Main metadata editing must retain the original incoming rank.
+    save(db.pool(), Some(root.clone()), vec!["1".into()], draft())
+        .await
+        .unwrap();
+    db.close().await;
+
+    let reopened = Database::open(&temp.path().join("vault.db")).await.unwrap();
+
+    let key = crate::disk_sync::distribution_order_key(&root).unwrap();
+
+    let ordered: Vec<(i64, i64)> = sqlx::query_as(
+        "SELECT id,naming_order FROM media WHERE naming_order_key=? ORDER BY naming_order",
+    )
+    .bind(key)
+    .fetch_all(reopened.pool())
+    .await
+    .unwrap();
+    assert_eq!(ordered, [(3, 0), (1, 1), (4, 2), (2, 3)]);
+    reopened.close().await;
+}

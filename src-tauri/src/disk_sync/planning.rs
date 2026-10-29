@@ -18,6 +18,7 @@ pub(super) struct Target {
     pub(super) current_root: String,
     pub(super) current_relative: String,
     pub(super) position: Option<i64>,
+    incoming_position: Option<i64>,
     pub(super) kind: String,
     pub(super) revision: Option<String>,
 }
@@ -60,6 +61,8 @@ pub(super) async fn grouped_targets(
     settings: &AppConfig,
 ) -> Result<BTreeMap<String, Vec<Target>>, String> {
     let mut groups: BTreeMap<String, Vec<Target>> = BTreeMap::new();
+
+    let incoming_key = super::distribution_order_key(root)?;
 
     let mut cursor = 0;
 
@@ -186,6 +189,13 @@ pub(super) async fn grouped_targets(
             } else {
                 None
             };
+
+            let incoming_position = if saved_key.as_deref() == Some(incoming_key.as_str()) {
+                row.get::<Option<i64>, _>("naming_order")
+            } else {
+                None
+            };
+
             groups.entry(key).or_default().push(Target {
                 id,
                 folder,
@@ -194,6 +204,7 @@ pub(super) async fn grouped_targets(
                 current_root: row.get("root_path"),
                 current_relative: row.get("relative_path"),
                 position,
+                incoming_position,
                 kind: row.get("kind"),
                 revision: row.get("file_revision"),
             });
@@ -207,13 +218,18 @@ pub(super) async fn grouped_targets(
             } else if let Some(position) = current_position(target, root) {
                 (1, 0, position, target.id)
             } else {
-                (2, 0, 0, target.id)
+                (
+                    2,
+                    target.incoming_position.unwrap_or(i64::MAX),
+                    0,
+                    target.id,
+                )
             }
         });
 
         tracing::debug!(
             files = group.len(),
-            "Naming group ordered by saved ranks, existing filenames and newcomer IDs"
+            "Naming group ordered by saved ranks, existing filenames and distribution order with ID fallback"
         );
     }
     Ok(groups)
