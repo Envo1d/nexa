@@ -62,6 +62,18 @@ pub(super) fn filtered(root: &Option<String>, f: &Filters, prefix: &str) -> Quer
 }
 
 pub(crate) fn apply_metadata_search(q: &mut QueryBuilder<Sqlite>, search: &str) {
+    metadata_matches(q, search, false);
+}
+
+pub(crate) fn metadata_rank(q: &mut QueryBuilder<Sqlite>, search: &str) {
+    q.push("CASE WHEN 1");
+    metadata_matches(q, search, true);
+    q.push(" THEN 0 ELSE 1 END");
+}
+
+fn metadata_matches(q: &mut QueryBuilder<Sqlite>, search: &str, prefix_only: bool) {
+    let comparison = if prefix_only { "=1" } else { ">0" };
+
     for value in search.split(';').map(str::trim).filter(|v| !v.is_empty()) {
         let key = name_key(value);
         q.push(concat!(
@@ -69,22 +81,30 @@ pub(crate) fn apply_metadata_search(q: &mut QueryBuilder<Sqlite>, search: &str) 
                 "AND instr(d.name_key,",
             ))
             .push_bind(key.clone())
+            .push(")")
+            .push(comparison)
             .push(concat!(
-                ")=1) OR EXISTS(SELECT 1 FROM media_copyrights l JOIN copyrights d ON d.id=l.copyright_id ",
+                ") OR EXISTS(SELECT 1 FROM media_copyrights l JOIN copyrights d ON d.id=l.copyright_id ",
                 "WHERE l.media_id=m.id AND instr(d.name_key,",
             ))
             .push_bind(key.clone())
+            .push(")")
+            .push(comparison)
             .push(concat!(
-                ")=1) OR EXISTS(SELECT 1 FROM media_characters l JOIN characters d ON d.id=l.character_id ",
+                ") OR EXISTS(SELECT 1 FROM media_characters l JOIN characters d ON d.id=l.character_id ",
                 "WHERE l.media_id=m.id AND instr(d.name_key,",
             ))
             .push_bind(key.clone())
+            .push(")")
+            .push(comparison)
             .push(concat!(
-                ")=1) OR EXISTS(SELECT 1 FROM media_tags l JOIN tags d ON d.id=l.tag_id WHERE ",
+                ") OR EXISTS(SELECT 1 FROM media_tags l JOIN tags d ON d.id=l.tag_id WHERE ",
                 "l.media_id=m.id AND instr(d.name_key,",
             ))
             .push_bind(key)
-            .push(")=1))");
+            .push(")")
+            .push(comparison)
+            .push("))");
     }
 }
 
@@ -123,11 +143,14 @@ pub(crate) async fn browse(
     let total = count_filtered(pool, &root, &f).await?;
 
     let mut q = select_filtered(&root, &f);
+    q.push(" ORDER BY ");
+    metadata_rank(&mut q, &f.search);
+    q.push(",");
     q.push(match f.sort.as_str() {
-        "older" => " ORDER BY m.file_modified_at ASC,m.id ASC",
-        "name-asc" => " ORDER BY m.relative_path COLLATE NEXA_FILENAME ASC,m.id ASC",
-        "name-desc" => " ORDER BY m.relative_path COLLATE NEXA_FILENAME DESC,m.id ASC",
-        _ => " ORDER BY m.file_modified_at DESC,m.id ASC",
+        "older" => "m.file_modified_at ASC,m.id ASC",
+        "name-asc" => "m.relative_path COLLATE NEXA_FILENAME ASC,m.id ASC",
+        "name-desc" => "m.relative_path COLLATE NEXA_FILENAME DESC,m.id ASC",
+        _ => "m.file_modified_at DESC,m.id ASC",
     });
     q.push(" LIMIT 500 OFFSET ").push_bind(f.offset);
 
@@ -296,7 +319,10 @@ pub async fn get_library_files(
     config: tauri::State<'_, ConfigStore>,
 ) -> Result<Page, String> {
     configure_stage_prefix(&mut filters, &config)?;
-    tracing::debug!(search_match = "metadata_prefix", "Loading Main page");
+    tracing::debug!(
+        search_match = "metadata_prefix_then_substring",
+        "Loading Main page"
+    );
 
     let page = browse(database.pool(), configured_root(&config)?, filters).await?;
 
@@ -351,11 +377,14 @@ pub(super) async fn capture_viewer_sequence(
         &filters,
         "SELECT m.id,m.relative_path,m.kind,m.extension",
     );
+    q.push(" ORDER BY ");
+    metadata_rank(&mut q, &filters.search);
+    q.push(",");
     q.push(match filters.sort.as_str() {
-        "older" => " ORDER BY m.file_modified_at ASC,m.id ASC",
-        "name-asc" => " ORDER BY m.relative_path COLLATE NEXA_FILENAME ASC,m.id ASC",
-        "name-desc" => " ORDER BY m.relative_path COLLATE NEXA_FILENAME DESC,m.id ASC",
-        _ => " ORDER BY m.file_modified_at DESC,m.id ASC",
+        "older" => "m.file_modified_at ASC,m.id ASC",
+        "name-asc" => "m.relative_path COLLATE NEXA_FILENAME ASC,m.id ASC",
+        "name-desc" => "m.relative_path COLLATE NEXA_FILENAME DESC,m.id ASC",
+        _ => "m.file_modified_at DESC,m.id ASC",
     });
 
     q.build()

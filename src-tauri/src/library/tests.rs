@@ -83,7 +83,7 @@ fn draft() -> Draft {
 }
 
 #[tokio::test]
-async fn search_matches_prefixes_across_metadata_and_viewer_with_literal_punctuation() {
+async fn search_matches_substrings_across_metadata_and_viewer_with_literal_punctuation() {
     let (_temp, db, root) = fixture().await;
     save(db.pool(), Some(root.clone()), vec!["1".into()], draft())
         .await
@@ -91,10 +91,10 @@ async fn search_matches_prefixes_across_metadata_and_viewer_with_literal_punctua
 
     for (search, expected) in [
         (" STRASS ; CAFÉ; Al; Ser ", 1),
-        ("traße", 0),
-        ("lice", 0),
-        ("fé", 0),
-        ("ther", 0),
+        ("traße", 1),
+        ("lice", 1),
+        ("fé", 1),
+        ("ther", 1),
         ("%", 0),
         ("_", 0),
     ] {
@@ -112,6 +112,63 @@ async fn search_matches_prefixes_across_metadata_and_viewer_with_literal_punctua
                 .await
                 .unwrap();
         assert_eq!(sequence.len() as i64, expected, "viewer: {search}");
+    }
+    db.close().await;
+}
+
+#[tokio::test]
+async fn prefix_groups_keep_sorting_pagination_and_viewer_order() {
+    let (_temp, db, root) = fixture().await;
+    sqlx::raw_sql(concat!(
+        "INSERT INTO tags VALUES(1,'atomic','atomic'),(2,'marvel','marvel'); ",
+        "INSERT INTO media_tags SELECT id,1 FROM media WHERE id<=501; ",
+        "DELETE FROM media_tags WHERE media_id=1; INSERT INTO media_tags VALUES(1,2);",
+    ))
+    .execute(db.pool())
+    .await
+    .unwrap();
+
+    for sort in ["newest", "older", "name-asc", "name-desc"] {
+        let mut baseline = filters();
+        baseline.sort = sort.into();
+        let values =
+            super::queries::capture_viewer_sequence(db.pool(), Some(root.clone()), baseline)
+                .await
+                .unwrap();
+        let values = serde_json::to_value(values).unwrap();
+        let mut expected = vec!["1".to_string()];
+        expected.extend(values.as_array().unwrap().iter().filter_map(|value| {
+            let id = value["id"].as_str().unwrap();
+            (id != "1").then(|| id.to_string())
+        }));
+
+        let mut actual = Vec::new();
+        for offset in [0, 500] {
+            let mut query = filters();
+            query.sort = sort.into();
+            query.search = "m".into();
+            query.offset = offset;
+            let page = browse(db.pool(), Some(root.clone()), query).await.unwrap();
+            assert_eq!(page.total, 501);
+            actual.extend(page.files.into_iter().map(|file| file.technical.id));
+        }
+        assert_eq!(actual, expected, "{sort}");
+
+        let mut query = filters();
+        query.sort = sort.into();
+        query.search = "m".into();
+        let sequence =
+            super::queries::capture_viewer_sequence(db.pool(), Some(root.clone()), query)
+                .await
+                .unwrap();
+        let sequence = serde_json::to_value(sequence).unwrap();
+        let ids: Vec<_> = sequence
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|entry| entry["id"].as_str().unwrap())
+            .collect();
+        assert_eq!(ids, expected, "viewer: {sort}");
     }
     db.close().await;
 }

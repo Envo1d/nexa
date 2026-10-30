@@ -10,6 +10,7 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 
 import { isNativeData } from "../runtime";
+import { searchByName } from "../utils/metadataSearch";
 import { translateUi as ui } from "../i18n/presentation";
 import AppIcon from "./AppIcon.vue";
 import MetadataPresetManager from "./MetadataPresetManager.vue";
@@ -56,13 +57,7 @@ const blocked = computed(() => props.disabled || busy.value || !loaded.value);
 
 const available = computed(() => !blocked.value);
 
-const visiblePresets = computed(() =>
-  presets.value.filter((preset) =>
-    preset.name
-      .toLocaleLowerCase()
-      .startsWith(query.value.trim().toLocaleLowerCase()),
-  ),
-);
+const visiblePresets = computed(() => searchByName(presets.value, query.value));
 
 async function toggle() {
   if (props.disabled || managing.value) return;

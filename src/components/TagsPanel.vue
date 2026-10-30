@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 
 import { isNativeData } from "../runtime";
+import { searchByName } from "../utils/metadataSearch";
 import { translateUi as ui } from "../i18n/presentation";
 import AppIcon from "./AppIcon.vue";
 import AppSelect from "./AppSelect.vue";
@@ -126,7 +127,7 @@ const filtersActive = computed(
 const entries = computed(() => {
   const query = search.value.trim().toLocaleLowerCase();
 
-  return data.value[categoryKey[category.value]].filter((entry) => {
+  const values = data.value[categoryKey[category.value]].filter((entry) => {
     const matchesLinkedCount =
       linkedCount.value === "all" || entry.count === linkedCount.value;
 
@@ -140,8 +141,10 @@ const entries = computed(() => {
       if (!matchesRepeatedName) return false;
     }
 
-    return entry.name.toLocaleLowerCase().startsWith(query);
+    return true;
   });
+
+  return searchByName(values, query);
 });
 
 async function load() {

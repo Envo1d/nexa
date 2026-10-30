@@ -18,8 +18,8 @@ use sqlx::{AssertSqlSafe, Row, SqlitePool, sqlite::SqliteRow};
 
 use crate::{config::AppConfig, stage};
 
-const SELECT: &str = concat!(
-    "SELECT m.*,s.root_path,s.kind source_kind,v.duration_ms,v.fps_num,v.fps_den,v.codec,",
+const SELECT_BODY: &str = concat!(
+    "m.*,s.root_path,s.kind source_kind,v.duration_ms,v.fps_num,v.fps_den,v.codec,",
     "v.bitrate_bps,v.title,a.name artist_name FROM media m JOIN sources s ON ",
     "s.id=m.source_id LEFT JOIN video_metadata v ON v.media_id=m.id LEFT JOIN artists a ON ",
     "a.id=m.artist_id",
@@ -98,7 +98,7 @@ fn candidate(row: SqliteRow) -> Candidate {
 
 async fn record(pool: &SqlitePool, value: i64) -> Result<SqliteRow, String> {
     // Only the constant SELECT fragment is interpolated; IDs remain bound values.
-    sqlx::query(AssertSqlSafe(format!("{SELECT} WHERE m.id=?")))
+    sqlx::query(AssertSqlSafe(format!("SELECT {SELECT_BODY} WHERE m.id=?")))
         .bind(value)
         .fetch_optional(pool)
         .await

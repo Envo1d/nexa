@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, ref, useId, watch } from "vue";
 
 import { translateUi as ui } from "../i18n/presentation";
+import { searchByName } from "../utils/metadataSearch";
 import { useFocusTrap } from "../shared/composables/useFocusTrap";
 import AppIcon from "./AppIcon.vue";
 import MetadataInput, { type MetadataValue } from "./MetadataInput.vue";
@@ -45,13 +46,7 @@ const tags = ref<MetadataValue[]>([]);
 const query = ref("");
 const confirmingDelete = ref(false);
 
-const visiblePresets = computed(() =>
-  props.presets.filter((preset) =>
-    preset.name
-      .toLocaleLowerCase()
-      .startsWith(query.value.trim().toLocaleLowerCase()),
-  ),
-);
+const visiblePresets = computed(() => searchByName(props.presets, query.value));
 
 function values(names: string[]): MetadataValue[] {
   return names.map((name) => ({ id: name, name }));

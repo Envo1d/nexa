@@ -133,30 +133,47 @@ pub async fn get_viewer_sequence(
 
         let root = root.map(|path| path.to_string_lossy().into_owned());
 
-        let order = super::queries::sort_order(&filters.sort)?;
-
-        let mut query = QueryBuilder::<Sqlite>::new(concat!(
-            "SELECT m.id,m.relative_path,m.kind,m.extension FROM media m ",
-            "JOIN sources s ON s.id=m.source_id WHERE ((s.kind='stage' AND s.path_key=? ",
-            "AND m.availability='present' AND m.library_assignment IS NULL) OR ",
-            "m.needs_distribution=1)",
-        ));
-
-        query.push(super::queries::FILENAME_SEARCH).push(order);
-
-        query
-            .build()
-            .bind(root)
-            .bind(crate::naming::name_key(&search.trim().replace('\\', "/")))
-            .fetch_all(database.pool())
-            .await
-            .map_err(|_| "Cannot read viewer sequence")?
-            .into_iter()
-            .map(ViewerEntry::from_row)
-            .collect()
+        capture_stage_sequence(database.pool(), root, &search, &filters.sort).await?
     };
 
     tracing::debug!(count = entries.len(), "Viewer order captured");
+    Ok(entries)
+}
+
+pub(super) async fn capture_stage_sequence(
+    pool: &SqlitePool,
+    root: Option<String>,
+    search: &str,
+    sort: &str,
+) -> Result<Vec<ViewerEntry>, String> {
+    let order = super::queries::sort_order(sort)?;
+
+    let mut query = QueryBuilder::<Sqlite>::new(concat!(
+        "SELECT m.id,m.relative_path,m.kind,m.extension FROM media m ",
+        "JOIN sources s ON s.id=m.source_id WHERE ((s.kind='stage' AND s.path_key=? ",
+        "AND m.availability='present' AND m.library_assignment IS NULL) OR ",
+        "m.needs_distribution=1)",
+    ));
+
+    query
+        .push(super::queries::FILENAME_SEARCH)
+        .push(super::queries::FILENAME_RANK)
+        .push(order);
+
+    let search = crate::naming::name_key(&search.trim().replace('\\', "/"));
+
+    let entries = query
+        .build()
+        .bind(root)
+        .bind(&search)
+        .bind(&search)
+        .fetch_all(pool)
+        .await
+        .map_err(|_| "Cannot read viewer sequence")?
+        .into_iter()
+        .map(ViewerEntry::from_row)
+        .collect();
+
     Ok(entries)
 }
 

@@ -923,7 +923,7 @@ async fn batch_failure_rolls_back_and_switching_roots_keeps_history() {
 }
 
 #[tokio::test]
-async fn search_matches_literal_unicode_filename_prefixes_independent_of_directories() {
+async fn search_ranks_literal_unicode_filename_prefixes_before_substrings() {
     let (_temp, db, root) = fixture().await;
     let source = activate_source(db.pool(), &root, 1).await.unwrap();
     std::fs::create_dir(root.join("marvel")).unwrap();
@@ -948,13 +948,24 @@ async fn search_matches_literal_unicode_filename_prefixes_independent_of_directo
     let root = Some(root.to_string_lossy().into_owned());
 
     for (search, expected) in [
-        (" M ", vec!["marvel.mp4"]),
-        ("ar", vec![]),
+        (
+            " M ",
+            vec![
+                "marvel.mp4",
+                "100%.mp4",
+                "amber.mp4",
+                "atomic.mp4",
+                "Straße.mp4",
+                "under_score.mp4",
+            ],
+        ),
+        ("marvel", vec!["marvel.mp4"]),
+        ("ar", vec!["marvel.mp4"]),
         ("STRASS", vec!["Straße.mp4"]),
         ("100%", vec!["100%.mp4"]),
         ("under_", vec!["under_score.mp4"]),
-        ("%", vec![]),
-        ("_", vec![]),
+        ("%", vec!["100%.mp4"]),
+        ("_", vec!["under_score.mp4"]),
     ] {
         let page = browse(db.pool(), root.clone(), 0, search, "name-asc")
             .await
@@ -968,6 +979,56 @@ async fn search_matches_literal_unicode_filename_prefixes_independent_of_directo
             expected,
             "{search}"
         );
+    }
+    db.close().await;
+}
+
+#[tokio::test]
+async fn ranked_filename_pages_match_viewer_order() {
+    let (_temp, db, root) = fixture().await;
+    let source = activate_source(db.pool(), &root, 1).await.unwrap();
+    let mut batch = Vec::new();
+    for index in 0..501 {
+        let name = if index == 500 {
+            "needle.mp4".to_string()
+        } else {
+            format!("a-needle {index}.mp4")
+        };
+        batch.push(prepared(&root, &name, 10));
+        if batch.len() == BATCH {
+            save_batch(db.pool(), source, 1, std::mem::take(&mut batch))
+                .await
+                .unwrap();
+        }
+    }
+    save_batch(db.pool(), source, 1, batch).await.unwrap();
+    let root = Some(root.to_string_lossy().into_owned());
+    for sort in ["newest", "older", "name-asc", "name-desc"] {
+        let mut ids = Vec::new();
+        for offset in [0, 500] {
+            let page = browse(db.pool(), root.clone(), offset, "needle", sort)
+                .await
+                .unwrap();
+            assert_eq!(page.total, 501);
+            if offset == 0 {
+                assert_eq!(page.files[0].filename, "needle.mp4");
+            }
+            ids.extend(page.files.into_iter().map(|file| file.id));
+        }
+        let sequence =
+            super::viewing::capture_stage_sequence(db.pool(), root.clone(), "needle", sort)
+                .await
+                .unwrap();
+        let sequence = serde_json::to_value(sequence).unwrap();
+        let viewer_ids: Vec<_> = sequence
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|value| value["id"].as_str().unwrap())
+            .collect();
+        assert_eq!(ids, viewer_ids, "{sort}");
+        let unique: std::collections::HashSet<_> = ids.iter().collect();
+        assert_eq!(unique.len(), 501);
     }
     db.close().await;
 }

@@ -11,6 +11,40 @@ export interface MetadataCatalog {
   characters: { name: string; copyright: string }[];
 }
 
+export function nameSearchRank(name: string, search: string): number {
+  const position = name
+    .toLocaleLowerCase()
+    .indexOf(search.trim().toLocaleLowerCase());
+
+  return position < 0 ? 2 : position === 0 ? 0 : 1;
+}
+
+export function searchByName<T extends { name: string }>(
+  values: readonly T[],
+  search: string,
+): T[] {
+  return values
+    .map((value) => ({ value, rank: nameSearchRank(value.name, search) }))
+    .filter(({ rank }) => rank < 2)
+    .sort((a, b) => a.rank - b.rank)
+    .map(({ value }) => value);
+}
+
+export function metadataSearchRank(names: string[], terms: string[]): number {
+  let rank = 0;
+
+  for (const term of terms) {
+    const termRank = names.reduce(
+      (best, name) => Math.min(best, nameSearchRank(name, term)),
+      2,
+    );
+
+    rank = Math.max(rank, termRank);
+  }
+
+  return rank;
+}
+
 export function normalizeMetadataSearch(search: string): string {
   return search
     .split(";")
@@ -44,7 +78,10 @@ export function metadataSuggestions(
   for (const value of entries) {
     const normalized = value.name.toLocaleLowerCase();
 
-    if (normalized.startsWith(query) && !existing.includes(normalized)) {
+    if (
+      nameSearchRank(value.name, query) < 2 &&
+      !existing.includes(normalized)
+    ) {
       values.set(
         JSON.stringify([value.category, normalized, value.copyright ?? ""]),
         value,
@@ -55,6 +92,7 @@ export function metadataSuggestions(
   return [...values.values()]
     .sort(
       (a, b) =>
+        nameSearchRank(a.name, query) - nameSearchRank(b.name, query) ||
         a.name.localeCompare(b.name) ||
         (a.copyright ?? "").localeCompare(b.copyright ?? ""),
     )

@@ -12,11 +12,11 @@ pub use metadata::{
     __tauri_command_name_set_library_favorite, distribute_files, save_library_metadata,
     save_library_tags, set_library_favorite,
 };
-pub(crate) use queries::apply_metadata_search;
 pub(crate) use queries::viewer_sequence;
 pub use queries::{
     __cmd__get_library_files, __tauri_command_name_get_library_files, get_library_files,
 };
+pub(crate) use queries::{apply_metadata_search, metadata_rank};
 
 use std::path::PathBuf;
 
