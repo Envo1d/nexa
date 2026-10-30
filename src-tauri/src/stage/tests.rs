@@ -985,7 +985,7 @@ async fn batch_failure_rolls_back_and_switching_roots_keeps_history() {
 }
 
 #[tokio::test]
-async fn search_ranks_literal_unicode_filename_prefixes_before_substrings() {
+async fn search_matches_paths_and_ranks_literal_unicode_filename_prefixes_first() {
     let (_temp, db, root) = fixture().await;
     let source = activate_source(db.pool(), &root, 1).await.unwrap();
     std::fs::create_dir(root.join("marvel")).unwrap();
@@ -1021,9 +1021,22 @@ async fn search_ranks_literal_unicode_filename_prefixes_before_substrings() {
                 "under_score.mp4",
             ],
         ),
-        ("marvel", vec!["marvel.mp4"]),
-        ("ar", vec!["marvel.mp4"]),
+        ("marvel", vec!["marvel.mp4", "atomic.mp4"]),
+        ("ar", vec!["atomic.mp4", "marvel.mp4"]),
         ("STRASS", vec!["Straße.mp4"]),
+        ("MARVEL/AT", vec!["atomic.mp4"]),
+        ("marvel\\at", vec!["atomic.mp4"]),
+        (
+            root.as_deref().unwrap(),
+            vec![
+                "100%.mp4",
+                "amber.mp4",
+                "atomic.mp4",
+                "marvel.mp4",
+                "Straße.mp4",
+                "under_score.mp4",
+            ],
+        ),
         ("100%", vec!["100%.mp4"]),
         ("under_", vec!["under_score.mp4"]),
         ("%", vec!["100%.mp4"]),
@@ -1046,15 +1059,17 @@ async fn search_ranks_literal_unicode_filename_prefixes_before_substrings() {
 }
 
 #[tokio::test]
-async fn ranked_filename_pages_match_viewer_order() {
+async fn ranked_path_pages_match_viewer_order() {
     let (_temp, db, root) = fixture().await;
     let source = activate_source(db.pool(), &root, 1).await.unwrap();
+    std::fs::create_dir(root.join("needle-folder")).unwrap();
+
     let mut batch = Vec::new();
     for index in 0..501 {
         let name = if index == 500 {
             "needle.mp4".to_string()
         } else {
-            format!("a-needle {index}.mp4")
+            format!("needle-folder/a-file {index}.mp4")
         };
         batch.push(prepared(&root, &name, 10));
         if batch.len() == BATCH {

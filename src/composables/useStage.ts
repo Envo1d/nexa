@@ -184,10 +184,13 @@ export function useStage() {
     const query = appliedSearch.value.toLocaleLowerCase().replace(/\\/g, "/");
 
     return media.value
-      .filter((item) => nameSearchRank(item.filename, query) < 2)
+      .filter(
+        (item) => nameSearchRank(item.path.replace(/\\/g, "/"), query) < 2,
+      )
       .sort((a, b) => {
         const relevance =
-          nameSearchRank(a.filename, query) - nameSearchRank(b.filename, query);
+          Math.min(nameSearchRank(a.filename, query), 1) -
+          Math.min(nameSearchRank(b.filename, query), 1);
 
         if (relevance) return relevance;
 
