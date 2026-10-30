@@ -11,6 +11,68 @@ use crate::media_paths::checked_action_path;
 use crate::{database::Database, media_metadata::MediaMetadata};
 
 #[tokio::test]
+async fn viewer_information_loads_current_record_and_preserves_character_copyrights() {
+    let (_temp, db, root) = fixture().await;
+    let source = activate_source(db.pool(), &root, 1).await.unwrap();
+
+    save_batch(db.pool(), source, 1, vec![prepared(&root, "photo.bmp", 10)])
+        .await
+        .unwrap();
+
+    let id: i64 = sqlx::query_scalar("SELECT id FROM media")
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+    let initial = super::viewing::viewer_details(db.pool(), id).await.unwrap();
+    assert!(initial.artist.is_none());
+    assert!(initial.video_title.is_none());
+    assert!(initial.characters.is_empty());
+
+    for statement in [
+        "INSERT INTO copyrights(id,name,name_key) VALUES(1,'Series A','series a'),(2,'Series B','series b')",
+        "INSERT INTO artists(id,name,name_key) VALUES(1,'Author','author')",
+        "INSERT INTO characters(id,name,name_key,copyright_id) VALUES(1,'Alice','alice',1),(2,'Alice','alice',2)",
+    ] {
+        sqlx::query(statement).execute(db.pool()).await.unwrap();
+    }
+
+    sqlx::query("UPDATE media SET artist_id=1,width=3840,height=2160 WHERE id=?")
+        .bind(id)
+        .execute(db.pool())
+        .await
+        .unwrap();
+    for character in [1, 2] {
+        sqlx::query("INSERT INTO media_copyrights VALUES(?,?)")
+            .bind(id)
+            .bind(character)
+            .execute(db.pool())
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO media_characters VALUES(?,?,?)")
+            .bind(id)
+            .bind(character)
+            .bind(character)
+            .execute(db.pool())
+            .await
+            .unwrap();
+    }
+
+    let details = super::viewing::viewer_details(db.pool(), id).await.unwrap();
+    assert_eq!(details.artist.as_deref(), Some("Author"));
+    assert_eq!(details.copyrights, ["Series A", "Series B"]);
+    assert_eq!((details.width, details.height), (Some(3840), Some(2160)));
+    assert_eq!(details.characters.len(), 2);
+    assert_eq!(details.characters[0].name, "Alice");
+    assert_eq!(details.characters[0].copyright, "Series A");
+    assert_eq!(details.characters[1].copyright, "Series B");
+    assert!(
+        super::viewing::viewer_details(db.pool(), id + 1)
+            .await
+            .is_err()
+    );
+}
+
+#[tokio::test]
 async fn preview_requests_wait_for_maintenance_and_remain_bounded() {
     use std::{future::Future, task::Context, task::Poll, task::Waker};
 

@@ -24,6 +24,8 @@ import {
   Heart,
   Image,
   Info,
+  Keyboard,
+  ExternalLink,
   LayoutGrid,
   List,
   Menu,
@@ -55,6 +57,8 @@ const props = withDefaults(defineProps<{ name: string; size?: number }>(), {
 
 // Explicit imports preserve the semantic API without bundling the full icon catalogue.
 const icons: Record<string, Component> = {
+  keyboard: Keyboard,
+  external: ExternalLink,
   menu: Menu,
   gallery: Folder,
   heart: Heart,
