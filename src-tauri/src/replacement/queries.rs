@@ -2,7 +2,7 @@
 
 use sqlx::{QueryBuilder, Row, Sqlite, SqlitePool};
 
-use super::{Candidates, SELECT, Source, candidate, id, is_main, is_stage, record, root};
+use super::{Candidates, SELECT_BODY, Source, candidate, id, is_main, is_stage, record, root};
 use crate::{
     config::{AppConfig, ConfigStore},
     database::Database,
@@ -67,7 +67,7 @@ pub(super) async fn candidates(
     search: &str,
     after: i64,
 ) -> Result<Candidates, String> {
-    if !matches!(kind, "image" | "video") || after < 0 || search.len() > 512 {
+    if !matches!(kind, "image" | "video") || after == i64::MIN || search.len() > 512 {
         return Err("Invalid replacement search".into());
     }
 
@@ -80,11 +80,15 @@ pub(super) async fn candidates(
         )
     });
 
-    let mut query = QueryBuilder::<Sqlite>::new(SELECT);
+    // Cursor sign records the relevance group; magnitude remains the media ID.
+    let cursor_rank = i64::from(after < 0);
+    let cursor_id = after.abs();
+
+    let mut query = QueryBuilder::<Sqlite>::new("WITH matches AS (SELECT ");
+    crate::library::metadata_rank(&mut query, search);
+    query.push(" AS search_rank,").push(SELECT_BODY);
     query
-        .push(" WHERE m.id>")
-        .push_bind(after)
-        .push(" AND m.kind=")
+        .push(" WHERE m.id>0 AND m.kind=")
         .push_bind(kind)
         .push(" AND m.availability='present' AND m.needs_distribution=0 AND (m.library_assignment=")
         .push_bind(&library)
@@ -103,12 +107,19 @@ pub(super) async fn candidates(
             .push(")");
     }
     crate::library::apply_metadata_search(&mut query, search);
-    query.push(" ORDER BY m.id LIMIT 51");
+    query
+        .push(") SELECT * FROM matches WHERE search_rank>")
+        .push_bind(cursor_rank)
+        .push(" OR (search_rank=")
+        .push_bind(cursor_rank)
+        .push(" AND id>")
+        .push_bind(cursor_id)
+        .push(") ORDER BY search_rank,id LIMIT 51");
 
     tracing::debug!(
         kind,
         after,
-        search_match = "metadata_prefix",
+        search_match = "metadata_prefix_then_substring",
         "Loading replacement candidates using Main metadata filters"
     );
 
@@ -122,7 +133,16 @@ pub(super) async fn candidates(
     rows.truncate(50);
 
     let next = if more {
-        rows.last().map(|r| r.get::<i64, _>("id").to_string())
+        rows.last().map(|row| {
+            let id = row.get::<i64, _>("id");
+            let cursor = if row.get::<i64, _>("search_rank") == 0 {
+                id
+            } else {
+                -id
+            };
+
+            cursor.to_string()
+        })
     } else {
         None
     };
@@ -145,7 +165,15 @@ pub async fn get_replacement_candidates(
         &config.snapshot()?.settings,
         &kind,
         &search,
-        after.as_deref().map(id).transpose()?.unwrap_or(0),
+        after.as_deref().map(parse_cursor).transpose()?.unwrap_or(0),
     )
     .await
+}
+
+pub(super) fn parse_cursor(value: &str) -> Result<i64, String> {
+    value
+        .parse::<i64>()
+        .ok()
+        .filter(|id| *id != 0 && *id != i64::MIN)
+        .ok_or_else(|| "Invalid replacement cursor".into())
 }

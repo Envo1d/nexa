@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { isNativeData } from "../runtime";
 import { useMediaSelection } from "./useMediaSelection";
 import { createMockMedia } from "../data/mockMedia";
+import { nameSearchRank } from "../utils/metadataSearch";
 
 import type { MediaItem, MediaKind } from "../types/media";
 
@@ -183,8 +184,13 @@ export function useStage() {
     const query = appliedSearch.value.toLocaleLowerCase().replace(/\\/g, "/");
 
     return media.value
-      .filter((item) => item.filename.toLocaleLowerCase().startsWith(query))
+      .filter((item) => nameSearchRank(item.filename, query) < 2)
       .sort((a, b) => {
+        const relevance =
+          nameSearchRank(a.filename, query) - nameSearchRank(b.filename, query);
+
+        if (relevance) return relevance;
+
         if (sortMode.value === "name-asc" || sortMode.value === "name-desc") {
           const order = a.filename.localeCompare(b.filename, "en", {
             numeric: true,

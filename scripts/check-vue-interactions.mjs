@@ -54,22 +54,48 @@ const { useSearchSuggestions } = (
   await loadModule("../src/shared/composables/useSearchSuggestions.ts")
 ).exports;
 
-const { metadataSuggestions } = (
+const { metadataSuggestions, searchByName, metadataSearchRank } = (
   await loadModule("../src/utils/metadataSearch.ts")
 ).exports;
 
-test("metadata suggestions match literal name prefixes and exclude chosen terms", () => {
+test("metadata suggestions rank prefixes before literal substrings and exclude chosen terms", () => {
   const entries = ["atomic", "amber", "marvel", "M_hero", "100%"].map(
     (name) => ({ name, category: "Tag" }),
   );
   const names = (query) =>
     metadataSuggestions(query, entries).map((entry) => entry.name);
 
-  assert.deepEqual(names(" m "), ["M_hero", "marvel"]);
-  assert.deepEqual(names("MARVEL; m"), ["M_hero"]);
-  assert.deepEqual(names("_"), []);
+  assert.deepEqual(names(" m "), ["M_hero", "marvel", "amber", "atomic"]);
+  assert.deepEqual(names("MARVEL; m"), ["M_hero", "amber", "atomic"]);
+  assert.deepEqual(names("_"), ["M_hero"]);
   assert.deepEqual(names("100%"), ["100%"]);
   assert.deepEqual(names(""), []);
+});
+
+test("prefix matches rank before the suggestion limit and ties keep source order", () => {
+  const entries = Array.from({ length: 35 }, (_, index) => ({
+    name: `a-needle ${index}`,
+    category: "Tag",
+  }));
+  entries.push({ name: "Needle last", category: "Tag" });
+  const matches = metadataSuggestions("needle", entries);
+  assert.equal(matches.length, 30);
+  assert.equal(matches[0].name, "Needle last");
+  assert.deepEqual(
+    searchByName(
+      [
+        { name: "a-needle" },
+        { name: "Needle z" },
+        { name: "needle a" },
+        { name: "b-needle" },
+      ],
+      "NEEDLE",
+    ).map((entry) => entry.name),
+    ["Needle z", "needle a", "a-needle", "b-needle"],
+  );
+  assert.equal(metadataSearchRank(["Marvel", "Alice"], ["mar", "al"]), 0);
+  assert.equal(metadataSearchRank(["Marvel", "Malice"], ["mar", "al"]), 1);
+  assert.equal(metadataSearchRank(["Marvel"], ["mar", "missing"]), 2);
 });
 
 function key(key, options = {}) {

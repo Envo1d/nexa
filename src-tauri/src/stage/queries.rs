@@ -40,15 +40,21 @@ pub struct StagePage {
 // instr treats SQL wildcard characters literally and matches the empty query too.
 pub(super) const FILENAME_SEARCH: &str = concat!(
     " AND instr(substr(m.stage_search_key,",
-    "length(rtrim(m.stage_search_key,replace(m.stage_search_key,'/','')))+1),?)=1",
+    "length(rtrim(m.stage_search_key,replace(m.stage_search_key,'/','')))+1),?)>0",
+);
+
+pub(super) const FILENAME_RANK: &str = concat!(
+    " ORDER BY CASE WHEN instr(substr(m.stage_search_key,",
+    "length(rtrim(m.stage_search_key,replace(m.stage_search_key,'/','')))+1),?)=1 ",
+    "THEN 0 ELSE 1 END,",
 );
 
 pub(super) fn sort_order(sort: &str) -> Result<&'static str, String> {
     match sort {
-        "newest" => Ok(" ORDER BY m.file_modified_at DESC,m.id ASC"),
-        "older" => Ok(" ORDER BY m.file_modified_at ASC,m.id ASC"),
-        "name-asc" => Ok(" ORDER BY m.relative_path COLLATE NEXA_FILENAME ASC,m.id ASC"),
-        "name-desc" => Ok(" ORDER BY m.relative_path COLLATE NEXA_FILENAME DESC,m.id ASC"),
+        "newest" => Ok("m.file_modified_at DESC,m.id ASC"),
+        "older" => Ok("m.file_modified_at ASC,m.id ASC"),
+        "name-asc" => Ok("m.relative_path COLLATE NEXA_FILENAME ASC,m.id ASC"),
+        "name-desc" => Ok("m.relative_path COLLATE NEXA_FILENAME DESC,m.id ASC"),
         _ => Err("Invalid Stage sorting mode".into()),
     }
 }
@@ -126,13 +132,15 @@ pub(crate) async fn browse(
 
     query
         .push(FILENAME_SEARCH)
+        .push(FILENAME_RANK)
         .push(order)
         .push(" LIMIT 500 OFFSET ?");
 
     let rows = query
         .build()
         .bind(root)
-        .bind(search)
+        .bind(&search)
+        .bind(&search)
         .bind(offset)
         .fetch_all(pool)
         .await
@@ -159,7 +167,7 @@ pub async fn get_stage_files(
     });
 
     tracing::debug!(
-        search_match = "filename_prefix",
+        search_match = "filename_prefix_then_substring",
         "Loading sorted Stage page"
     );
 

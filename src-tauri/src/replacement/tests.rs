@@ -632,6 +632,60 @@ async fn picker_searches_metadata_and_pages_full_main_independent_of_stage() {
 }
 
 #[tokio::test]
+async fn ranked_picker_cursor_crosses_groups_without_skipping_lower_ids() {
+    let f = fixture(false).await;
+    sqlx::raw_sql("INSERT INTO tags VALUES(2,'atomic','atomic'),(3,'marvel','marvel');")
+        .execute(f.db.pool())
+        .await
+        .unwrap();
+    let mut tx = f.db.pool().begin().await.unwrap();
+    for id in 3..=122i64 {
+        let path = format!("candidate-{id}.mp4");
+        sqlx::query(concat!(
+            "INSERT INTO media(id,source_id,relative_path,path_key,original_filename,kind,",
+            "extension,last_seen_at,created_at,updated_at) VALUES(?,1,?,?,?,'video','mp4',1,1,1)",
+        ))
+        .bind(id)
+        .bind(&path)
+        .bind(&path)
+        .bind(&path)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+        sqlx::query("INSERT INTO media_tags VALUES(?,?)")
+            .bind(id)
+            .bind(if id < 63 { 2 } else { 3 })
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+    }
+    tx.commit().await.unwrap();
+
+    let mut cursor = 0;
+    let mut ids = Vec::new();
+    loop {
+        let page = candidates(f.db.pool(), &f.settings, "video", "m", cursor)
+            .await
+            .unwrap();
+        ids.extend(
+            page.files
+                .into_iter()
+                .map(|entry| entry.file.id.parse::<i64>().unwrap()),
+        );
+        let Some(next) = page.next else {
+            break;
+        };
+        cursor = super::queries::parse_cursor(&next).unwrap();
+    }
+    assert_eq!(ids, (63..=122).chain(3..=62).collect::<Vec<_>>());
+    assert!(cursor < 0);
+    for invalid in ["0", "-9223372036854775808", "bad"] {
+        assert!(super::queries::parse_cursor(invalid).is_err());
+    }
+    f.db.close().await;
+}
+
+#[tokio::test]
 async fn replacement_metadata_search_matches_main_and_requires_all_terms_on_one_file() {
     let f = fixture(false).await;
     sqlx::raw_sql(concat!(
@@ -652,7 +706,7 @@ async fn replacement_metadata_search_matches_main_and_requires_all_terms_on_one_
         ("Artist;Artist; ;Character;", 1),
         ("Artist; Other", 0),
         ("Art", 2),
-        ("rt", 0),
+        ("rt", 2),
         ("Art; Char; Ke; Cop", 1),
         ("%", 0),
         ("_", 0),

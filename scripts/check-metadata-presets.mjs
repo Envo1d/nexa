@@ -5,6 +5,21 @@ import vm from "node:vm";
 import { computed, nextTick, reactive, ref, watch } from "vue";
 import { ModuleKind, transpileModule } from "typescript";
 
+const searchModule = { exports: {} };
+
+vm.runInNewContext(
+  transpileModule(
+    await readFile(
+      new URL("../src/utils/metadataSearch.ts", import.meta.url),
+      "utf8",
+    ),
+    {
+      compilerOptions: { module: ModuleKind.CommonJS },
+    },
+  ).outputText,
+  searchModule,
+);
+
 // Exercise real script-setup operations with IPC doubles, without a browser.
 async function script(file, expose) {
   const source = await readFile(
@@ -61,6 +76,8 @@ function fixture(code, props, invoke = async () => []) {
       if (id === "@tauri-apps/api/core") return { isTauri: () => true, invoke };
 
       if (id.endsWith("runtime")) return { isNativeData: () => true };
+
+      if (id.endsWith("metadataSearch")) return searchModule.exports;
 
       if (id.endsWith("presentation")) return { translateUi: (value) => value };
 
@@ -362,7 +379,7 @@ test("preset search filters names and Escape dismisses only an open picker", asy
   );
 
   state.query.value = "gular";
-  assert.equal(state.visiblePresets.value.length, 0);
+  assert.equal(state.visiblePresets.value.length, 1);
 
   let stopped = 0;
   const event = {

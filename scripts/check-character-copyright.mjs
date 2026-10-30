@@ -12,6 +12,21 @@ const keys = {
   character: "characters",
 };
 
+const searchModule = { exports: {} };
+
+vm.runInNewContext(
+  transpileModule(
+    await readFile(
+      new URL("../src/utils/metadataSearch.ts", import.meta.url),
+      "utf8",
+    ),
+    {
+      compilerOptions: { module: ModuleKind.CommonJS },
+    },
+  ).outputText,
+  searchModule,
+);
+
 async function compile(path, expose, component = false) {
   const source = await readFile(new URL(path, import.meta.url), "utf8");
 
@@ -46,7 +61,7 @@ const inputCode = await compile(
   true,
 );
 
-test("taxonomy and metadata inputs match name prefixes without matching parent copyrights", () => {
+test("taxonomy and metadata inputs rank prefixes before substrings without matching parent copyrights", () => {
   const names = ["atomic", "amber", "marvel", "M_hero"];
   const characters = names.map((name) => ({
     name,
@@ -60,7 +75,7 @@ test("taxonomy and metadata inputs match name prefixes without matching parent c
   panel.search.value = " M ";
   assert.deepEqual(
     Array.from(panel.entries.value, (entry) => entry.name),
-    ["marvel", "M_hero"],
+    ["marvel", "M_hero", "atomic", "amber"],
   );
 
   const input = run(inputCode, false, undefined, {
@@ -71,10 +86,10 @@ test("taxonomy and metadata inputs match name prefixes without matching parent c
   input.query.value = "m";
   assert.deepEqual(
     Array.from(input.matches.value, (entry) => entry.name),
-    ["M_hero"],
+    ["M_hero", "atomic", "amber"],
   );
   input.query.value = "_";
-  assert.equal(input.matches.value.length, 0);
+  assert.equal(input.matches.value.length, 1);
 });
 
 function run(code, native, invoke = async () => ({}), props = {}) {
@@ -103,6 +118,8 @@ function run(code, native, invoke = async () => ({}), props = {}) {
         return { isTauri: () => native, invoke };
 
       if (id.endsWith("runtime")) return { isNativeData: () => native };
+
+      if (id.endsWith("metadataSearch")) return searchModule.exports;
 
       if (id.endsWith("taxonomy")) return { categoryKey: keys };
 

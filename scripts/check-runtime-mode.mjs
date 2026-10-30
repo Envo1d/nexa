@@ -84,6 +84,59 @@ for (const [name, native, demo, expected] of [
 }
 
 for (const native of [false, true]) {
+  test(`${native ? "native" : "browser"} demo ranks searched metadata and filenames before the selected sort`, () => {
+    const f = fixture(native, true);
+    const scope = vue.effectScope();
+    const library = scope.run(() =>
+      f.load("composables/useLibrary.ts").useLibrary(),
+    );
+    const stage = scope.run(() => f.load("composables/useStage.ts").useStage());
+    try {
+      const base = {
+        ...library.media.value[0],
+        copyrights: [],
+        artists: [],
+        artist: "",
+        characters: [],
+        tags: [],
+      };
+      library.media.value = [
+        { ...base, id: "contains", tags: ["atomic"], modifiedAt: 3 },
+        { ...base, id: "prefix", tags: ["Marvel"], modifiedAt: 1 },
+        { ...base, id: "absent", tags: ["Other"], modifiedAt: 2 },
+      ];
+      library.search.value = "m";
+      library.commitSearch();
+      stage.media.value = [
+        { ...base, id: "contains", filename: "a needle.mp4", modifiedAt: 3 },
+        { ...base, id: "prefix", filename: "Needle.mp4", modifiedAt: 1 },
+        {
+          ...base,
+          id: "absent",
+          filename: "Other.mp4",
+          path: "C:/needle/Other.mp4",
+          modifiedAt: 2,
+        },
+      ];
+      stage.appliedSearch.value = "needle";
+      for (const sort of ["newest", "older", "name-asc", "name-desc"]) {
+        library.sortMode.value = sort;
+        stage.sortMode.value = sort;
+        assert.deepEqual(
+          Array.from(library.results.value, (item) => item.id),
+          ["prefix", "contains"],
+        );
+        assert.deepEqual(
+          Array.from(stage.results.value, (item) => item.id),
+          ["prefix", "contains"],
+        );
+      }
+      assert.equal(f.calls.length, 0);
+    } finally {
+      scope.stop();
+    }
+  });
+
   test(`${native ? "native" : "browser"} demo loads real mock libraries and saves annotations without IPC`, async () => {
     const f = fixture(native, true);
     const scope = vue.effectScope();

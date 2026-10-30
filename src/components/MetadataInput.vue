@@ -11,6 +11,7 @@ import { I18nT } from "vue-i18n";
 
 import { translateUi as ui } from "../i18n/presentation";
 import AppIcon from "./AppIcon.vue";
+import { searchByName } from "../utils/metadataSearch";
 
 export interface MetadataValue {
   id: string;
@@ -68,14 +69,13 @@ const matches = computed(() => {
 
   if (!name) return [];
 
-  return props.options
-    .filter(
-      (value) =>
-        (props.textInput ||
-          !props.modelValue.some((selected) => selected.id === value.id)) &&
-        value.name.toLocaleLowerCase().startsWith(name),
-    )
-    .slice(0, 30);
+  const options = props.options.filter(
+    (value) =>
+      props.textInput ||
+      !props.modelValue.some((selected) => selected.id === value.id),
+  );
+
+  return searchByName(options, name).slice(0, 30);
 });
 
 const showSuggestions = computed(
