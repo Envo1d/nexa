@@ -35,13 +35,9 @@ pub struct StagePage {
     pub(crate) total: i64,
 }
 
-// The key is a normalized full path. Trimming its non-slash characters leaves
-// the parent directory including the final slash; search only the remaining name.
-// instr treats SQL wildcard characters literally and matches the empty query too.
-pub(super) const FILENAME_SEARCH: &str = concat!(
-    " AND instr(substr(m.stage_search_key,",
-    "length(rtrim(m.stage_search_key,replace(m.stage_search_key,'/','')))+1),?)>0",
-);
+// Match the normalized full path; instr treats SQL wildcard characters literally
+// and matches the empty query too. Filename prefixes retain relevance priority.
+pub(super) const PATH_SEARCH: &str = " AND instr(m.stage_search_key,?)>0";
 
 pub(super) const FILENAME_RANK: &str = concat!(
     " ORDER BY CASE WHEN instr(substr(m.stage_search_key,",
@@ -113,7 +109,7 @@ pub(crate) async fn browse(
         "((s.kind='stage' AND s.path_key=? AND m.availability='present' AND ",
         "m.library_assignment IS NULL) OR m.needs_distribution=1)",
     ));
-    count_query.push(FILENAME_SEARCH);
+    count_query.push(PATH_SEARCH);
 
     let total = count_query
         .build_query_scalar()
@@ -131,7 +127,7 @@ pub(crate) async fn browse(
     ));
 
     query
-        .push(FILENAME_SEARCH)
+        .push(PATH_SEARCH)
         .push(FILENAME_RANK)
         .push(order)
         .push(" LIMIT 500 OFFSET ?");
@@ -167,7 +163,7 @@ pub async fn get_stage_files(
     });
 
     tracing::debug!(
-        search_match = "filename_prefix_then_substring",
+        search_match = "filename_prefix_then_path_substring",
         "Loading sorted Stage page"
     );
 

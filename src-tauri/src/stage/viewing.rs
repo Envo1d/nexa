@@ -222,7 +222,7 @@ pub(super) async fn capture_stage_sequence(
     ));
 
     query
-        .push(super::queries::FILENAME_SEARCH)
+        .push(super::queries::PATH_SEARCH)
         .push(super::queries::FILENAME_RANK)
         .push(order);
 
