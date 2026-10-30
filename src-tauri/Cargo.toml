@@ -1,6 +1,6 @@
 [package]
 name = "nexa"
-version = "2.12.3"
+version = "2.13.0"
 description = "A Tauri App"
 authors = ["Envo1d"]
 edition = "2024"

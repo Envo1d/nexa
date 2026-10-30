@@ -86,6 +86,72 @@ pub struct ViewerSource {
     favorite: bool,
     tags: Vec<String>,
     fps: Option<f64>,
+    details: ViewerDetails,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct ViewerDetails {
+    pub(super) video_title: Option<String>,
+    pub(super) artist: Option<String>,
+    pub(super) copyrights: Vec<String>,
+    pub(super) characters: Vec<ViewerCharacter>,
+    pub(super) width: Option<i64>,
+    pub(super) height: Option<i64>,
+}
+
+#[derive(Serialize)]
+pub(super) struct ViewerCharacter {
+    pub(super) name: String,
+    pub(super) copyright: String,
+}
+
+pub(super) async fn viewer_details(pool: &SqlitePool, id: i64) -> Result<ViewerDetails, String> {
+    let row = sqlx::query(concat!(
+        "SELECT m.width,m.height,v.title,a.name artist FROM media m ",
+        "LEFT JOIN video_metadata v ON v.media_id=m.id ",
+        "LEFT JOIN artists a ON a.id=m.artist_id WHERE m.id=?",
+    ))
+    .bind(id)
+    .fetch_one(pool)
+    .await
+    .map_err(|_| "Cannot read viewer information")?;
+
+    let copyrights = sqlx::query_scalar(concat!(
+        "SELECT c.name FROM copyrights c ",
+        "JOIN media_copyrights mc ON mc.copyright_id=c.id ",
+        "WHERE mc.media_id=? ORDER BY c.name_key,c.id",
+    ))
+    .bind(id)
+    .fetch_all(pool)
+    .await
+    .map_err(|_| "Cannot read viewer copyrights")?;
+
+    let characters = sqlx::query(concat!(
+        "SELECT c.name,p.name copyright FROM characters c ",
+        "JOIN copyrights p ON p.id=c.copyright_id ",
+        "JOIN media_characters mc ON mc.character_id=c.id ",
+        "WHERE mc.media_id=? ORDER BY c.name_key,c.id",
+    ))
+    .bind(id)
+    .fetch_all(pool)
+    .await
+    .map_err(|_| "Cannot read viewer characters")?
+    .into_iter()
+    .map(|row| ViewerCharacter {
+        name: row.get("name"),
+        copyright: row.get("copyright"),
+    })
+    .collect();
+
+    Ok(ViewerDetails {
+        video_title: row.get("title"),
+        artist: row.get("artist"),
+        copyrights,
+        characters,
+        width: row.get("width"),
+        height: row.get("height"),
+    })
 }
 
 #[derive(Serialize)]
@@ -265,6 +331,8 @@ pub async fn get_viewer_source(
     .await
     .map_err(|_| "Cannot read tags")?;
 
+    let details = viewer_details(database.pool(), id).await?;
+
     // Authorize only this validated file, never its directory or a frontend path.
     app.asset_protocol_scope()
         .allow_file(&path)
@@ -279,6 +347,7 @@ pub async fn get_viewer_source(
         favorite,
         tags,
         fps,
+        details,
     })
 }
 

@@ -656,10 +656,15 @@ defineExpose({ stop, keyboard });
   object-fit: contain;
 }
 .video-toolbar {
-  flex: none;
-  padding: 12px 16px;
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(760px, calc(100% - 144px));
+  padding: 12px 18px;
   background: var(--surface);
-  border-top: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
+  border-radius: 24px;
 }
 .video-seek {
   display: block;
@@ -812,6 +817,9 @@ defineExpose({ stop, keyboard });
 .nexa-video-player:fullscreen .video-toolbar {
   position: absolute;
   inset: auto 0 0;
+  transform: none;
+  width: auto;
+  border-radius: 0;
   visibility: hidden;
   pointer-events: none;
 }
