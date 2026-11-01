@@ -9,7 +9,7 @@ import {
   chooseMetadataSuggestion,
   metadataSuggestions,
   normalizeMetadataSearch,
-  metadataSearchRank,
+  matchesMetadataSearch,
   type MetadataSuggestion,
 } from "../utils/metadataSearch";
 
@@ -197,8 +197,8 @@ export function useLibrary() {
       .map((value) => value.trim().toLocaleLowerCase())
       .filter(Boolean);
 
-    const rank = (item: MediaItem) =>
-      metadataSearchRank(
+    const matchesSearch = (item: MediaItem) =>
+      matchesMetadataSearch(
         [
           ...item.copyrights,
           ...(item.artists ?? [item.artist]),
@@ -213,13 +213,9 @@ export function useLibrary() {
         (item) =>
           (kind.value === "all" || item.kind === kind.value) &&
           (!(taggedOnly.value || hideUntagged.value) || item.tags.length > 0) &&
-          rank(item) < 2,
+          matchesSearch(item),
       )
       .sort((a, b) => {
-        const relevance = rank(a) - rank(b);
-
-        if (relevance) return relevance;
-
         if (sortMode.value === "name-asc" || sortMode.value === "name-desc") {
           const order = a.filename.localeCompare(b.filename, "en", {
             numeric: true,

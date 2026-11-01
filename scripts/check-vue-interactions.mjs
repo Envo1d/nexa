@@ -54,7 +54,7 @@ const { useSearchSuggestions } = (
   await loadModule("../src/shared/composables/useSearchSuggestions.ts")
 ).exports;
 
-const { metadataSuggestions, searchByName, metadataSearchRank } = (
+const { metadataSuggestions, searchByName, matchesMetadataSearch } = (
   await loadModule("../src/utils/metadataSearch.ts")
 ).exports;
 
@@ -93,9 +93,17 @@ test("prefix matches rank before the suggestion limit and ties keep source order
     ).map((entry) => entry.name),
     ["Needle z", "needle a", "a-needle", "b-needle"],
   );
-  assert.equal(metadataSearchRank(["Marvel", "Alice"], ["mar", "al"]), 0);
-  assert.equal(metadataSearchRank(["Marvel", "Malice"], ["mar", "al"]), 1);
-  assert.equal(metadataSearchRank(["Marvel"], ["mar", "missing"]), 2);
+});
+
+test("library metadata requires every full name while suggestions retain inclusions", () => {
+  assert.equal(matchesMetadataSearch(["Edi"], ["EDI"]), true);
+  assert.equal(matchesMetadataSearch(["Meredith Stout"], ["Edi"]), false);
+  assert.equal(matchesMetadataSearch(["Edi extra"], ["Edi"]), false);
+  assert.equal(matchesMetadataSearch(["Edi", "Marvel"], ["edi", "marvel"]), true);
+  assert.equal(matchesMetadataSearch(["Edi", "Marvel"], ["edi", "mar"]), false);
+  assert.equal(matchesMetadataSearch(["Cafe\u0301", "100%"], ["CAFÉ", "100%"]), true);
+  assert.equal(matchesMetadataSearch(["100%"], ["%"]), false);
+  assert.equal(matchesMetadataSearch(["Edi"], []), true);
 });
 
 function key(key, options = {}) {
