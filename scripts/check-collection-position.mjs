@@ -45,7 +45,7 @@ async function collection(options = {}) {
   source = source.replace(/import .* from ".*?";/g, (line) =>
     line.includes('from "file:') ? line : "",
   );
-  source = `const events = []; const defineProps = () => globalThis.__collectionProps; const defineEmits = () => (...args) => events.push(args);\n${source}\nexport { viewport, loaded, scrollTop, updateScroll, visibleItems, rowHeight, columns, mounted, unmounting, events };`;
+  source = `const events = []; const defineProps = () => globalThis.__collectionProps; const defineEmits = () => (...args) => events.push(args);\n${source}\nexport { viewport, loaded, scrollTop, updateScroll, visibleItems, rowHeight, columns, width, cardWidth, gap, gridPadding, mounted, unmounting, events };`;
   const code = transpileModule(source, {
     compilerOptions: { module: ModuleKind.ESNext },
   }).outputText;
@@ -344,6 +344,46 @@ test("grid refresh and insertion of a complete row preserve the visible anchor",
 
     assert.ok(Math.abs(f.viewport.scrollTop - (height * 41 + 7)) < 0.001);
     assert.ok(f.state.visibleItems.value.length > 0);
+  } finally {
+    f.scope.stop();
+  }
+});
+
+test("responsive grid fills available width and preserves the visible anchor on resize", async () => {
+  const f = await collection({ mode: "grid" });
+
+  try {
+    f.viewport.scrollTop = 0;
+    f.state.scrollTop.value = 0;
+    f.state.width.value = 1000;
+
+    await settle();
+
+    for (const nextWidth of [1050, 820, 1400, 650]) {
+      const previousColumns = f.state.columns.value;
+      const previousHeight = f.state.rowHeight.value;
+      f.state.loaded.value = 250;
+      f.viewport.scrollTop = previousHeight * 10.25;
+      f.state.updateScroll();
+      const anchor = 10 * previousColumns;
+      f.state.width.value = nextWidth;
+
+      await settle();
+
+      const count = f.state.columns.value;
+      const occupiedWidth =
+        count * f.state.cardWidth.value + (count - 1) * f.state.gap.value;
+      assert.ok(
+        Math.abs(occupiedWidth + f.state.gridPadding.value - nextWidth) < 0.001,
+      );
+      assert.ok(
+        Math.abs(
+          f.viewport.scrollTop / f.state.rowHeight.value -
+            (Math.floor(anchor / count) + 0.25),
+        ) < 0.001,
+      );
+      assert.ok(f.state.visibleItems.value.length > 0);
+    }
   } finally {
     f.scope.stop();
   }

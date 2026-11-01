@@ -795,5 +795,18 @@
   "catalogConcurrentChange": "The catalog changed while saving the safety backup. Retry restoration.",
   "catalogDestinationError": "The destination already exists or cannot be written. Choose a new filename.",
   "catalogSizeLimit": "Catalog files are limited to 256 MiB.",
-  "catalogInvalidJson": "Invalid catalog backup JSON."
+  "catalogInvalidJson": "Invalid catalog backup JSON.",
+  "frequentTags": "Frequent",
+  "allTags": "All",
+  "tagDisplay": "Tag display",
+  "findDuplicates": "Find duplicates",
+  "duplicatesDemoNotice": "Duplicate search is available in the production application with indexed folders.",
+  "cardActions": "Actions for {filename}",
+  "stageQueue": "Incoming queue",
+  "stageQueueFiles": "files awaiting distribution",
+  "stageQueueHint": "Select files to assign metadata and move them into your library.",
+  "stageSelection": "Stage selection actions",
+  "stageSelectionHint": "Select files to distribute",
+  "clearSelection": "Clear selection",
+  "stageDistributeSelected": "Distribute selected ({count})"
 }

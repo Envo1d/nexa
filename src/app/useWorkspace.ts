@@ -285,9 +285,11 @@ export function useWorkspace(elements: WorkspaceElements) {
     context.value = null;
   });
 
-  const displayedTags = computed(() =>
-    showAllTags.value ? tags.value : tags.value.slice(0, 8),
-  );
+  const displayedTags = computed(() => {
+    if (!showAllTags.value) return tags.value.slice(0, 8);
+
+    return [...tags.value].sort((a, b) => a.name.localeCompare(b.name));
+  });
 
   const typeOptions = computed<
     {

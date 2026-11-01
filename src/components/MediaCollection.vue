@@ -70,7 +70,7 @@ const showBackToTop = computed(
 const loaded = ref(savedPosition?.loaded ?? 36);
 const remSize = ref(savedPosition?.remSize ?? 13);
 
-const cardWidth = computed(() => 17.5 * remSize.value);
+const minimumCardWidth = computed(() => 17.5 * remSize.value);
 
 const gap = computed(() => remSize.value);
 
@@ -82,15 +82,23 @@ const columns = computed(() =>
         1,
         Math.floor(
           (width.value - gridPadding.value + gap.value) /
-            (cardWidth.value + gap.value),
+            (minimumCardWidth.value + gap.value),
         ),
       )
     : 1,
 );
 
+const cardWidth = computed(() =>
+  Math.max(
+    0,
+    (width.value - gridPadding.value - (columns.value - 1) * gap.value) /
+      columns.value,
+  ),
+);
+
 const rowHeight = computed(() =>
   props.mode === "grid"
-    ? ((cardWidth.value - 2) * 9) / 16 + 6.5 * remSize.value + 2 + gap.value
+    ? ((cardWidth.value - 2) * 9) / 16 + 5.75 * remSize.value + 2 + gap.value
     : 88,
 );
 
@@ -333,20 +341,30 @@ function scrollToTop() {
   });
 }
 
-watch(columns, async (count, previous) => {
-  if (props.mode !== "grid" || count === previous) return;
+watch(
+  () => [props.mode, columns.value, rowHeight.value] as const,
+  async (
+    [mode, count, height],
+    [previousMode, previousCount, previousHeight],
+  ) => {
+    if (mode !== "grid" || mode !== previousMode) return;
 
-  cancelScrollFrame();
+    endSelection();
+    cancelScrollFrame();
 
-  const firstItem = Math.floor(scrollTop.value / rowHeight.value) * previous;
+    const top = viewport.value?.scrollTop ?? scrollTop.value;
+    const firstItem = Math.floor(top / previousHeight) * previousCount;
+    const rowOffset = (top % previousHeight) / previousHeight;
 
-  await nextTick();
+    await nextTick();
 
-  if (!viewport.value) return;
+    if (!viewport.value) return;
 
-  viewport.value.scrollTop = Math.floor(firstItem / count) * rowHeight.value;
-  updateScroll();
-});
+    viewport.value.scrollTop =
+      (Math.floor(firstItem / count) + rowOffset) * height;
+    updateScroll();
+  },
+);
 
 let resetItems = false;
 
@@ -489,7 +507,13 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="collection-panel" :aria-label="t('collection')">
-    <header class="collection-heading">
+    <header v-if="$slots.toolbar" class="collection-toolbar">
+      <h1 class="sr-only">
+        {{ heading }} — {{ t("filesCount", { count: totalCount }) }}
+      </h1>
+      <slot name="toolbar" />
+    </header>
+    <header v-else class="collection-heading">
       <div>
         <h1>{{ heading }}</h1>
         <span>{{ t("filesCount", { count: totalCount }) }}</span>
@@ -530,6 +554,7 @@ onBeforeUnmount(() => {
         <AppIcon name="info" :size="20" />
       </button>
     </header>
+    <slot name="selection" />
     <div class="collection-viewport">
       <div
         ref="viewport"
@@ -555,7 +580,9 @@ onBeforeUnmount(() => {
               transform: `translateY(${startRow * rowHeight}px)`,
               gridAutoRows: `${rowHeight - gap}px`,
               gridTemplateColumns:
-                mode === 'grid' ? `repeat(${columns}, 17.5rem)` : undefined,
+                mode === 'grid'
+                  ? `repeat(${columns}, ${cardWidth}px)`
+                  : undefined,
             }"
           >
             <MediaCard
@@ -632,20 +659,12 @@ onBeforeUnmount(() => {
         <AppIcon name="up" :size="20" />
       </button>
     </div>
-    <footer class="collection-footer">
-      <span>{{
-        t("loadedCount", { loaded: loadedCount, total: totalCount })
-      }}</span>
-      <div class="load-track">
-        <span
-          :style="{
-            width: `${totalCount ? (loadedCount / totalCount) * 100 : 0}%`,
-          }"
-        ></span>
-      </div>
-      <span v-if="loadedCount && loadedCount === totalCount" class="load-done"
-        ><AppIcon name="check" :size="14" />{{ t("allLoaded") }}</span
-      >
-    </footer>
+
+    <p v-if="loading || error" class="collection-status" role="status">
+      {{ error ? ui(error) : t("readingFiles") }}
+      <button v-if="error" class="text-button" @click="emit('retry')">
+        {{ t("retry") }}
+      </button>
+    </p>
   </section>
 </template>

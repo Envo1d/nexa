@@ -7,7 +7,7 @@ import { translateUi as ui } from "./i18n/presentation";
 import AppIcon from "./components/AppIcon.vue";
 import ToggleSwitch from "./components/ToggleSwitch.vue";
 import ToastNotifications from "./components/ToastNotifications.vue";
-import SortSelect from "./components/SortSelect.vue";
+import CollectionControls from "./components/CollectionControls.vue";
 import MediaCollection from "./components/MediaCollection.vue";
 import MediaViewer from "./components/MediaViewer.vue";
 import MetadataInput from "./components/MetadataInput.vue";
@@ -109,7 +109,6 @@ const {
   maximized,
   systemWindowCorners,
   displayedTags,
-  typeOptions,
   notify,
   navigate,
   fileActionBusy,
@@ -150,6 +149,23 @@ const tagOptions = computed(() =>
     )
     .map((name) => ({ id: name.toLocaleLowerCase(), name })),
 );
+
+const maxTagCount = computed(() =>
+  tags.value.reduce((maximum, tag) => Math.max(maximum, tag.count), 0),
+);
+
+function openContentDuplicates() {
+  if (isNativeData()) {
+    contentDuplicatesOpen.value = true;
+    return;
+  }
+
+  notify(t("duplicatesDemoNotice"));
+}
+function resetStageFilters() {
+  stage.clearSearch();
+  stage.kind.value = "all";
+}
 </script>
 
 <template>
@@ -193,25 +209,6 @@ const tagOptions = computed(() =>
         @pointerdown="startDrag"
         @dblclick="windowAction('maximize')"
       ></div>
-      <div class="layout-toggle" :aria-label="t('layout')">
-        <button
-          :class="{ active: mode === 'grid' }"
-          :aria-pressed="mode === 'grid'"
-          :aria-label="t('grid')"
-          :disabled="view === 'settings' || view === 'tags'"
-          @click="mode = 'grid'"
-        >
-          <AppIcon name="grid" :size="17" /></button
-        ><button
-          :class="{ active: mode === 'list' }"
-          :aria-pressed="mode === 'list'"
-          :aria-label="t('list')"
-          :disabled="view === 'settings' || view === 'tags'"
-          @click="mode = 'list'"
-        >
-          <AppIcon name="list" :size="19" />
-        </button>
-      </div>
       <div class="window-controls">
         <button :aria-label="t('minimize')" @click="windowAction('minimize')">
           <AppIcon name="minimize" :size="17" /></button
@@ -310,12 +307,107 @@ const tagOptions = computed(() =>
           :aria-label="t('libraryFilters')"
         >
           <header class="panel-heading">
-            <h2>{{ t("filters") }}</h2>
+            <h2>{{ t("tags") }}</h2>
             <span v-if="activeFilterCount" class="filter-count">{{
               activeFilterCount
             }}</span>
           </header>
           <div class="filters-scroll">
+            <section class="filter-section tag-filter-section">
+              <div class="tag-view-toggle" :aria-label="t('tagDisplay')">
+                <button
+                  :class="{ active: !showAllTags }"
+                  :aria-pressed="!showAllTags"
+                  @click="showAllTags = false"
+                >
+                  {{ t("frequentTags") }}
+                </button>
+                <button
+                  :class="{ active: showAllTags }"
+                  :aria-pressed="showAllTags"
+                  @click="showAllTags = true"
+                >
+                  {{ t("allTags") }}
+                </button>
+              </div>
+              <div
+                class="filter-tags"
+                tabindex="0"
+                :aria-label="t('filterTags')"
+              >
+                <button
+                  v-for="tag in displayedTags"
+                  :key="tag.name"
+                  class="filter-tag"
+                  @click="library.addSearch(tag.name)"
+                >
+                  <span class="filter-tag-name">{{ tag.name }}</span>
+                  <span class="tag-usage" aria-hidden="true"
+                    ><span
+                      :style="{
+                        width:
+                          (maxTagCount ? (tag.count / maxTagCount) * 100 : 0) +
+                          '%',
+                      }"
+                    ></span
+                  ></span>
+                  <small>{{ tag.count }}</small>
+                </button>
+              </div>
+            </section>
+            <section class="filter-section additional-section">
+              <h3>{{ t("additional") }}</h3>
+              <ToggleSwitch v-model="taggedOnly">{{
+                t("taggedOnly")
+              }}</ToggleSwitch
+              ><ToggleSwitch v-model="hideUntagged">{{
+                t("hideUntagged")
+              }}</ToggleSwitch>
+              <ToggleSwitch v-model="showPreviews">{{
+                t("showPreviews")
+              }}</ToggleSwitch>
+            </section>
+          </div>
+          <div class="filter-reset">
+            <button class="secondary-button" @click="library.reset()">
+              <AppIcon name="reset" :size="16" />{{ t("resetFilters") }}
+            </button>
+            <button class="secondary-button" @click="openContentDuplicates">
+              <AppIcon name="copy" :size="16" />{{ t("findDuplicates") }}
+            </button>
+          </div>
+        </aside>
+        <MediaCollection
+          class="main-collection"
+          :items="results"
+          :position="mainPosition"
+          :collection-key="library.collectionKey.value"
+          :native="isNativeData()"
+          :total="isNativeData() ? library.total.value : undefined"
+          :has-more="library.hasMore.value"
+          :loading="library.loading.value"
+          :error="library.error.value"
+          :show-previews="showPreviews"
+          :mode="mode"
+          :selected-id="selectedId"
+          :selected-ids="library.selectedIds.value"
+          :details-open="detailsOpen"
+          :heading="heading"
+          :filtered="activeFilterCount > 0"
+          @load-more="library.loadMore"
+          @save-position="mainPosition = $event"
+          @retry="library.refresh()"
+          @select="library.select"
+          @open="previewAction('Open file', $event)"
+          @toggle-details="detailsOpen ? closeDetails() : (detailsOpen = true)"
+          @selection-start="library.beginSelection"
+          @select-many="library.selectMany($event, false)"
+          @selection-end="library.selectMany"
+          @favorite="library.toggleFavorite"
+          @context="openContext"
+          @reset="library.reset()"
+        >
+          <template #toolbar>
             <div class="metadata-search">
               <div class="search-box">
                 <AppIcon name="search" :size="17" /><input
@@ -378,113 +470,18 @@ const tagOptions = computed(() =>
                 </button>
               </div>
             </div>
-            <section class="filter-section type-section">
-              <h3>{{ t("fileType") }}</h3>
-              <button
-                v-for="option in typeOptions"
-                :key="option.value"
-                class="type-option"
-                :class="{ active: kind === option.value }"
-                :aria-pressed="kind === option.value"
-                @click="kind = option.value"
-              >
-                <AppIcon :name="option.icon" :size="17" /><span>{{
-                  ui(option.label)
-                }}</span
-                ><span class="type-count">{{ typeCounts[option.value] }}</span>
-              </button>
-            </section>
-            <section class="filter-section">
-              <h3>{{ t("sorting") }}</h3>
-              <SortSelect v-model="sortMode" />
-            </section>
-            <section class="filter-section tag-filter-section">
-              <h3>{{ t("tags") }}</h3>
-              <div
-                class="filter-tags"
-                tabindex="0"
-                :aria-label="t('filterTags')"
-              >
-                <button
-                  v-for="tag in displayedTags"
-                  :key="tag.name"
-                  class="filter-tag"
-                  @click="library.addSearch(tag.name)"
-                >
-                  <span>{{ tag.name }}</span
-                  ><small>{{ tag.count }}</small>
-                </button>
-              </div>
-              <button
-                v-if="tags.length > 8"
-                class="text-button show-tags"
-                :aria-expanded="showAllTags"
-                @click="showAllTags = !showAllTags"
-              >
-                {{ showAllTags ? t("showFewer") : t("showAllTags")
-                }}<AppIcon
-                  name="down"
-                  :size="13"
-                  class="show-tags-arrow"
-                  :class="{ expanded: showAllTags }"
-                />
-              </button>
-            </section>
-            <section class="filter-section additional-section">
-              <h3>{{ t("additional") }}</h3>
-              <ToggleSwitch v-model="taggedOnly">{{
-                t("taggedOnly")
-              }}</ToggleSwitch
-              ><ToggleSwitch v-model="hideUntagged">{{
-                t("hideUntagged")
-              }}</ToggleSwitch>
-              <ToggleSwitch v-model="showPreviews">{{
-                t("showPreviews")
-              }}</ToggleSwitch>
-            </section>
-          </div>
-          <div class="filter-reset">
-            <button
-              v-if="isNativeData()"
-              class="secondary-button"
-              @click="contentDuplicatesOpen = true"
-            >
-              <AppIcon name="search" :size="16" />{{ t("contentDuplicates") }}
-            </button>
-            <button class="secondary-button" @click="library.reset()">
-              <AppIcon name="reset" :size="16" />{{ t("resetFilters") }}
-            </button>
-          </div>
-        </aside>
-        <MediaCollection
-          :items="results"
-          :position="mainPosition"
-          :collection-key="library.collectionKey.value"
-          :native="isNativeData()"
-          :total="isNativeData() ? library.total.value : undefined"
-          :has-more="library.hasMore.value"
-          :loading="library.loading.value"
-          :error="library.error.value"
-          :show-previews="showPreviews"
-          :mode="mode"
-          :selected-id="selectedId"
-          :selected-ids="library.selectedIds.value"
-          :details-open="detailsOpen"
-          :heading="heading"
-          :filtered="activeFilterCount > 0"
-          @load-more="library.loadMore"
-          @save-position="mainPosition = $event"
-          @retry="library.refresh()"
-          @select="library.select"
-          @open="previewAction('Open file', $event)"
-          @toggle-details="detailsOpen ? closeDetails() : (detailsOpen = true)"
-          @selection-start="library.beginSelection"
-          @select-many="library.selectMany($event, false)"
-          @selection-end="library.selectMany"
-          @favorite="library.toggleFavorite"
-          @context="openContext"
-          @reset="library.reset()"
-        />
+            <CollectionControls
+              v-model:kind="kind"
+              v-model:sort="sortMode"
+              v-model:mode="mode"
+              :counts="typeCounts"
+              :details-open="detailsOpen"
+              @toggle-details="
+                detailsOpen ? closeDetails() : (detailsOpen = true)
+              "
+            />
+          </template>
+        </MediaCollection>
       </template>
       <TagsPanel
         v-else-if="view === 'tags'"
@@ -506,42 +503,44 @@ const tagOptions = computed(() =>
         "
       />
       <template v-else>
-        <aside class="filters-panel" :aria-label="t('stageFilters')">
+        <aside
+          class="filters-panel stage-queue-panel"
+          :aria-label="t('stageQueue')"
+        >
           <header class="panel-heading">
-            <h2>{{ t("filters") }}</h2>
+            <h2>{{ t("stageQueue") }}</h2>
           </header>
           <div class="filters-scroll">
-            <div class="search-box">
-              <AppIcon name="search" :size="17" />
-              <input
-                ref="searchInput"
-                v-model="stage.search.value"
-                :aria-label="t('searchFiles')"
-                :placeholder="t('filePlaceholder')"
-              />
-              <button
-                v-if="stage.search.value"
-                class="icon-button"
-                :aria-label="t('clearSearch')"
-                @click="stage.clearSearch()"
-              >
-                <AppIcon name="close" :size="14" />
-              </button>
-              <kbd v-else>Ctrl F</kbd>
-            </div>
-            <section class="filter-section">
-              <h3>{{ t("sorting") }}</h3>
-              <SortSelect v-model="stage.sortMode.value" />
+            <section class="stage-queue-summary">
+              <strong>{{ stage.queueTotal.value }}</strong
+              ><span>{{ t("stageQueueFiles") }}</span>
+              <p>{{ t("stageQueueHint") }}</p>
             </section>
             <section class="filter-section additional-section">
-              <h3>{{ t("additional") }}</h3>
               <ToggleSwitch v-model="showPreviews">{{
                 t("showPreviews")
               }}</ToggleSwitch>
             </section>
           </div>
+          <div class="filter-reset stage-queue-actions">
+            <button
+              class="primary-button"
+              :disabled="!stage.selectedIds.value.length"
+              @click="distribute()"
+            >
+              <AppIcon name="staging" :size="17" />{{
+                t("stageDistributeSelected", {
+                  count: stage.selectedIds.value.length,
+                })
+              }}
+            </button>
+            <button class="secondary-button" @click="resetStageFilters">
+              <AppIcon name="reset" :size="16" />{{ t("resetFilters") }}
+            </button>
+          </div>
         </aside>
         <MediaCollection
+          class="main-collection stage-collection"
           :items="stage.results.value"
           :position="stagePosition"
           :collection-key="stage.queryKey.value"
@@ -556,7 +555,9 @@ const tagOptions = computed(() =>
           :selected-ids="stage.selectedIds.value"
           :details-open="detailsOpen"
           :heading="t('stage')"
-          :filtered="Boolean(stage.search.value.trim())"
+          :filtered="
+            Boolean(stage.search.value.trim()) || stage.kind.value !== 'all'
+          "
           stage
           @load-more="stage.loadMore"
           @save-position="stagePosition = $event"
@@ -569,8 +570,63 @@ const tagOptions = computed(() =>
           @selection-end="stage.selectMany"
           @distribute="distribute()"
           @context="openContext"
-          @reset="stage.clearSearch()"
-        />
+          @reset="resetStageFilters"
+        >
+          <template #toolbar>
+            <div class="search-box">
+              <AppIcon name="search" :size="17" />
+              <input
+                ref="searchInput"
+                v-model="stage.search.value"
+                :aria-label="t('searchFiles')"
+                :placeholder="t('filePlaceholder')"
+              />
+              <button
+                v-if="stage.search.value"
+                class="icon-button"
+                :aria-label="t('clearSearch')"
+                @click="stage.clearSearch()"
+              >
+                <AppIcon name="close" :size="14" /></button
+              ><kbd v-else>Ctrl F</kbd>
+            </div>
+            <CollectionControls
+              v-model:kind="stage.kind.value"
+              v-model:sort="stage.sortMode.value"
+              v-model:mode="mode"
+              :counts="stage.typeCounts.value"
+              :details-open="detailsOpen"
+              @toggle-details="
+                detailsOpen ? closeDetails() : (detailsOpen = true)
+              "
+            />
+          </template>
+          <template #selection>
+            <div class="stage-selection-bar" :aria-label="t('stageSelection')">
+              <span role="status">{{
+                stage.selectedIds.value.length
+                  ? t("selectedCount", {
+                      count: stage.selectedIds.value.length,
+                    })
+                  : t("stageSelectionHint")
+              }}</span>
+              <button
+                class="secondary-button"
+                :disabled="!stage.selectedIds.value.length"
+                @click="stage.clearSelection()"
+              >
+                {{ t("clearSelection") }}
+              </button>
+              <button
+                class="primary-button"
+                :disabled="!stage.selectedIds.value.length"
+                @click="distribute()"
+              >
+                <AppIcon name="staging" :size="16" />{{ t("distribute") }}
+              </button>
+            </div>
+          </template>
+        </MediaCollection>
       </template>
       <Transition name="details-drawer">
         <div

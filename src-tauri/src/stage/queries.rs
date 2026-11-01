@@ -13,6 +13,7 @@ pub struct StageFile {
     pub(crate) id: String,
     pub(super) path: String,
     pub(super) filename: String,
+    pub(super) relative_path: String,
     pub(crate) kind: String,
     pub(super) extension: String,
     pub(super) size: Option<i64>,
@@ -30,9 +31,19 @@ pub struct StageFile {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StagePage {
     pub(super) files: Vec<StageFile>,
     pub(crate) total: i64,
+    pub(super) queue_total: i64,
+    pub(super) type_counts: StageTypeCounts,
+}
+
+#[derive(Serialize)]
+pub(super) struct StageTypeCounts {
+    all: i64,
+    image: i64,
+    video: i64,
 }
 
 // Match the normalized full path; instr treats SQL wildcard characters literally
@@ -55,14 +66,25 @@ pub(super) fn sort_order(sort: &str) -> Result<&'static str, String> {
     }
 }
 
+pub(super) fn kind_filter(kind: &str) -> Result<&'static str, String> {
+    match kind {
+        "all" => Ok(""),
+        "image" => Ok(" AND m.kind='image'"),
+        "video" => Ok(" AND m.kind='video'"),
+        _ => Err("Invalid Stage media kind".into()),
+    }
+}
+
 pub(crate) async fn browse(
     pool: &SqlitePool,
     root: Option<String>,
     offset: i64,
     search: &str,
     sort: &str,
+    kind: &str,
 ) -> Result<StagePage, String> {
     let order = sort_order(sort)?;
+    let kind_sql = kind_filter(kind)?;
 
     if offset < 0 {
         return Err("Invalid Stage offset".into());
@@ -104,20 +126,32 @@ pub(crate) async fn browse(
 
     let search = crate::naming::name_key(&search.trim().replace('\\', "/"));
 
-    let mut count_query = QueryBuilder::<Sqlite>::new(concat!(
-        "SELECT count(*) FROM media m JOIN sources s ON s.id=m.source_id WHERE ",
+    let counts = sqlx::query(concat!(
+        "WITH eligible AS (SELECT m.kind,instr(m.stage_search_key,?)>0 AS matches ",
+        "FROM media m JOIN sources s ON s.id=m.source_id WHERE ",
         "((s.kind='stage' AND s.path_key=? AND m.availability='present' AND ",
-        "m.library_assignment IS NULL) OR m.needs_distribution=1)",
-    ));
-    count_query.push(PATH_SEARCH);
+        "m.library_assignment IS NULL) OR m.needs_distribution=1)) ",
+        "SELECT count(*) AS queue_total,coalesce(sum(matches),0) AS all_count,",
+        "coalesce(sum(matches AND kind='image'),0) AS image_count,",
+        "coalesce(sum(matches AND kind='video'),0) AS video_count FROM eligible",
+    ))
+    .bind(&search)
+    .bind(&root)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| e.to_string())?;
 
-    let total = count_query
-        .build_query_scalar()
-        .bind(&root)
-        .bind(&search)
-        .fetch_one(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+    let queue_total = counts.get("queue_total");
+    let type_counts = StageTypeCounts {
+        all: counts.get("all_count"),
+        image: counts.get("image_count"),
+        video: counts.get("video_count"),
+    };
+    let total = match kind {
+        "image" => type_counts.image,
+        "video" => type_counts.video,
+        _ => type_counts.all,
+    };
 
     let mut query = QueryBuilder::<Sqlite>::new(concat!(
         "SELECT m.*,s.root_path,v.duration_ms,v.fps_num,v.fps_den,v.codec,v.bitrate_bps FROM ",
@@ -128,6 +162,7 @@ pub(crate) async fn browse(
 
     query
         .push(PATH_SEARCH)
+        .push(kind_sql)
         .push(FILENAME_RANK)
         .push(order)
         .push(" LIMIT 500 OFFSET ?");
@@ -143,15 +178,21 @@ pub(crate) async fn browse(
         .map_err(|e| e.to_string())?;
 
     let files = rows.into_iter().map(stage_file).collect();
-    Ok(StagePage { files, total })
+    Ok(StagePage {
+        files,
+        total,
+        queue_total,
+        type_counts,
+    })
 }
 
 #[tauri::command]
-#[tracing::instrument(level = "debug", skip_all, fields(offset, sort), err)]
+#[tracing::instrument(level = "debug", skip_all, fields(offset, sort, kind), err)]
 pub async fn get_stage_files(
     offset: i64,
     search: String,
     sort: String,
+    kind: String,
     database: tauri::State<'_, Database>,
     config: tauri::State<'_, ConfigStore>,
 ) -> Result<StagePage, String> {
@@ -167,7 +208,7 @@ pub async fn get_stage_files(
         "Loading sorted Stage page"
     );
 
-    let page = browse(database.pool(), root, offset, &search, &sort).await?;
+    let page = browse(database.pool(), root, offset, &search, &sort, &kind).await?;
 
     tracing::debug!(
         count = page.files.len(),
@@ -193,6 +234,7 @@ pub(crate) fn stage_file(row: sqlx::sqlite::SqliteRow) -> StageFile {
             .unwrap_or_default()
             .to_string_lossy()
             .into_owned(),
+        relative_path: row.get("relative_path"),
         kind: row.get("kind"),
         extension: row.get("extension"),
         size: row.get("size_bytes"),

@@ -22,6 +22,7 @@ export function useStage() {
           id: `stage-${index + 1}`,
           filename,
           path: `C:\\Media\\Nexa staging\\${item.kind === "video" ? "Videos" : "Images"}\\${filename}`,
+          relativePath: `${item.kind === "video" ? "Videos" : "Images"}/${filename}`,
           favorite: false,
           title: undefined,
           videoTitle: undefined,
@@ -35,13 +36,16 @@ export function useStage() {
 
   const search = ref("");
   const appliedSearch = ref("");
+  const kind = ref<"all" | MediaKind>("all");
   const sortMode = ref<"newest" | "older" | "name-asc" | "name-desc">("newest");
 
   const queryKey = computed(() =>
-    JSON.stringify([appliedSearch.value, sortMode.value]),
+    JSON.stringify([appliedSearch.value, sortMode.value, kind.value]),
   );
 
   const total = ref(0);
+  const nativeQueueTotal = ref(0);
+  const nativeTypeCounts = ref({ all: 0, video: 0, image: 0 });
   const loading = ref(false);
   const error = ref("");
 
@@ -66,6 +70,7 @@ export function useStage() {
         id: string;
         path: string;
         filename: string;
+        relativePath: string;
         nativeRedistribution: boolean;
         revision: string | null;
         availability: string;
@@ -83,10 +88,16 @@ export function useStage() {
       };
 
       const readPage = (offset: number) =>
-        invoke<{ files: NativeFile[]; total: number }>("get_stage_files", {
+        invoke<{
+          files: NativeFile[];
+          total: number;
+          queueTotal: number;
+          typeCounts: { all: number; video: number; image: number };
+        }>("get_stage_files", {
           offset,
           search: appliedSearch.value,
           sort: sortMode.value,
+          kind: kind.value,
         });
 
       const target = append || reset ? 0 : media.value.length;
@@ -113,6 +124,7 @@ export function useStage() {
         availability: file.availability,
         nativeRedistribution: file.nativeRedistribution,
         filename: file.filename,
+        relativePath: file.relativePath,
         path: file.path,
         kind: file.kind,
         extension: file.extension,
@@ -134,6 +146,8 @@ export function useStage() {
       }));
 
       total.value = page.total;
+      nativeQueueTotal.value = page.queueTotal;
+      nativeTypeCounts.value = page.typeCounts;
       media.value = append ? [...media.value, ...queued] : queued;
     } catch (cause) {
       if (version === refreshVersion)
@@ -167,7 +181,7 @@ export function useStage() {
     }, 350);
   });
 
-  watch([appliedSearch, sortMode], () => {
+  watch([appliedSearch, sortMode, kind], () => {
     if (isNativeData()) {
       void loadPage(false, true);
     }
@@ -178,15 +192,37 @@ export function useStage() {
     clearTimeout(searchTimer);
   });
 
+  const searchedMedia = computed(() => {
+    const query = appliedSearch.value.toLocaleLowerCase().replace(/\\/g, "/");
+
+    return media.value.filter(
+      (item) => nameSearchRank(item.path.replace(/\\/g, "/"), query) < 2,
+    );
+  });
+
+  const queueTotal = computed(() =>
+    isNativeData() ? nativeQueueTotal.value : media.value.length,
+  );
+
+  const typeCounts = computed(() => {
+    if (isNativeData()) return nativeTypeCounts.value;
+
+    const files = searchedMedia.value;
+
+    return {
+      all: files.length,
+      video: files.filter((item) => item.kind === "video").length,
+      image: files.filter((item) => item.kind === "image").length,
+    };
+  });
+
   const results = computed(() => {
     if (isNativeData()) return media.value;
 
     const query = appliedSearch.value.toLocaleLowerCase().replace(/\\/g, "/");
 
-    return media.value
-      .filter(
-        (item) => nameSearchRank(item.path.replace(/\\/g, "/"), query) < 2,
-      )
+    return searchedMedia.value
+      .filter((item) => kind.value === "all" || item.kind === kind.value)
       .sort((a, b) => {
         const relevance =
           Math.min(nameSearchRank(a.filename, query), 1) -
@@ -223,6 +259,9 @@ export function useStage() {
   return {
     media,
     total,
+    queueTotal,
+    typeCounts,
+    kind,
     hasMore,
     loading,
     error,

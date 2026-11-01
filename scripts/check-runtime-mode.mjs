@@ -108,11 +108,23 @@ for (const native of [false, true]) {
       library.search.value = "m";
       library.commitSearch();
       stage.media.value = [
-        { ...base, id: "contains", filename: "a needle.mp4", modifiedAt: 3 },
-        { ...base, id: "prefix", filename: "Needle.mp4", modifiedAt: 1 },
         {
           ...base,
-          id: "absent",
+          id: "contains",
+          filename: "a needle.mp4",
+          path: "C:/files/a needle.mp4",
+          modifiedAt: 3,
+        },
+        {
+          ...base,
+          id: "prefix",
+          filename: "Needle.mp4",
+          path: "C:/files/Needle.mp4",
+          modifiedAt: 1,
+        },
+        {
+          ...base,
+          id: "path-only",
           filename: "Other.mp4",
           path: "C:/needle/Other.mp4",
           modifiedAt: 2,
@@ -128,7 +140,9 @@ for (const native of [false, true]) {
         );
         assert.deepEqual(
           Array.from(stage.results.value, (item) => item.id),
-          ["prefix", "contains"],
+          sort === "newest" || sort === "name-asc"
+            ? ["prefix", "contains", "path-only"]
+            : ["prefix", "path-only", "contains"],
         );
       }
       assert.equal(f.calls.length, 0);
@@ -190,6 +204,49 @@ for (const native of [false, true]) {
         nextLibrary.media.value[0].tags.includes("Demo-only"),
         false,
       );
+    } finally {
+      scope.stop();
+    }
+  });
+}
+
+for (const native of [false, true]) {
+  test(`Stage type filters combine with path search and retain the full queue in ${native ? "native" : "browser"} demo`, async () => {
+    const f = fixture(native, true);
+    const scope = vue.effectScope();
+    const stage = scope.run(() => f.load("composables/useStage.ts").useStage());
+
+    try {
+      assert.equal(stage.queueTotal.value, 96);
+      assert.deepEqual(
+        { ...stage.typeCounts.value },
+        { all: 96, video: 40, image: 56 },
+      );
+      stage.kind.value = "video";
+      assert.equal(stage.results.value.length, 40);
+      assert.ok(stage.results.value.every((item) => item.kind === "video"));
+      stage.select(stage.results.value[0]);
+      const key = stage.queryKey.value;
+      stage.kind.value = "image";
+      await vue.nextTick();
+      assert.notEqual(stage.queryKey.value, key);
+      assert.equal(stage.results.value.length, 56);
+      assert.equal(stage.selectedIds.value.length, 0);
+      stage.appliedSearch.value = "Videos";
+      assert.equal(stage.results.value.length, 0);
+      assert.deepEqual(
+        { ...stage.typeCounts.value },
+        { all: 40, video: 40, image: 0 },
+      );
+      assert.equal(stage.queueTotal.value, 96);
+      stage.kind.value = "all";
+      assert.equal(stage.results.value.length, 40);
+      assert.ok(
+        stage.results.value.every((item) =>
+          item.relativePath.startsWith("Videos/"),
+        ),
+      );
+      assert.equal(f.calls.length, 0);
     } finally {
       scope.stop();
     }
