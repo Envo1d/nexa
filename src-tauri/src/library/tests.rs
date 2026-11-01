@@ -83,18 +83,22 @@ fn draft() -> Draft {
 }
 
 #[tokio::test]
-async fn search_matches_substrings_across_metadata_and_viewer_with_literal_punctuation() {
+async fn search_matches_exact_metadata_names_in_pages_and_viewer() {
     let (_temp, db, root) = fixture().await;
     save(db.pool(), Some(root.clone()), vec!["1".into()], draft())
         .await
         .unwrap();
 
     for (search, expected) in [
-        (" STRASS ; CAFÉ; Al; Ser ", 1),
-        ("traße", 1),
-        ("lice", 1),
-        ("fé", 1),
-        ("ther", 1),
+        (" STRASSE ; CAFÉ; Alice; Series ", 1),
+        ("Straße", 1),
+        ("Alice", 1),
+        ("Other", 1),
+        ("Cafe\u{301}", 1),
+        ("traße", 0),
+        ("lice", 0),
+        ("fé", 0),
+        ("ther", 0),
         ("%", 0),
         ("_", 0),
     ] {
@@ -117,11 +121,46 @@ async fn search_matches_substrings_across_metadata_and_viewer_with_literal_punct
 }
 
 #[tokio::test]
-async fn prefix_groups_keep_sorting_pagination_and_viewer_order() {
+async fn edi_excludes_other_names_containing_or_starting_with_edi() {
+    let (_temp, db, root) = fixture().await;
+
+    for (id, name) in [(1, "Edi"), (2, "Meredith Stout"), (3, "Edi extra")] {
+        let mut metadata = draft();
+        metadata.artists = vec![name.into()];
+        save(
+            db.pool(),
+            Some(root.clone()),
+            vec![id.to_string()],
+            metadata,
+        )
+        .await
+        .unwrap();
+    }
+
+    let mut query = filters();
+    query.search = " eDI ".into();
+    let page = browse(db.pool(), Some(root.clone()), query).await.unwrap();
+    assert_eq!(page.total, 1);
+    assert_eq!(page.files[0].technical.id, "1");
+
+    let mut query = filters();
+    query.search = "edi".into();
+    let sequence = super::queries::capture_viewer_sequence(db.pool(), Some(root), query)
+        .await
+        .unwrap();
+    let sequence = serde_json::to_value(sequence).unwrap();
+    assert_eq!(sequence.as_array().unwrap().len(), 1);
+    assert_eq!(sequence[0]["id"], "1");
+    db.close().await;
+}
+
+#[tokio::test]
+async fn exact_matches_keep_sorting_pagination_and_viewer_order() {
     let (_temp, db, root) = fixture().await;
     sqlx::raw_sql(concat!(
-        "INSERT INTO tags VALUES(1,'atomic','atomic'),(2,'marvel','marvel'); ",
-        "INSERT INTO media_tags SELECT id,1 FROM media WHERE id<=501; ",
+        "INSERT INTO tags VALUES(1,'atomic','atomic'),(2,'atomic extra','atomic extra'); ",
+        "UPDATE media SET availability='present' WHERE id=502; ",
+        "INSERT INTO media_tags SELECT id,1 FROM media WHERE id<=502; ",
         "DELETE FROM media_tags WHERE media_id=1; INSERT INTO media_tags VALUES(1,2);",
     ))
     .execute(db.pool())
@@ -136,7 +175,7 @@ async fn prefix_groups_keep_sorting_pagination_and_viewer_order() {
                 .await
                 .unwrap();
         let values = serde_json::to_value(values).unwrap();
-        let mut expected = vec!["1".to_string()];
+        let mut expected = Vec::new();
         expected.extend(values.as_array().unwrap().iter().filter_map(|value| {
             let id = value["id"].as_str().unwrap();
             (id != "1").then(|| id.to_string())
@@ -146,7 +185,7 @@ async fn prefix_groups_keep_sorting_pagination_and_viewer_order() {
         for offset in [0, 500] {
             let mut query = filters();
             query.sort = sort.into();
-            query.search = "m".into();
+            query.search = "atomic".into();
             query.offset = offset;
             let page = browse(db.pool(), Some(root.clone()), query).await.unwrap();
             assert_eq!(page.total, 501);
@@ -156,7 +195,7 @@ async fn prefix_groups_keep_sorting_pagination_and_viewer_order() {
 
         let mut query = filters();
         query.sort = sort.into();
-        query.search = "m".into();
+        query.search = "atomic".into();
         let sequence =
             super::queries::capture_viewer_sequence(db.pool(), Some(root.clone()), query)
                 .await

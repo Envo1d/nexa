@@ -30,19 +30,17 @@ export function searchByName<T extends { name: string }>(
     .map(({ value }) => value);
 }
 
-export function metadataSearchRank(names: string[], terms: string[]): number {
-  let rank = 0;
+export function matchesMetadataSearch(
+  names: string[],
+  terms: string[],
+): boolean {
+  const normalizedNames = new Set(
+    names.map((name) => name.normalize("NFC").toLocaleLowerCase()),
+  );
 
-  for (const term of terms) {
-    const termRank = names.reduce(
-      (best, name) => Math.min(best, nameSearchRank(name, term)),
-      2,
-    );
-
-    rank = Math.max(rank, termRank);
-  }
-
-  return rank;
+  return terms.every((term) =>
+    normalizedNames.has(term.trim().normalize("NFC").toLocaleLowerCase()),
+  );
 }
 
 export function normalizeMetadataSearch(search: string): string {

@@ -80,13 +80,10 @@ pub(super) async fn candidates(
         )
     });
 
-    // Cursor sign records the relevance group; magnitude remains the media ID.
-    let cursor_rank = i64::from(after < 0);
     let cursor_id = after.abs();
 
-    let mut query = QueryBuilder::<Sqlite>::new("WITH matches AS (SELECT ");
-    crate::library::metadata_rank(&mut query, search);
-    query.push(" AS search_rank,").push(SELECT_BODY);
+    let mut query = QueryBuilder::<Sqlite>::new("SELECT ");
+    query.push(SELECT_BODY);
     query
         .push(" WHERE m.id>0 AND m.kind=")
         .push_bind(kind)
@@ -108,18 +105,14 @@ pub(super) async fn candidates(
     }
     crate::library::apply_metadata_search(&mut query, search);
     query
-        .push(") SELECT * FROM matches WHERE search_rank>")
-        .push_bind(cursor_rank)
-        .push(" OR (search_rank=")
-        .push_bind(cursor_rank)
-        .push(" AND id>")
+        .push(" AND m.id>")
         .push_bind(cursor_id)
-        .push(") ORDER BY search_rank,id LIMIT 51");
+        .push(" ORDER BY m.id LIMIT 51");
 
     tracing::debug!(
         kind,
         after,
-        search_match = "metadata_prefix_then_substring",
+        search_match = "metadata_exact",
         "Loading replacement candidates using Main metadata filters"
     );
 
@@ -133,16 +126,7 @@ pub(super) async fn candidates(
     rows.truncate(50);
 
     let next = if more {
-        rows.last().map(|row| {
-            let id = row.get::<i64, _>("id");
-            let cursor = if row.get::<i64, _>("search_rank") == 0 {
-                id
-            } else {
-                -id
-            };
-
-            cursor.to_string()
-        })
+        rows.last().map(|row| row.get::<i64, _>("id").to_string())
     } else {
         None
     };

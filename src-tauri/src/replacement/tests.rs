@@ -633,7 +633,7 @@ async fn picker_searches_metadata_and_pages_full_main_independent_of_stage() {
 }
 
 #[tokio::test]
-async fn ranked_picker_cursor_crosses_groups_without_skipping_lower_ids() {
+async fn exact_picker_cursor_pages_without_partial_name_matches() {
     let f = fixture(false).await;
     sqlx::raw_sql("INSERT INTO tags VALUES(2,'atomic','atomic'),(3,'marvel','marvel');")
         .execute(f.db.pool())
@@ -665,7 +665,7 @@ async fn ranked_picker_cursor_crosses_groups_without_skipping_lower_ids() {
     let mut cursor = 0;
     let mut ids = Vec::new();
     loop {
-        let page = candidates(f.db.pool(), &f.settings, "video", "m", cursor)
+        let page = candidates(f.db.pool(), &f.settings, "video", "marvel", cursor)
             .await
             .unwrap();
         ids.extend(
@@ -678,8 +678,8 @@ async fn ranked_picker_cursor_crosses_groups_without_skipping_lower_ids() {
         };
         cursor = super::queries::parse_cursor(&next).unwrap();
     }
-    assert_eq!(ids, (63..=122).chain(3..=62).collect::<Vec<_>>());
-    assert!(cursor < 0);
+    assert_eq!(ids, (63..=122).collect::<Vec<_>>());
+    assert!(cursor > 0);
     for invalid in ["0", "-9223372036854775808", "bad"] {
         assert!(super::queries::parse_cursor(invalid).is_err());
     }
@@ -706,9 +706,9 @@ async fn replacement_metadata_search_matches_main_and_requires_all_terms_on_one_
         (" artist ; CHARACTER; Keep; Copyright ", 1),
         ("Artist;Artist; ;Character;", 1),
         ("Artist; Other", 0),
-        ("Art", 2),
-        ("rt", 2),
-        ("Art; Char; Ke; Cop", 1),
+        ("Art", 0),
+        ("rt", 0),
+        ("Art; Char; Ke; Cop", 0),
         ("%", 0),
         ("_", 0),
         ("old", 0),
