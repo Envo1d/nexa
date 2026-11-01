@@ -46,7 +46,7 @@ async function compile(path, expose, component = false) {
 
 const panelCode = await compile(
   "../src/components/TagsPanel.vue",
-  "begin, apply, category, catalog, copyright, copyrightOptions, name, pending, error, busy, search, entries",
+  "selectEntry, cancelEdit, confirmDeletion, showCharacter, apply, category, catalog, copyright, copyrightOptions, name, deleting, error, busy, search, entries, selectedEntry, dirty, linkedCount, repeatedOnly, relatedCharacters",
   true,
 );
 
@@ -172,7 +172,7 @@ test("character editor submits name and target copyright together and refreshes"
 
   await nextTick();
 
-  state.begin(data.characters[0], "edit");
+  state.selectEntry(data.characters[0]);
   assert.equal(state.copyright.value, "World");
   state.copyright.value = "Other";
   state.name.value = "Hero";
@@ -186,7 +186,7 @@ test("character editor submits name and target copyright together and refreshes"
     copyrightId: 2,
   });
   assert.equal(calls[1][0], "get_taxonomy");
-  assert.equal(state.pending.value, null);
+  assert.equal(state.deleting.value, false);
   assert.equal(state.events[0][0], "changed");
 });
 
@@ -205,14 +205,14 @@ test("failed update preserves draft and missing target makes no write", async ()
 
   await nextTick();
 
-  state.begin(data.characters[0], "edit");
+  state.selectEntry(data.characters[0]);
   state.copyright.value = "Other";
 
   await state.apply();
 
   assert.match(state.error.value, /collision/);
   assert.equal(state.copyright.value, "Other");
-  assert.ok(state.pending.value);
+  assert.equal(state.dirty.value, true);
   assert.equal(state.busy.value, false);
   assert.equal(state.events.length, 0);
   state.copyright.value = "Missing";
@@ -230,23 +230,177 @@ test("other categories retain the rename command", async () => {
     return catalog();
   });
 
+  state.catalog.value.tags = [{ id: "5", name: "Tag", count: 0 }];
   state.category.value = "tag";
 
   await nextTick();
 
-  state.begin(
-    {
-      id: "5",
-      name: "Tag",
-      count: 0,
-    },
-    "edit",
-  );
   state.name.value = "Renamed";
 
   await state.apply();
 
   assert.equal(calls[0], "rename_taxonomy");
+});
+
+test("list selection, cancellation and empty filters never write or retain another entry's draft", async () => {
+  let writes = 0;
+  const state = run(panelCode, true, async () => writes++);
+  const data = catalog();
+  data.characters.push({
+    id: "11",
+    name: "Alice",
+    copyright: "Other",
+    count: 0,
+  });
+  state.catalog.value = data;
+  state.category.value = "character";
+
+  await nextTick();
+
+  assert.equal(state.selectedEntry.value.id, "10");
+  assert.equal(state.name.value, "Alice");
+  state.name.value = "Draft";
+  state.copyright.value = "Other";
+  assert.equal(state.dirty.value, true);
+  state.cancelEdit();
+  assert.equal(state.name.value, "Alice");
+  assert.equal(state.copyright.value, "World");
+  state.name.value = "Discarded";
+  state.selectEntry(data.characters[1]);
+
+  await nextTick();
+
+  assert.equal(state.selectedEntry.value.id, "11");
+  assert.equal(state.copyright.value, "Other");
+  assert.equal(state.dirty.value, false);
+  state.confirmDeletion();
+  state.search.value = "missing";
+
+  await nextTick();
+
+  assert.equal(state.selectedEntry.value, null);
+  assert.equal(state.name.value, "");
+  assert.equal(state.deleting.value, false);
+  await state.apply();
+  assert.equal(writes, 0);
+});
+
+test("related character navigation clears incompatible filters and preserves qualified identity", async () => {
+  const state = run(panelCode, true);
+  const data = catalog();
+  data.characters.push({
+    id: "11",
+    name: "Alice",
+    copyright: "Other",
+    count: 0,
+  });
+  state.catalog.value = data;
+
+  await nextTick();
+
+  assert.deepEqual(
+    Array.from(state.relatedCharacters.value, (entry) => entry.id),
+    ["10"],
+  );
+  state.linkedCount.value = 1;
+  state.repeatedOnly.value = true;
+  state.search.value = "World";
+  state.showCharacter(data.characters[1]);
+
+  await nextTick();
+
+  assert.equal(state.category.value, "character");
+  assert.equal(state.linkedCount.value, "all");
+  assert.equal(state.search.value, "");
+  assert.equal(state.repeatedOnly.value, false);
+  assert.equal(state.selectedEntry.value.id, "11");
+  assert.equal(state.copyright.value, "Other");
+  state.linkedCount.value = 0;
+  state.category.value = "copyright";
+
+  await nextTick();
+
+  assert.equal(state.linkedCount.value, 0);
+  assert.equal(state.selectedEntry.value.name, "Other");
+  assert.equal(state.dirty.value, false);
+});
+
+test("deletion requires confirmation and blocks selection while its command is running", async () => {
+  const data = catalog();
+  const calls = [];
+  let finishDelete;
+  const state = run(panelCode, true, async (command, args) => {
+    calls.push([command, args]);
+
+    if (command === "delete_taxonomy") {
+      await new Promise((resolve) => {
+        finishDelete = resolve;
+      });
+      data.copyrights = data.copyrights.filter((entry) => entry.id !== "1");
+
+      return 1;
+    }
+
+    return structuredClone(data);
+  });
+  state.catalog.value = data;
+
+  await nextTick();
+  await state.apply();
+  assert.equal(calls.length, 0);
+  state.confirmDeletion();
+  state.cancelEdit();
+  await state.apply();
+  assert.equal(calls.length, 0);
+  state.confirmDeletion();
+  const saving = state.apply();
+  state.selectEntry(data.copyrights[1]);
+  state.showCharacter(data.characters[0]);
+  assert.equal(state.selectedEntry.value.id, "1");
+  assert.equal(state.category.value, "copyright");
+  assert.equal(calls[0][0], "delete_taxonomy");
+  assert.deepEqual(JSON.parse(JSON.stringify(calls[0][1])), {
+    category: "copyright",
+    id: 1,
+  });
+  finishDelete();
+  await saving;
+  await nextTick();
+  assert.equal(state.selectedEntry.value.id, "2");
+  assert.equal(state.deleting.value, false);
+  assert.equal(state.dirty.value, false);
+});
+
+test("demo rename keeps the renamed qualified character selected after its identity changes", async () => {
+  const library = ref([
+    {
+      id: "file-1",
+      artist: "Artist",
+      tags: [],
+      copyrights: ["World", "Other"],
+      characters: ["Alice"],
+      characterCopyrights: [{ name: "Alice", copyright: "World" }],
+    },
+  ]);
+  const demo = run(demoCode, false).useDemoTaxonomy(library, ref([]));
+  const state = run(panelCode, false, undefined, {
+    get demoCatalog() {
+      return demo.catalog.value;
+    },
+    changeDemo: demo.change,
+  });
+  state.category.value = "character";
+
+  await nextTick();
+
+  state.name.value = "Hero";
+  state.copyright.value = "Other";
+  await state.apply();
+  await nextTick();
+  assert.equal(state.selectedEntry.value.name, "Hero");
+  assert.equal(state.selectedEntry.value.copyright, "Other");
+  assert.equal(state.name.value, "Hero");
+  assert.equal(state.dirty.value, false);
 });
 
 test("demo reassigns qualified links, cleans old copyright, and rejects collisions atomically", async () => {
