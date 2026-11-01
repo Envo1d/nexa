@@ -199,7 +199,7 @@ pub async fn get_viewer_sequence(
 
         let root = root.map(|path| path.to_string_lossy().into_owned());
 
-        capture_stage_sequence(database.pool(), root, &search, &filters.sort).await?
+        capture_stage_sequence(database.pool(), root, &search, &filters.sort, &filters.kind).await?
     };
 
     tracing::debug!(count = entries.len(), "Viewer order captured");
@@ -211,8 +211,10 @@ pub(super) async fn capture_stage_sequence(
     root: Option<String>,
     search: &str,
     sort: &str,
+    kind: &str,
 ) -> Result<Vec<ViewerEntry>, String> {
     let order = super::queries::sort_order(sort)?;
+    let kind_sql = super::queries::kind_filter(kind)?;
 
     let mut query = QueryBuilder::<Sqlite>::new(concat!(
         "SELECT m.id,m.relative_path,m.kind,m.extension FROM media m ",
@@ -223,6 +225,7 @@ pub(super) async fn capture_stage_sequence(
 
     query
         .push(super::queries::PATH_SEARCH)
+        .push(kind_sql)
         .push(super::queries::FILENAME_RANK)
         .push(order);
 

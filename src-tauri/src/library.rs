@@ -29,7 +29,7 @@ use crate::{config::ConfigStore, stage};
 pub struct Filters {
     scope: String,
     search: String,
-    kind: String,
+    pub(crate) kind: String,
     pub(crate) sort: String,
     tagged: bool,
     offset: i64,

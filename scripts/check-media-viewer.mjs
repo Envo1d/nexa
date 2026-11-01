@@ -67,6 +67,7 @@ function models(items) {
     media: ref(items),
     total: ref(items.length),
     appliedSearch: ref("Stage query"),
+    kind: ref("image"),
     sortMode: ref("name-desc"),
     refreshRedistribution: async () => {
       refreshes++;
@@ -188,6 +189,7 @@ test("Stage captures its applied search and demo retains the loaded order", asyn
       assert.equal(args.library, false);
       assert.equal(args.search, "Stage query");
       assert.equal(args.filters.sort, "name-desc");
+      assert.equal(args.filters.kind, "image");
       assert.equal(model.library.sortMode.value, "newest");
 
       return [

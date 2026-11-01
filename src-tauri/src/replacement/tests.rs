@@ -204,7 +204,8 @@ async fn replacement_retains_main_identity_annotations_order_and_refreshes_techn
             ),
             0,
             "",
-            "newest"
+            "newest",
+            "all"
         )
         .await
         .unwrap()

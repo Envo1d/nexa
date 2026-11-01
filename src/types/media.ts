@@ -18,6 +18,7 @@ export interface MediaItem {
   id: string;
   filename: string;
   path: string;
+  relativePath?: string;
   kind: MediaKind;
   extension: string;
   title?: string;

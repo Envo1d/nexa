@@ -1042,7 +1042,7 @@ async fn search_matches_paths_and_ranks_literal_unicode_filename_prefixes_first(
         ("%", vec!["100%.mp4"]),
         ("_", vec!["under_score.mp4"]),
     ] {
-        let page = browse(db.pool(), root.clone(), 0, search, "name-asc")
+        let page = browse(db.pool(), root.clone(), 0, search, "name-asc", "all")
             .await
             .unwrap();
         assert_eq!(page.total, expected.len() as i64, "{search}");
@@ -1083,7 +1083,7 @@ async fn ranked_path_pages_match_viewer_order() {
     for sort in ["newest", "older", "name-asc", "name-desc"] {
         let mut ids = Vec::new();
         for offset in [0, 500] {
-            let page = browse(db.pool(), root.clone(), offset, "needle", sort)
+            let page = browse(db.pool(), root.clone(), offset, "needle", sort, "all")
                 .await
                 .unwrap();
             assert_eq!(page.total, 501);
@@ -1093,7 +1093,7 @@ async fn ranked_path_pages_match_viewer_order() {
             ids.extend(page.files.into_iter().map(|file| file.id));
         }
         let sequence =
-            super::viewing::capture_stage_sequence(db.pool(), root.clone(), "needle", sort)
+            super::viewing::capture_stage_sequence(db.pool(), root.clone(), "needle", sort, "all")
                 .await
                 .unwrap();
         let sequence = serde_json::to_value(sequence).unwrap();
@@ -1107,6 +1107,83 @@ async fn ranked_path_pages_match_viewer_order() {
         let unique: std::collections::HashSet<_> = ids.iter().collect();
         assert_eq!(unique.len(), 501);
     }
+    db.close().await;
+}
+
+#[tokio::test]
+async fn kind_filters_keep_counts_pages_relative_paths_and_viewer_consistent() {
+    let (_temp, db, root) = fixture().await;
+    let source = activate_source(db.pool(), &root, 1).await.unwrap();
+    std::fs::create_dir(root.join("needle-folder")).unwrap();
+
+    let mut batch = Vec::new();
+    for index in 0..502 {
+        batch.push(prepared(
+            &root,
+            &format!("needle-folder/image {index}.png"),
+            10,
+        ));
+        if batch.len() == BATCH {
+            save_batch(db.pool(), source, 1, std::mem::take(&mut batch))
+                .await
+                .unwrap();
+        }
+    }
+    batch.push(prepared(&root, "needle.mp4", 10));
+    batch.push(prepared(&root, "other.mp4", 10));
+    save_batch(db.pool(), source, 1, batch).await.unwrap();
+
+    let root = Some(root.to_string_lossy().into_owned());
+    for sort in ["newest", "older", "name-asc", "name-desc"] {
+        for (kind, count) in [("all", 503), ("image", 502), ("video", 1)] {
+            let first = browse(db.pool(), root.clone(), 0, "needle", sort, kind)
+                .await
+                .unwrap();
+            assert_eq!(first.total, count);
+            assert_eq!(first.queue_total, 504);
+            let counts = serde_json::to_value(&first.type_counts).unwrap();
+            assert_eq!(counts["all"], 503);
+            assert_eq!(counts["image"], 502);
+            assert_eq!(counts["video"], 1);
+            if kind == "image" {
+                assert!(first.files[0].relative_path.starts_with("needle-folder/"));
+            }
+
+            let mut ids: Vec<_> = first.files.into_iter().map(|file| file.id).collect();
+            let second = browse(db.pool(), root.clone(), 500, "needle", sort, kind)
+                .await
+                .unwrap();
+            ids.extend(second.files.into_iter().map(|file| file.id));
+            assert_eq!(ids.len(), count as usize);
+            let sequence = super::viewing::capture_stage_sequence(
+                db.pool(),
+                root.clone(),
+                "needle",
+                sort,
+                kind,
+            )
+            .await
+            .unwrap();
+            let sequence = serde_json::to_value(sequence).unwrap();
+            let viewer_ids: Vec<_> = sequence
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|entry| entry["id"].as_str().unwrap())
+                .collect();
+            assert_eq!(ids, viewer_ids);
+        }
+    }
+    assert!(
+        browse(db.pool(), root.clone(), 0, "", "newest", "invalid")
+            .await
+            .is_err()
+    );
+    let empty = browse(db.pool(), root, 0, "absent", "newest", "all")
+        .await
+        .unwrap();
+    assert_eq!(empty.total, 0);
+    assert_eq!(empty.queue_total, 504);
     db.close().await;
 }
 
@@ -1131,7 +1208,7 @@ async fn paginates_without_duplicates_searches_unicode_and_keeps_queued_files() 
 
     let root_name = Some(root.to_string_lossy().into_owned());
 
-    let first = browse(db.pool(), root_name.clone(), 0, "", "newest")
+    let first = browse(db.pool(), root_name.clone(), 0, "", "newest", "all")
         .await
         .unwrap();
     assert_eq!(first.total, 501);
@@ -1139,18 +1216,18 @@ async fn paginates_without_duplicates_searches_unicode_and_keeps_queued_files() 
 
     let cursor = first.files.last().unwrap().id.parse::<i64>().unwrap();
 
-    let second = browse(db.pool(), root_name.clone(), 500, "", "newest")
+    let second = browse(db.pool(), root_name.clone(), 500, "", "newest", "all")
         .await
         .unwrap();
     assert_eq!(second.files.len(), 1);
     assert_eq!(second.total, 501);
 
     for sort in ["newest", "older", "name-asc", "name-desc"] {
-        let first = browse(db.pool(), root_name.clone(), 0, "", sort)
+        let first = browse(db.pool(), root_name.clone(), 0, "", sort, "all")
             .await
             .unwrap();
 
-        let second = browse(db.pool(), root_name.clone(), 500, "", sort)
+        let second = browse(db.pool(), root_name.clone(), 500, "", sort, "all")
             .await
             .unwrap();
 
@@ -1173,7 +1250,7 @@ async fn paginates_without_duplicates_searches_unicode_and_keeps_queued_files() 
         }
     }
 
-    let matched = browse(db.pool(), root_name, 0, "зображення 500", "newest")
+    let matched = browse(db.pool(), root_name, 0, "зображення 500", "newest", "all")
         .await
         .unwrap();
     assert_eq!(matched.total, 1);
@@ -1184,7 +1261,9 @@ async fn paginates_without_duplicates_searches_unicode_and_keeps_queued_files() 
     .await
     .unwrap();
 
-    let queued = browse(db.pool(), None, 0, "", "newest").await.unwrap();
+    let queued = browse(db.pool(), None, 0, "", "newest", "all")
+        .await
+        .unwrap();
     assert_eq!(queued.total, 1);
     assert!(queued.files[0].native_redistribution);
     assert_eq!(queued.files[0].availability, "missing");
@@ -1234,7 +1313,9 @@ async fn stage_sorts_dates_and_natural_names_with_stable_ties_and_search() {
             vec!["other.mp4", "Image 10.mp4", "image 2.mp4", "IMAGE 02.mp4"],
         ),
     ] {
-        let page = browse(db.pool(), root.clone(), 0, "", sort).await.unwrap();
+        let page = browse(db.pool(), root.clone(), 0, "", sort, "all")
+            .await
+            .unwrap();
 
         assert_eq!(
             page.files
@@ -1245,7 +1326,7 @@ async fn stage_sorts_dates_and_natural_names_with_stable_ties_and_search() {
             "{sort}"
         );
 
-        let filtered = browse(db.pool(), root.clone(), 0, "image", sort)
+        let filtered = browse(db.pool(), root.clone(), 0, "image", sort, "all")
             .await
             .unwrap();
 
@@ -1264,11 +1345,15 @@ async fn stage_sorts_dates_and_natural_names_with_stable_ties_and_search() {
     }
 
     assert!(
-        browse(db.pool(), root.clone(), -1, "", "newest")
+        browse(db.pool(), root.clone(), -1, "", "newest", "all")
             .await
             .is_err()
     );
-    assert!(browse(db.pool(), root, 0, "", "invalid").await.is_err());
+    assert!(
+        browse(db.pool(), root, 0, "", "invalid", "all")
+            .await
+            .is_err()
+    );
     db.close().await;
 }
 

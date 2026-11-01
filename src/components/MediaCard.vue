@@ -2,13 +2,13 @@
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 
-import { formatDate } from "../types/media";
+import { formatDate, formatSize } from "../types/media";
 import MediaPreview from "./MediaPreview.vue";
 import AppIcon from "./AppIcon.vue";
 
 import type { MediaItem } from "../types/media";
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 
 const props = defineProps<{
   item: MediaItem;
@@ -20,9 +20,7 @@ const props = defineProps<{
 
 const displayName = computed(() =>
   props.stage
-    ? props.mode === "list"
-      ? props.item.filename
-      : props.item.filename.replace(/\.[^.]+$/, "")
+    ? props.item.filename
     : props.item.kind === "video"
       ? props.item.videoTitle?.trim()
       : props.item.characters.join(", "),
@@ -48,6 +46,27 @@ const modifiedDateTime = computed(() =>
     : new Date(props.item.modifiedAt).toISOString(),
 );
 
+const compactDate = computed(() => {
+  if (props.item.nativeId && !props.item.modifiedAt)
+    return t("dateUnavailable");
+
+  return new Intl.DateTimeFormat(locale.value, {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(props.item.modifiedAt));
+});
+
+const metadataSummary = computed(() => metadataChips.value.join(", "));
+
+const stageFolder = computed(() => {
+  const relative = props.item.relativePath?.replace(/\\/g, "/") ?? "";
+  const separator = relative.lastIndexOf("/");
+
+  return separator > 0 ? relative.slice(0, separator) : "";
+});
+
 defineEmits<{
   select: [event: MouseEvent];
   open: [];
@@ -60,7 +79,7 @@ defineEmits<{
   <article
     class="media-card"
     :data-media-id="item.id"
-    :class="[mode, { selected }]"
+    :class="[mode, { selected, 'stage-card': stage }]"
     @contextmenu.prevent.stop="$emit('context', $event)"
     @keydown.shift.f10.prevent.stop="$emit('context', $event)"
   >
@@ -73,25 +92,45 @@ defineEmits<{
     >
       <MediaPreview :item="item" :show-previews="showPreviews" variant="card" />
       <div class="card-body">
-        <div v-if="displayName" class="card-title" :title="displayName">
-          {{ displayName }}
+        <div :class="{ 'stage-card-heading': stage }">
+          <div class="card-title" :title="displayName">
+            {{ displayName }}
+          </div>
+          <div
+            v-if="stage && stageFolder"
+            class="card-folder"
+            :title="stageFolder"
+          >
+            <AppIcon name="gallery" :size="12" /><span>{{ stageFolder }}</span>
+          </div>
         </div>
-        <time :datetime="modifiedDateTime">{{ modifiedDate }}</time>
-        <div
-          v-if="!stage"
-          class="card-tags"
-          :class="{ 'card-characters': showCharacterChips }"
-        >
-          <span
-            v-for="(label, index) in metadataChips"
-            :key="index"
-            class="tag-chip"
-            >{{ label }}</span
-          ><span v-if="!metadataChips.length" class="no-tags">{{
-            t("noTags")
+        <div class="card-footer">
+          <time :datetime="modifiedDateTime" :title="modifiedDate">{{
+            mode === "grid" ? compactDate : modifiedDate
+          }}</time>
+          <div
+            v-if="!stage"
+            class="card-tags"
+            :class="{ 'card-characters': showCharacterChips }"
+            :title="metadataSummary || t('noTags')"
+          >
+            <AppIcon :name="showCharacterChips ? 'person' : 'tag'" :size="15" />
+            <span>{{ metadataSummary || t("noTags") }}</span>
+          </div>
+          <span v-else class="card-size">{{
+            item.size < 0 ? t("unavailable") : formatSize(item.size)
           }}</span>
         </div>
       </div>
+    </button>
+    <button
+      class="card-more icon-button"
+      :aria-label="t('cardActions', { filename: item.filename })"
+      aria-haspopup="menu"
+      @click="$emit('context', $event)"
+      @dblclick.stop
+    >
+      <AppIcon name="more" :size="17" />
     </button>
     <button
       v-if="!stage"
