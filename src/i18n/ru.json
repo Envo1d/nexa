@@ -808,5 +808,15 @@
   "stageSelection": "Действия с выбранными файлами",
   "stageSelectionHint": "Выберите файлы для распределения",
   "clearSelection": "Снять выделение",
-  "stageDistributeSelected": "Распределить выбранные ({count})"
+  "stageDistributeSelected": "Распределить выбранные ({count})",
+  "taxonomyCollectionMetadata": "Метаданные коллекции",
+  "taxonomyDictionaries": "Справочники",
+  "taxonomySelectLeft": "Выберите запись слева, чтобы изменить её данные.",
+  "taxonomyQualifiedNames": "Имена различаются по копирайту.",
+  "taxonomyLinkedFiles": "Связанные файлы",
+  "taxonomyEntryDetails": "Данные записи",
+  "taxonomyChangeHelp": "Изменения применяются ко всем связанным файлам.",
+  "taxonomyUnsaved": "Несохранённые изменения",
+  "taxonomyNoCharacters": "В этом копирайте пока нет персонажей.",
+  "taxonomySelectEntry": "Выберите запись для редактирования."
 }

@@ -808,5 +808,15 @@
   "stageSelection": "Stage selection actions",
   "stageSelectionHint": "Select files to distribute",
   "clearSelection": "Clear selection",
-  "stageDistributeSelected": "Distribute selected ({count})"
+  "stageDistributeSelected": "Distribute selected ({count})",
+  "taxonomyCollectionMetadata": "Collection metadata",
+  "taxonomyDictionaries": "Dictionaries",
+  "taxonomySelectLeft": "Select an entry on the left to edit its details.",
+  "taxonomyQualifiedNames": "Names are qualified by copyright.",
+  "taxonomyLinkedFiles": "Linked files",
+  "taxonomyEntryDetails": "Entry details",
+  "taxonomyChangeHelp": "Changes apply to all linked files.",
+  "taxonomyUnsaved": "Unsaved changes",
+  "taxonomyNoCharacters": "No characters in this copyright yet.",
+  "taxonomySelectEntry": "Select an entry to edit its details."
 }

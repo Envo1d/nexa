@@ -393,7 +393,11 @@ function keydown(event: KeyboardEvent) {
       </button>
     </div>
     <div ref="entry" class="metadata-entry">
-      <AppIcon name="search" :size="15" />
+      <AppIcon
+        v-if="!textInput || options.length > 0"
+        name="search"
+        :size="15"
+      />
       <input
         :id="`distribute-${label}`"
         ref="input"
