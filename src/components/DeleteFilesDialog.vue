@@ -219,7 +219,11 @@ onBeforeUnmount(() => {
 }
 .delete-confirm {
   border-color: var(--danger-line);
-  background: var(--danger-button);
+  background: linear-gradient(
+    120deg,
+    var(--danger-button),
+    var(--danger-button-end)
+  );
 }
 .delete-confirm:hover {
   background: var(--danger-button-hover);

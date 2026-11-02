@@ -190,7 +190,11 @@ button:focus-visible {
   overflow-y: auto;
   padding: 0 32px 24px;
   text-align: center;
-  background: var(--shell);
+  background: radial-gradient(
+    ellipse at 50% 36%,
+    color-mix(in srgb, var(--accent-soft) 50%, transparent),
+    transparent 62%
+  );
   border: 1px solid var(--line);
 }
 
@@ -265,7 +269,7 @@ h1 {
   width: 38%;
   height: 100%;
   border-radius: inherit;
-  background: var(--accent);
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
   animation: sweep 2s ease-in-out infinite;
 }
 

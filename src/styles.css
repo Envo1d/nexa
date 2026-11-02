@@ -102,7 +102,9 @@ svg {
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: var(--shell);
+  background:
+    radial-gradient(ellipse at 40% -35%, var(--shell-glow) 0, transparent 55%),
+    var(--shell);
 }
 .app-shell.maximized,
 .app-shell.system-window-corners {
@@ -218,7 +220,7 @@ body:has(.nexa-video-player:fullscreen) .app-shell {
 .details-panel {
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: var(--surface);
+  background: linear-gradient(120deg, var(--surface), var(--surface-alt));
   min-height: 0;
 }
 .navigation {
@@ -259,8 +261,8 @@ body:has(.nexa-video-player:fullscreen) .app-shell {
   text-overflow: ellipsis;
 }
 .nav-item.active {
-  background: var(--surface-hover);
-  color: var(--text-accent);
+  background: linear-gradient(140deg, var(--accent-strong), var(--accent-end));
+  color: var(--on-accent);
   box-shadow: inset 2px 0 var(--accent);
 }
 .nav-main {
@@ -669,7 +671,7 @@ body:has(.nexa-video-player:fullscreen) .app-shell {
   border-color: var(--accent-line);
 }
 .primary-button {
-  background: var(--accent-strong);
+  background: linear-gradient(120deg, var(--accent-strong), var(--accent-end));
   border: 1px solid transparent;
   color: var(--on-accent);
 }
@@ -696,7 +698,7 @@ body:has(.nexa-video-player:fullscreen) .app-shell {
   display: flex;
   flex-direction: column;
   padding: 0 14px;
-  background: var(--surface);
+  background: linear-gradient(110deg, var(--surface), var(--surface-alt));
 }
 .collection-heading {
   display: flex;
@@ -1212,8 +1214,12 @@ body:has(.nexa-video-player:fullscreen) .app-shell {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--surface-raised);
-  color: var(--muted);
+  background: radial-gradient(
+    circle at 20% 0,
+    var(--accent-soft-hover),
+    var(--accent-soft)
+  );
+  color: var(--text-accent);
   margin-bottom: 24px;
 }
 .empty-state h2 {
@@ -1233,7 +1239,11 @@ body:has(.nexa-video-player:fullscreen) .app-shell {
   align-items: center;
   justify-content: center;
   text-align: center;
-  background: var(--surface);
+  background: radial-gradient(
+    ellipse at 50% 40%,
+    color-mix(in srgb, var(--shell-glow) 40%, transparent),
+    transparent 60%
+  );
   border: 1px solid var(--line);
   border-radius: 10px;
 }
@@ -1289,7 +1299,7 @@ body:has(.nexa-video-player:fullscreen) .app-shell {
   padding: 16px;
   border: 1px solid var(--line-strong);
   border-radius: 12px;
-  background: var(--surface-raised);
+  background: linear-gradient(125deg, var(--surface-raised), var(--surface));
   color: var(--text);
   font-size: 12px;
   box-shadow: 0 6px 18px var(--shadow-soft);
@@ -1408,7 +1418,7 @@ body:has(.nexa-video-player:fullscreen) .app-shell {
   border: 1px solid var(--line);
   border-radius: 13px;
   padding: 6px 20px 20px;
-  background: var(--surface-raised);
+  background: linear-gradient(130deg, var(--surface-raised), var(--surface));
   box-shadow: 0 20px 100px var(--shadow-deep);
   max-height: 85dvh;
   overflow: auto;
@@ -2018,7 +2028,9 @@ body:has(.nexa-video-player:fullscreen) .app-shell {
   height: min(820px, calc(100dvh - 24px));
   display: flex;
   flex-direction: column;
-  background: var(--shell);
+  background:
+    radial-gradient(ellipse at 50% 0, var(--shell-glow), transparent 55%),
+    var(--shell);
   border: 1px solid var(--line);
   border-radius: 14px;
   box-shadow: 0 24px 80px var(--shadow);
@@ -2108,7 +2120,7 @@ body:has(.nexa-video-player:fullscreen) .app-shell {
   font-weight: 600;
 }
 .wizard-steps button.active .wizard-step-number {
-  background: var(--accent-strong);
+  background: linear-gradient(140deg, var(--accent-strong), var(--accent-end));
   color: var(--on-accent);
   border-color: var(--accent);
 }
@@ -2449,6 +2461,11 @@ body:has(.nexa-video-player:fullscreen) .app-shell {
   height: 120px;
   margin-bottom: 12px;
   color: var(--accent);
+  background: radial-gradient(
+    ellipse,
+    color-mix(in srgb, var(--accent) 22%, transparent),
+    transparent 70%
+  );
 }
 .wizard-success-art > span {
   position: absolute;

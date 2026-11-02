@@ -930,7 +930,9 @@ onBeforeUnmount(() => {
 .duplicates-comparison {
   padding: 16px 20px;
   overflow-y: auto;
-  background: var(--background);
+  background:
+    radial-gradient(ellipse at 50% 0%, var(--accent-glow), transparent 65%),
+    var(--background);
 }
 .duplicates-columns {
   display: grid;
@@ -973,7 +975,7 @@ dd {
   white-space: pre-wrap;
 }
 .panel-heading {
-  background: var(--surface-alt);
+  background: linear-gradient(110deg, var(--accent-soft), var(--surface) 65%);
   border-bottom: 1px solid var(--line);
   flex-shrink: 0;
 }
@@ -1069,7 +1071,7 @@ dd {
 .duplicate-progress-fill {
   height: 100%;
   border-radius: inherit;
-  background: var(--accent);
+  background: linear-gradient(90deg, var(--accent-strong), var(--accent));
 }
 .duplicate-progress-track.indeterminate .duplicate-progress-fill {
   width: 35% !important;
