@@ -78,9 +78,9 @@ pub async fn restore_catalog(
     tracing::info!("Catalog restore started");
     let settings = config.snapshot()?.settings;
 
-    if settings.sync_structure || settings.auto_scan {
+    if settings.sync_structure || settings.auto_scan || settings.watch_folders {
         return Err(
-            "Disable and save disk synchronization and automatic scanning before restoring.".into(),
+            "Disable and save disk synchronization, automatic scanning and folder monitoring before restoring.".into(),
         );
     }
 

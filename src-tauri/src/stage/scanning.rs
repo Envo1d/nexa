@@ -504,7 +504,30 @@ pub(super) async fn scan_source(
     root: PathBuf,
     source_kind: &str,
     excluded: Option<PathBuf>,
+    report: impl FnMut(&ScanStatus),
+) -> Result<ScanStatus, String> {
+    scan_source_impl(pool, root, source_kind, excluded, report, None).await
+}
+
+pub(super) async fn scan_watched_source(
+    pool: &SqlitePool,
+    root: PathBuf,
+    source_kind: &str,
+    excluded: Option<PathBuf>,
+    report: impl FnMut(&ScanStatus),
+    tracker: &mut super::renames::RenameTracker,
+) -> Result<ScanStatus, String> {
+    scan_source_impl(pool, root, source_kind, excluded, report, Some(tracker)).await
+}
+
+#[tracing::instrument(skip_all, fields(source_kind))]
+async fn scan_source_impl(
+    pool: &SqlitePool,
+    root: PathBuf,
+    source_kind: &str,
+    excluded: Option<PathBuf>,
     mut report: impl FnMut(&ScanStatus),
+    mut tracker: Option<&mut super::renames::RenameTracker>,
 ) -> Result<ScanStatus, String> {
     tracing::info!(
         source_kind,
@@ -556,6 +579,12 @@ pub(super) async fn scan_source(
 
     let source = activate_source_for(pool, &root, marker, source_kind).await?;
 
+    if let Some(tracker) = tracker.as_mut() {
+        tracker.begin();
+    }
+
+    let source_root = root.clone();
+
     let (tx, mut rx) = tokio::sync::mpsc::channel(4);
 
     let walker = tauri::async_runtime::spawn_blocking(move || {
@@ -599,6 +628,10 @@ pub(super) async fn scan_source(
             WalkMessage::Batch(files) => {
                 let count = files.len() as u64;
 
+                if let Some(tracker) = tracker.as_mut() {
+                    tracker.observe(pool, source, &source_root, &files).await?;
+                }
+
                 let before = status.errors;
 
                 let prepared = prepare(pool, source, files, &mut status).await?;
@@ -627,6 +660,11 @@ pub(super) async fn scan_source(
             "Incomplete media scan; unseen records preserved"
         );
     }
+
+    if let Some(tracker) = tracker {
+        tracker.finish(complete && status.errors == 0);
+    }
+
     status.running = false;
     status.message = if traversal_errors == 0 {
         format!("{source_kind} scan complete")
