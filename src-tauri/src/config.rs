@@ -28,7 +28,6 @@ pub struct AppConfig {
     pub gif_subfolder: String,
     pub sync_structure: bool,
     pub auto_scan: bool,
-    pub watch_folders: bool,
     pub auto_update_check: bool,
     pub locale: AppLocale,
     pub theme: AppTheme,
@@ -59,7 +58,6 @@ impl Default for AppConfig {
             gif_subfolder: "Animations".into(),
             sync_structure: false,
             auto_scan: false,
-            watch_folders: true,
             auto_update_check: false,
             locale: AppLocale::default(),
             theme: AppTheme::default(),
@@ -118,12 +116,26 @@ impl ConfigStore {
     #[tracing::instrument(skip_all, fields(config_path = %paths.config_path.display()), err)]
     pub fn load(paths: AppPaths) -> ConfigResult<Self> {
         let settings = match fs::read(&paths.config_path) {
-            Ok(bytes) => serde_json::from_slice(&bytes).map_err(|error| {
-                format!(
-                    "Invalid configuration {}: {error}",
-                    paths.config_path.display()
-                )
-            })?,
+            Ok(bytes) => {
+                let parse = || -> Result<AppConfig, serde_json::Error> {
+                    let mut value: serde_json::Value = serde_json::from_slice(&bytes)?;
+
+                    if let Some(settings) = value.as_object_mut()
+                        && settings.remove("watchFolders").is_some()
+                    {
+                        tracing::debug!("Retired folder monitoring preference ignored");
+                    }
+
+                    serde_json::from_value(value)
+                };
+
+                parse().map_err(|error| {
+                    format!(
+                        "Invalid configuration {}: {error}",
+                        paths.config_path.display()
+                    )
+                })?
+            }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 let defaults = AppConfig::default();
                 Self::write(&paths, &defaults, false)?;

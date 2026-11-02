@@ -1,7 +1,7 @@
 {
   "name": "nexa",
   "private": true,
-  "version": "2.16.1",
+  "version": "2.16.2",
   "type": "module",
   "scripts": {
     "build:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-windows.ps1",

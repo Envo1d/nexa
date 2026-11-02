@@ -526,15 +526,6 @@ function resetDrafts() {
                     ><small>{{ t("autoScanDescription") }}</small></span
                   ></ToggleSwitch
                 >
-                <ToggleSwitch
-                  v-model="draft.watchFolders"
-                  trailing
-                  class="settings-card-row settings-switch-row"
-                  ><span
-                    ><strong>{{ t("watchFolders") }}</strong
-                    ><small>{{ t("watchFoldersDescription") }}</small></span
-                  ></ToggleSwitch
-                >
                 <div class="settings-scan-summary">
                   <div>
                     <AppIcon name="info" :size="16" /><strong>{{

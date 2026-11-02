@@ -544,51 +544,13 @@ pub(super) async fn scan(
     scan_source(pool, root, "stage", None, report).await
 }
 
-#[cfg(test)]
 #[tracing::instrument(skip_all, fields(source_kind))]
 pub(super) async fn scan_source(
     pool: &SqlitePool,
     root: PathBuf,
     source_kind: &str,
     excluded: Option<PathBuf>,
-    report: impl FnMut(&ScanStatus),
-) -> Result<ScanStatus, String> {
-    scan_source_impl(pool, root, source_kind, excluded, report, None).await
-}
-
-pub(super) async fn scan_with_baseline(
-    pool: &SqlitePool,
-    root: PathBuf,
-    source_kind: &str,
-    excluded: Option<PathBuf>,
-    report: impl FnMut(&ScanStatus),
-    baselines: &tokio::sync::Mutex<super::renames::RenameBaselines>,
-) -> Result<ScanStatus, String> {
-    let mut baselines = baselines.lock().await;
-    let tracker = baselines.tracker(source_kind, &root, excluded.as_deref());
-
-    scan_watched_source(pool, root, source_kind, excluded, report, tracker).await
-}
-
-pub(super) async fn scan_watched_source(
-    pool: &SqlitePool,
-    root: PathBuf,
-    source_kind: &str,
-    excluded: Option<PathBuf>,
-    report: impl FnMut(&ScanStatus),
-    tracker: &mut super::renames::RenameTracker,
-) -> Result<ScanStatus, String> {
-    scan_source_impl(pool, root, source_kind, excluded, report, Some(tracker)).await
-}
-
-#[tracing::instrument(skip_all, fields(source_kind))]
-async fn scan_source_impl(
-    pool: &SqlitePool,
-    root: PathBuf,
-    source_kind: &str,
-    excluded: Option<PathBuf>,
     mut report: impl FnMut(&ScanStatus),
-    mut tracker: Option<&mut super::renames::RenameTracker>,
 ) -> Result<ScanStatus, String> {
     tracing::info!(
         source_kind,
@@ -640,12 +602,6 @@ async fn scan_source_impl(
 
     let source = activate_source_for(pool, &root, marker, source_kind).await?;
 
-    if let Some(tracker) = tracker.as_mut() {
-        tracker.begin();
-    }
-
-    let source_root = root.clone();
-
     let (tx, mut rx) = tokio::sync::mpsc::channel(4);
 
     let walker = tauri::async_runtime::spawn_blocking(move || {
@@ -689,10 +645,6 @@ async fn scan_source_impl(
             WalkMessage::Batch(files) => {
                 let count = files.len() as u64;
 
-                if let Some(tracker) = tracker.as_mut() {
-                    tracker.observe(pool, source, &source_root, &files).await?;
-                }
-
                 let before = status.errors;
 
                 let prepared = prepare(pool, source, files, &mut status).await?;
@@ -720,10 +672,6 @@ async fn scan_source_impl(
             traversal_errors,
             "Incomplete media scan; unseen records preserved"
         );
-    }
-
-    if let Some(tracker) = tracker {
-        tracker.finish(complete && status.errors == 0);
     }
 
     status.running = false;
@@ -803,7 +751,7 @@ pub fn launch_sources(
         for (root, source_kind) in roots {
             let result = match &staging {
                 Ok(staging) => {
-                    scan_with_baseline(
+                    scan_source(
                         app.state::<Database>().pool(),
                         root,
                         source_kind,
@@ -813,7 +761,6 @@ pub fn launch_sources(
                             None
                         },
                         |status| publish(&app, status),
-                        &app.state::<StageState>().rename_baselines,
                     )
                     .await
                 }
