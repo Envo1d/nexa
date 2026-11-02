@@ -440,7 +440,7 @@ onBeforeUnmount(() => {
         :disabled="busy || loading"
         @click="chooseCategory(option.id)"
       >
-        <AppIcon :name="option.icon" :size="20" />
+        <AppIcon :name="option.icon" :size="16" />
         <span>{{ t(`healthCategory-${option.id}`) }}</span
         ><strong>{{ page.counts[index] }}</strong>
       </button>
@@ -668,10 +668,10 @@ onBeforeUnmount(() => {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  padding: 28px;
+  gap: 16px;
+  padding: 16px;
   overflow: hidden;
-  background: var(--background);
+  background: linear-gradient(110deg, var(--surface), var(--surface-alt));
   border: 1px solid var(--line);
   border-radius: 10px;
 }
@@ -685,6 +685,7 @@ onBeforeUnmount(() => {
 }
 .health-header {
   justify-content: space-between;
+  flex-wrap: wrap;
 }
 .health-eyebrow {
   color: var(--muted);
@@ -692,8 +693,8 @@ onBeforeUnmount(() => {
   font-weight: 500;
 }
 h1 {
-  font-size: 26px;
-  margin: 8px 0;
+  font-size: 20px;
+  margin: 4px 0 8px;
 }
 h2 {
   font-size: 16px;
@@ -709,27 +710,36 @@ p {
   line-height: 1.5;
 }
 .health-categories {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 .health-categories button {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 18px 14px;
+  gap: 8px;
+  min-height: 36px;
+  padding: 8px 12px;
   border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface);
+  border-radius: 6px;
+  background: var(--surface-raised);
   text-align: left;
 }
 .health-categories button.selected {
-  border-color: var(--accent);
+  border-color: var(--accent-line);
   background: var(--accent-soft);
 }
+.health-categories button:hover {
+  border-color: var(--accent-line);
+}
 .health-categories strong {
-  font-size: 23px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--surface-hover);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
 .health-categories span {
   min-width: 0;
@@ -737,7 +747,8 @@ p {
   line-height: 1.4;
 }
 .health-categories svg {
-  color: var(--accent);
+  flex-shrink: 0;
+  color: var(--muted);
 }
 .health-feedback {
   min-height: 24px;
@@ -753,14 +764,14 @@ p {
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1.25fr) minmax(290px, 0.8fr);
-  gap: 18px;
+  gap: 16px;
 }
 .health-list,
 .health-detail {
   min-height: 0;
   min-width: 0;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 8px;
   background: var(--surface);
 }
 .health-list {
@@ -770,7 +781,7 @@ p {
 }
 .health-list-header {
   justify-content: space-between;
-  padding: 18px;
+  padding: 16px;
   border-bottom: 1px solid var(--line);
 }
 .health-list-header p {
@@ -792,7 +803,7 @@ p {
   align-items: center;
   gap: 12px;
   text-align: left;
-  padding: 14px 10px;
+  padding: 12px;
   border: 1px solid transparent;
   border-radius: 8px;
 }
@@ -804,15 +815,15 @@ p {
   background: var(--accent-soft);
 }
 .health-issue-icon {
-  padding: 10px;
-  border-radius: 9px;
+  padding: 8px;
+  border-radius: 6px;
   background: var(--surface-raised);
   color: var(--accent);
 }
 .health-issue-caption {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
   min-width: 0;
 }
 .health-issue-caption > * {
@@ -838,7 +849,7 @@ p {
   color: var(--muted);
 }
 .health-detail {
-  padding: 22px;
+  padding: 16px;
   overflow: auto;
 }
 .health-detail > h2 {
@@ -858,14 +869,14 @@ p {
 }
 .health-metadata {
   display: grid;
-  gap: 14px;
-  padding: 18px 0;
+  gap: 12px;
+  padding: 16px 0;
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
 }
 .health-metadata div {
   display: grid;
-  gap: 5px;
+  gap: 4px;
 }
 dt {
   color: var(--muted);
@@ -879,8 +890,8 @@ dd {
 .health-repairs {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 20px;
+  gap: 8px;
+  margin-top: 16px;
 }
 .health-repairs p {
   width: 100%;
@@ -888,7 +899,7 @@ dd {
 .health-confirmation {
   display: grid;
   gap: 12px;
-  margin-top: 22px;
+  margin-top: 16px;
   padding: 16px;
   border: 1px solid var(--accent-line);
   border-radius: 8px;
@@ -911,35 +922,28 @@ dd {
   min-height: 220px;
   height: 100%;
   gap: 12px;
-  padding: 22px;
+  padding: 16px;
   color: var(--muted);
 }
 .health-empty svg {
   color: var(--accent);
 }
 .health-notice {
-  padding: 10px 12px;
+  padding: 8px 12px;
   border-radius: 8px;
   background: var(--info-bg);
   color: var(--info);
 }
 @media (max-width: 1150px) {
   .health-panel {
-    padding: 18px;
     gap: 12px;
-  }
-  .health-categories button {
-    grid-template-columns: minmax(0, 1fr) auto;
-    padding: 12px;
-  }
-  .health-categories svg {
-    display: none;
   }
   .health-header {
     align-items: start;
   }
   .health-header > div:first-child {
-    max-width: 60%;
+    flex: 1;
+    min-width: 240px;
   }
 }
 </style>

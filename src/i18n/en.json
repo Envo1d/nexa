@@ -1,5 +1,6 @@
 {
   "libraryHealth": "Library health",
+  "libraryHealthNav": "Check",
   "healthEyebrow": "Library care",
   "healthDescription": "Review catalog issues and restore links to your files without losing their metadata.",
   "healthRefresh": "Refresh",

@@ -302,7 +302,7 @@ function resetStageFilters() {
             @click="view = 'health'"
           >
             <AppIcon name="warning" /><span v-if="sidebarExpanded">{{
-              t("libraryHealth")
+              t("libraryHealthNav")
             }}</span>
             <span v-else class="sr-only">{{ t("libraryHealth") }}</span>
           </button>
