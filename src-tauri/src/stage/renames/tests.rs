@@ -46,6 +46,101 @@ async fn scan(database: &Database, root: &Path, kind: &str, tracker: &mut Rename
     assert_eq!(status.errors, 0);
 }
 
+#[tokio::test]
+async fn ordinary_scan_baseline_preserves_rename_on_first_notified_scan() {
+    for kind in ["library", "stage"] {
+        let (_temp, database, root, _) = fixture().await;
+        let baselines = tokio::sync::Mutex::new(RenameBaselines::default());
+        let initial = crate::stage::scanning::scan_with_baseline(
+            database.pool(),
+            root.clone(),
+            kind,
+            None,
+            |_| {},
+            &baselines,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            (initial.scanned, initial.extracted, initial.errors),
+            (1, 1, 0)
+        );
+
+        let id: i64 = sqlx::query_scalar("SELECT id FROM media")
+            .fetch_one(database.pool())
+            .await
+            .unwrap();
+        sqlx::query("UPDATE media SET favorite=1 WHERE id=?")
+            .bind(id)
+            .execute(database.pool())
+            .await
+            .unwrap();
+        fs::rename(root.join("original.bmp"), root.join("renamed.bmp")).unwrap();
+
+        let notified = crate::stage::scanning::scan_with_baseline(
+            database.pool(),
+            root.clone(),
+            kind,
+            None,
+            |_| {},
+            &baselines,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            (notified.scanned, notified.extracted, notified.errors),
+            (1, 0, 0)
+        );
+        let rows = sqlx::query("SELECT id,favorite,relative_path FROM media")
+            .fetch_all(database.pool())
+            .await
+            .unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].get::<i64, _>("id"), id);
+        assert_eq!(rows[0].get::<i64, _>("favorite"), 1);
+        assert_eq!(rows[0].get::<String, _>("relative_path"), "renamed.bmp");
+    }
+}
+
+#[test]
+fn shared_baselines_are_separate_per_source_and_reset_on_root_or_exclusion_change() {
+    let mut baselines = RenameBaselines::default();
+    let root = Path::new("Library");
+    let identity = Identity {
+        volume: 1,
+        object: 2,
+        created: 3,
+    };
+    baselines.tracker("library", root, None).previous.insert(
+        identity,
+        Tracked {
+            relative: "kept.bmp".into(),
+            revision: "revision".into(),
+        },
+    );
+    assert!(baselines.tracker("stage", root, None).previous.is_empty());
+    assert_eq!(baselines.tracker("library", root, None).previous.len(), 1);
+    assert!(
+        baselines
+            .tracker("library", root, Some(Path::new("Stage")))
+            .previous
+            .is_empty()
+    );
+    baselines.tracker("library", root, None).previous.insert(
+        identity,
+        Tracked {
+            relative: "kept.bmp".into(),
+            revision: "revision".into(),
+        },
+    );
+    assert!(
+        baselines
+            .tracker("library", Path::new("Other"), None)
+            .previous
+            .is_empty()
+    );
+}
+
 #[cfg(windows)]
 #[tokio::test]
 async fn external_renames_preserve_one_identity_annotations_and_updated_paths_in_both_sources() {

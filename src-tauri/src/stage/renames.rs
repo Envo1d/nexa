@@ -1,6 +1,9 @@
 //! Preserve catalog identity only for verified same-file moves within one source.
 
-use std::{collections::HashMap, path::Path};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
 use sqlx::SqlitePool;
 
@@ -62,6 +65,43 @@ struct Tracked {
 pub(super) struct RenameTracker {
     previous: HashMap<Identity, Tracked>,
     current: HashMap<Identity, Tracked>,
+}
+
+#[derive(Default)]
+pub(super) struct RenameBaselines {
+    sources: HashMap<String, SourceBaseline>,
+}
+
+struct SourceBaseline {
+    root: PathBuf,
+    excluded: Option<PathBuf>,
+    tracker: RenameTracker,
+}
+
+impl RenameBaselines {
+    pub(super) fn tracker(
+        &mut self,
+        kind: &str,
+        root: &Path,
+        excluded: Option<&Path>,
+    ) -> &mut RenameTracker {
+        let baseline = self
+            .sources
+            .entry(kind.to_owned())
+            .or_insert_with(|| SourceBaseline {
+                root: root.to_path_buf(),
+                excluded: excluded.map(Path::to_path_buf),
+                tracker: RenameTracker::default(),
+            });
+
+        if baseline.root != root || baseline.excluded.as_deref() != excluded {
+            baseline.root = root.to_path_buf();
+            baseline.excluded = excluded.map(Path::to_path_buf);
+            baseline.tracker = RenameTracker::default();
+        }
+
+        &mut baseline.tracker
+    }
 }
 
 struct Candidate {

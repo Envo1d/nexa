@@ -173,7 +173,7 @@
   "autoScan": "Auto scan on startup",
   "autoScanDescription": "Scan Library and Stage each time Nexa opens.",
   "watchFolders": "Detect folder changes automatically",
-  "watchFoldersDescription": "Keep Library and Stage up to date when files are added, changed or deleted. Includes subfolders and an initial scan when monitoring starts.",
+  "watchFoldersDescription": "Watch subfolders for added, changed or deleted files, then scan only the affected Library or Stage. Monitoring does not run a separate startup scan.",
   "lastScan": "Last scan",
   "scanning": "Scanning",
   "idle": "Idle",

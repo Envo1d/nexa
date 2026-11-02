@@ -50,7 +50,6 @@ struct SourceWatch {
     pending: Option<Pending>,
     attempted: Option<Instant>,
     retries: u8,
-    renames: super::renames::RenameTracker,
 }
 
 fn relevant(event: &Event, excluded: Option<&Path>) -> bool {
@@ -77,7 +76,6 @@ impl SourceWatch {
             pending: None,
             attempted: None,
             retries: 0,
-            renames: super::renames::RenameTracker::default(),
         }
     }
 
@@ -124,20 +122,22 @@ impl SourceWatch {
             match registration {
                 Ok(watcher) => {
                     self.watcher = Some(watcher);
-                    tracing::info!(source_kind = self.kind, "Recursive folder watch attached");
+                    tracing::info!(
+                        source_kind = self.kind,
+                        "Recursive folder watch attached; waiting for changes"
+                    );
                 }
                 Err(_) if first_attempt => {
                     tracing::warn!(
                         source_kind = self.kind,
-                        "Folder watch unavailable; retrying with periodic reconciliation"
+                        "Folder watch unavailable; retrying registration without indexing"
                     );
                 }
                 Err(_) => {}
             }
 
-            // Establish a baseline after registration, including newly reconnected roots.
-            // Failed native registrations also get a periodic scanner fallback.
-            self.changed.store(true, Ordering::Release);
+            // Registration alone is not a filesystem change. Ordinary scans share
+            // their rename baseline with event-triggered scans without another walk.
         }
 
         if self.changed.swap(false, Ordering::AcqRel) {
@@ -270,7 +270,7 @@ pub(crate) fn start(app: tauri::AppHandle) {
                     },
                 );
 
-                let result = scanning::scan_watched_source(
+                let result = scanning::scan_with_baseline(
                     app.state::<Database>().pool(),
                     watch.root.clone(),
                     watch.kind,
@@ -280,7 +280,7 @@ pub(crate) fn start(app: tauri::AppHandle) {
                         None
                     },
                     |status| scanning::publish(&app, status),
-                    &mut watch.renames,
+                    &state.rename_baselines,
                 )
                 .await;
 
