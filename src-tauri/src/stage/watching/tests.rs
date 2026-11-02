@@ -96,11 +96,23 @@ fn native_watch_observes_nested_add_modify_delete_and_reattaches_missing_root() 
     let root = temp.path().join("Stage");
     let mut watch = SourceWatch::new(root.clone(), "stage", None).maintain();
     assert!(watch.watcher.is_none());
+    assert!(watch.pending.is_none());
+    assert!(!watch.changed.load(Ordering::Acquire));
+
+    watch.attempted = None;
+    watch = watch.maintain();
+    assert!(
+        watch.pending.is_none(),
+        "Registration retries must not index"
+    );
 
     fs::create_dir_all(root.join("nested")).unwrap();
     watch.attempted = None;
     watch = watch.maintain();
     assert!(watch.watcher.is_some());
+    assert!(watch.pending.is_none(), "Attaching must not index");
+    watch = watch.maintain();
+    assert!(watch.pending.is_none(), "Idle watches must not index");
     watch.pending = None;
     watch.changed.store(false, Ordering::Release);
 
@@ -116,6 +128,8 @@ fn native_watch_observes_nested_add_modify_delete_and_reattaches_missing_root() 
 
     // Remove only disposable test directories, after releasing the native handle.
     watch.watcher = None;
+    watch.changed.store(false, Ordering::Release);
+    watch.finished(0);
     fs::remove_dir(root.join("nested")).unwrap();
     fs::remove_dir(&root).unwrap();
     watch.attempted = None;
@@ -125,5 +139,43 @@ fn native_watch_observes_nested_add_modify_delete_and_reattaches_missing_root() 
     watch.attempted = None;
     watch = watch.maintain();
     assert!(watch.watcher.is_some());
-    assert!(watch.pending.is_some());
+    assert!(watch.pending.is_none(), "Reattaching must not index");
+}
+
+#[test]
+fn notifications_schedule_only_the_affected_source() {
+    let library_root = PathBuf::from("library");
+    let stage_root = library_root.join("Stage");
+    let mut library = SourceWatch::new(library_root.clone(), "library", Some(stage_root.clone()));
+    let mut stage = SourceWatch::new(stage_root.clone(), "stage", None);
+
+    let event =
+        Event::new(EventKind::Create(CreateKind::File)).add_path(stage_root.join("incoming.bmp"));
+    library.changed.store(
+        relevant(&event, library.excluded.as_deref()),
+        Ordering::Release,
+    );
+    stage.changed.store(
+        relevant(&event, stage.excluded.as_deref()),
+        Ordering::Release,
+    );
+
+    // Avoid native registration: exercise the same notification consumption as maintenance.
+    library.attempted = Some(Instant::now());
+    stage.attempted = Some(Instant::now());
+    library = library.maintain();
+    stage = stage.maintain();
+    assert!(library.pending.is_none());
+    assert!(stage.pending.is_some());
+
+    stage.finished(0);
+    let event =
+        Event::new(EventKind::Remove(RemoveKind::File)).add_path(library_root.join("removed.bmp"));
+    library.changed.store(
+        relevant(&event, library.excluded.as_deref()),
+        Ordering::Release,
+    );
+    library = library.maintain();
+    assert!(library.pending.is_some());
+    assert!(stage.pending.is_none());
 }
