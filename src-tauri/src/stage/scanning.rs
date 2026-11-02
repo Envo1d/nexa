@@ -203,6 +203,16 @@ pub(super) async fn prepare(
     files: Vec<Discovered>,
     status: &mut ScanStatus,
 ) -> Result<Vec<Prepared>, String> {
+    prepare_impl(pool, source, files, status, false).await
+}
+
+async fn prepare_impl(
+    pool: &SqlitePool,
+    source: i64,
+    files: Vec<Discovered>,
+    status: &mut ScanStatus,
+    force: bool,
+) -> Result<Vec<Prepared>, String> {
     let mut prepared = Vec::with_capacity(files.len());
 
     let mut query = QueryBuilder::<Sqlite>::new(
@@ -261,11 +271,12 @@ pub(super) async fn prepare(
             continue;
         }
 
-        let unchanged = stored.get(&file.relative).is_some_and(|row| {
-            row.get::<Option<String>, _>("file_revision").as_deref() == Some(&file.revision)
-                && row.get::<i64, _>("metadata_version") == EXTRACTOR_VERSION
-                && row.get::<String, _>("metadata_state") == "ready"
-        });
+        let unchanged = !force
+            && stored.get(&file.relative).is_some_and(|row| {
+                row.get::<Option<String>, _>("file_revision").as_deref() == Some(&file.revision)
+                    && row.get::<i64, _>("metadata_version") == EXTRACTOR_VERSION
+                    && row.get::<String, _>("metadata_state") == "ready"
+            });
 
         if unchanged {
             prepared.push(Prepared {
@@ -320,7 +331,42 @@ pub(super) async fn prepare(
     Ok(prepared)
 }
 
-pub(super) fn video_title_from_filename(filename: &str) -> Option<&str> {
+pub(crate) async fn refresh_technical_metadata(pool: &SqlitePool, id: i64) -> Result<(), String> {
+    let row = sqlx::query(concat!(
+        "SELECT m.source_id,m.relative_path,m.last_seen_at,s.root_path FROM media m ",
+        "JOIN sources s ON s.id=m.source_id WHERE m.id=?",
+    ))
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|error| error.to_string())?
+    .ok_or("Media unavailable")?;
+    let root = PathBuf::from(row.get::<String, _>("root_path"));
+    let relative: String = row.get("relative_path");
+    let file = tauri::async_runtime::spawn_blocking(move || {
+        let path = crate::media_paths::checked_action_path(&root, &relative)?;
+        inspect(path, &root)?.ok_or_else(|| "Unsupported media file".to_string())
+    })
+    .await
+    .map_err(|_| "Metadata inspection worker failed")??;
+    let source = row.get("source_id");
+    let mut status = ScanStatus::default();
+    let prepared = prepare_impl(pool, source, vec![file], &mut status, true).await?;
+
+    if prepared.is_empty() {
+        return Err("File changed; retry the operation.".into());
+    }
+
+    save_batch(pool, source, row.get("last_seen_at"), prepared).await?;
+
+    if status.errors != 0 {
+        return Err("Technical metadata is still unavailable.".into());
+    }
+
+    Ok(())
+}
+
+pub(crate) fn video_title_from_filename(filename: &str) -> Option<&str> {
     let stem = Path::new(filename).file_stem()?.to_str()?.trim();
 
     let artist_start = stem.rfind(" [")?;

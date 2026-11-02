@@ -16,6 +16,7 @@ import CardContextMenu from "./components/CardContextMenu.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
 import DistributionDialog from "./components/DistributionDialog.vue";
 import TagsPanel from "./components/TagsPanel.vue";
+import LibraryHealthPanel from "./components/LibraryHealthPanel.vue";
 import DuplicateOrderDialog from "./components/DuplicateOrderDialog.vue";
 import ReplacementDialog from "./components/ReplacementDialog.vue";
 import ContentDuplicatesDialog from "./components/ContentDuplicatesDialog.vue";
@@ -23,7 +24,7 @@ import DeleteFilesDialog from "./components/DeleteFilesDialog.vue";
 import { useWorkspace } from "./app/useWorkspace";
 
 import "./styles.css";
-import type { CollectionPosition } from "./types/media";
+import type { CollectionPosition, MediaItem } from "./types/media";
 
 const { t } = useI18n();
 
@@ -31,6 +32,12 @@ const contentDuplicatesOpen = ref(false);
 const duplicateReplacementMain = ref<string>();
 const mainPosition = shallowRef<CollectionPosition>();
 const stagePosition = shallowRef<CollectionPosition>();
+const healthRevision = ref(0);
+
+function editHealthMetadata(item: MediaItem, collection: string) {
+  editingMetadata.value = collection === "library";
+  distributionQueue.value = [item];
+}
 
 const searchInput = useTemplateRef<HTMLInputElement>("searchInput");
 
@@ -287,6 +294,18 @@ function resetStageFilters() {
             }}</span
             ><span v-else class="sr-only">{{ t("tags") }}</span>
           </button>
+          <button
+            class="nav-item"
+            :title="t('libraryHealth')"
+            :class="{ active: view === 'health' }"
+            :aria-current="view === 'health' ? 'page' : undefined"
+            @click="view = 'health'"
+          >
+            <AppIcon name="warning" /><span v-if="sidebarExpanded">{{
+              t("libraryHealth")
+            }}</span>
+            <span v-else class="sr-only">{{ t("libraryHealth") }}</span>
+          </button>
         </div>
         <button
           class="nav-item settings-button"
@@ -500,6 +519,16 @@ function resetStageFilters() {
         "
         @preview="
           notify(`${$event} is a UI preview. No settings or files are changed.`)
+        "
+      />
+      <LibraryHealthPanel
+        v-else-if="view === 'health'"
+        :revision="healthRevision"
+        @changed="refreshAll"
+        @edit="editHealthMetadata"
+        @indexing="
+          settingsSection = { id: 'indexing' };
+          view = 'settings';
         "
       />
       <template v-else>
@@ -776,11 +805,12 @@ function resetStageFilters() {
       @close="distributionQueue = []"
       @open="previewAction('Open file', $event)"
       @processed="
+        healthRevision++;
         notify(
           editingMetadata
             ? `${$event} file(s) updated${isNativeData() ? '' : ' for this demo session'}.`
             : `${$event} file(s) distributed${isNativeData() ? '' : ' for this demo session'}.`,
-        )
+        );
       "
     />
     <div

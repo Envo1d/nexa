@@ -5,7 +5,7 @@ mod demo;
 #[cfg(desktop)]
 use crate::updater;
 use crate::{
-    catalog, config, database, disk_sync, duplicates, legacy_import, library, logging,
+    catalog, config, database, disk_sync, duplicates, health, legacy_import, library, logging,
     metadata_presets, replacement, stage, taxonomy,
 };
 
@@ -96,6 +96,12 @@ fn run_production() {
             result
         })
         .invoke_handler(tauri::generate_handler![
+            health::get_library_health,
+            health::check_library_health,
+            health::get_health_media,
+            health::retry_health_metadata,
+            health::inspect_health_relink,
+            health::confirm_health_relink,
             catalog::export_catalog,
             catalog::inspect_catalog_backup,
             catalog::restore_catalog,
@@ -233,6 +239,7 @@ fn setup(app: &mut tauri::App, paths: config::AppPaths) -> Result<(), Box<dyn st
     app.manage(stage::ViewerFullscreenState::default());
     app.manage(legacy_import::ImportState::default());
     app.manage(disk_sync::SyncState::default());
+    app.manage(health::HealthState::default());
 
     #[cfg(desktop)]
     {

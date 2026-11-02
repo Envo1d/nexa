@@ -7,7 +7,7 @@ use std::{
 
 use serde::Serialize;
 use sqlx::Row;
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 
 use super::{CACHE_MAX_BYTES, CacheStatus, StageState, inspect};
 use crate::{database::Database, media_paths::checked_action_path, preview_cache::PreviewOrigin};
@@ -113,6 +113,8 @@ pub async fn get_stage_preview(
 ) -> Result<tauri::ipc::Response, String> {
     let id = id.parse::<i64>().map_err(|_| "Invalid media ID")?;
 
+    let attempt = app.state::<crate::health::HealthState>().begin_preview();
+
     // Maintenance temporarily owns both permits; contention is not a failed preview.
     let permit = preview_permit(&state).await?;
 
@@ -137,7 +139,11 @@ pub async fn get_stage_preview(
 
     let expected: Option<String> = row.get("file_revision");
 
-    let bytes = tauri::async_runtime::spawn_blocking(move || {
+    let diagnostic_revision = expected.clone();
+    let diagnostic_path = format!("{}/{}", root.to_string_lossy(), relative);
+    let worker_app = app.clone();
+
+    let result = tauri::async_runtime::spawn_blocking(move || {
         let _permit = permit;
 
         tracing::debug!(media_id = id, "Preview source validation started");
@@ -165,7 +171,7 @@ pub async fn get_stage_preview(
                             "Preview cache budget reached"
                         );
 
-                        if let Err(error) = app.emit(
+                        if let Err(error) = worker_app.emit(
                             "cache-limit-reached",
                             CacheStatus {
                                 bytes,
@@ -182,13 +188,28 @@ pub async fn get_stage_preview(
 
         let bytes = crate::preview_cache::encode_preview(&preview.image)
             .map_err(|_| "Cannot encode preview")?;
-        Ok::<_, String>(bytes.to_vec())
+        Ok::<_, String>((bytes.to_vec(), preview.persistence_error.is_some()))
     })
     .await
     .map_err(|error| {
         tracing::error!(media_id = id, %error, "Preview worker failed");
         error.to_string()
-    })??;
+    }).and_then(|result| result);
+
+    let reason = match &result {
+        Ok((_, true)) => Some("Preview cache could not be written.".into()),
+        Ok(_) => None,
+        Err(error) => Some(error.clone()),
+    };
+    app.state::<crate::health::HealthState>().finish_preview(
+        id,
+        diagnostic_revision,
+        diagnostic_path,
+        attempt,
+        reason,
+    );
+
+    let (bytes, _) = result?;
 
     tracing::debug!(
         media_id = id,

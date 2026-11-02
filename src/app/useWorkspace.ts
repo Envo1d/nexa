@@ -85,7 +85,7 @@ export function useWorkspace(elements: WorkspaceElements) {
     activeFilterCount,
   } = library;
 
-  const view = ref<"main" | "stage" | "settings" | "tags">("main");
+  const view = ref<"main" | "stage" | "settings" | "tags" | "health">("main");
   const settingsSection = ref<{ id: string } | null>(null);
 
   watch(view, (next) => {
@@ -416,7 +416,11 @@ export function useWorkspace(elements: WorkspaceElements) {
       }
 
       if (distributionQueue.value.length) distributionQueue.value = [];
-      else if (view.value === "settings" || view.value === "tags")
+      else if (
+        view.value === "settings" ||
+        view.value === "tags" ||
+        view.value === "health"
+      )
         view.value = "main";
       else if (context.value) context.value = null;
       else if (detailsOpen.value) closeDetails();
