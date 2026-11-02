@@ -3,12 +3,8 @@
 mod file_actions;
 mod previews;
 mod queries;
-mod renames;
 mod scanning;
 mod viewing;
-mod watching;
-
-pub(crate) use watching::start as start_watching;
 
 pub(crate) use scanning::activate_source_for;
 pub(crate) use scanning::refresh_technical_metadata;
@@ -111,7 +107,6 @@ pub struct StageState {
     pub cache: Arc<PreviewCache>,
     preview_slots: Arc<tokio::sync::Semaphore>,
     generated_previews: Arc<AtomicU64>,
-    rename_baselines: tokio::sync::Mutex<renames::RenameBaselines>,
 }
 
 impl StageState {
@@ -138,7 +133,6 @@ impl StageState {
             cache: Arc::new(PreviewCache::new(cache_path)),
             preview_slots: Arc::new(tokio::sync::Semaphore::new(2)),
             generated_previews: Arc::new(AtomicU64::new(0)),
-            rename_baselines: tokio::sync::Mutex::new(renames::RenameBaselines::default()),
         }
     }
 }

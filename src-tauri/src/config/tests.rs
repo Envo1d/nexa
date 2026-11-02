@@ -1,27 +1,51 @@
 use super::*;
 
 #[test]
-fn existing_settings_enable_monitoring_and_explicit_opt_out_round_trips() {
-    let legacy: AppConfig = serde_json::from_str(r#"{"autoScan":false}"#).unwrap();
-    assert!(legacy.watch_folders);
-    assert!(!legacy.auto_scan);
+fn retired_monitoring_preference_loads_without_losing_settings_and_is_removed_on_save() {
+    for enabled in [false, true] {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = paths(dir.path());
+        let expected = AppConfig {
+            auto_scan: true,
+            theme: AppTheme::Paper,
+            locale: AppLocale::Russian,
+            ..AppConfig::default()
+        };
+        let mut saved = serde_json::to_value(&expected).unwrap();
+        saved["watchFolders"] = enabled.into();
+        let original = serde_json::to_vec(&saved).unwrap();
+        fs::create_dir_all(paths.config_path.parent().unwrap()).unwrap();
+        fs::write(&paths.config_path, &original).unwrap();
 
+        let store = ConfigStore::load(paths.clone()).unwrap();
+        assert_eq!(store.snapshot().unwrap().settings, expected);
+        assert_eq!(fs::read(&paths.config_path).unwrap(), original);
+        assert!(!store.save(expected.clone()).unwrap());
+
+        let persisted: serde_json::Value =
+            serde_json::from_slice(&fs::read(&paths.config_path).unwrap()).unwrap();
+        assert!(persisted.get("watchFolders").is_none());
+        assert_eq!(
+            ConfigStore::load(paths)
+                .unwrap()
+                .snapshot()
+                .unwrap()
+                .settings,
+            expected
+        );
+    }
+}
+
+#[test]
+fn retired_monitoring_compatibility_does_not_allow_other_unknown_settings() {
     let dir = tempfile::tempdir().unwrap();
     let paths = paths(dir.path());
-    let store = ConfigStore::load(paths.clone()).unwrap();
-    let draft = AppConfig {
-        watch_folders: false,
-        ..legacy
-    };
-    assert!(!store.save(draft).unwrap());
-    assert!(
-        !ConfigStore::load(paths)
-            .unwrap()
-            .snapshot()
-            .unwrap()
-            .settings
-            .watch_folders
-    );
+    let original = br#"{"watchFolders":true,"unknownSetting":false}"#;
+    fs::create_dir_all(paths.config_path.parent().unwrap()).unwrap();
+    fs::write(&paths.config_path, original).unwrap();
+
+    assert!(ConfigStore::load(paths.clone()).is_err());
+    assert_eq!(fs::read(&paths.config_path).unwrap(), original);
 }
 
 #[test]
