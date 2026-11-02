@@ -930,9 +930,7 @@ onBeforeUnmount(() => {
 .duplicates-comparison {
   padding: 16px 20px;
   overflow-y: auto;
-  background:
-    radial-gradient(ellipse at 50% 0%, var(--accent-glow), transparent 65%),
-    var(--background);
+  background: var(--background);
 }
 .duplicates-columns {
   display: grid;
@@ -947,7 +945,6 @@ onBeforeUnmount(() => {
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--surface);
-  box-shadow: 0 4px 18px var(--shadow-soft);
 }
 .duplicate-version :deep(.detail-preview) {
   height: clamp(170px, 23vh, 280px);
@@ -976,7 +973,7 @@ dd {
   white-space: pre-wrap;
 }
 .panel-heading {
-  background: linear-gradient(110deg, var(--accent-soft), var(--surface) 65%);
+  background: var(--surface-alt);
   border-bottom: 1px solid var(--line);
   flex-shrink: 0;
 }
@@ -986,9 +983,8 @@ dd {
   gap: 14px;
 }
 .duplicates-heading h2 {
-  font-size: 19px;
+  font-size: 20px;
   margin: 4px 0 0;
-  letter-spacing: -0.3px;
 }
 .duplicates-mark,
 .duplicates-welcome-icon {
@@ -1004,11 +1000,9 @@ dd {
   border-radius: 14px;
 }
 .duplicates-eyebrow {
-  color: var(--text-accent);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
 }
 .duplicates-controls > .muted {
   max-width: 950px;
@@ -1075,8 +1069,7 @@ dd {
 .duplicate-progress-fill {
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--accent-strong), var(--accent));
-  transition: width 160ms ease-out;
+  background: var(--accent);
 }
 .duplicate-progress-track.indeterminate .duplicate-progress-fill {
   width: 35% !important;
@@ -1232,7 +1225,6 @@ dd {
   width: 84px;
   height: 84px;
   border-radius: 24px;
-  box-shadow: 0 0 60px var(--accent-glow);
   margin-bottom: 20px;
 }
 .duplicates-welcome h3 {
@@ -1283,9 +1275,6 @@ dd {
   .duplicate-scan-spinner,
   .duplicate-progress-track.indeterminate .duplicate-progress-fill {
     animation: none;
-  }
-  .duplicate-progress-fill {
-    transition: none;
   }
 }
 @media (max-width: 850px) {

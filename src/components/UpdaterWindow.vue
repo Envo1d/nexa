@@ -5,6 +5,7 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import { translateUi as ui } from "../i18n/presentation";
 import { applyLocale, i18n } from "../i18n";
 import { applyTheme, themePreference } from "../themes";
+import AppIcon from "./AppIcon.vue";
 
 import type { InterfaceLocale } from "../types/config";
 import type { AppTheme } from "../themes";
@@ -94,27 +95,27 @@ onUnmounted(() => {
 <template>
   <main class="update-window" :class="{ failed: state.phase === 'error' }">
     <header data-tauri-drag-region>
-      <span data-tauri-drag-region>NEXA</span>
+      <span data-tauri-drag-region>Nexa</span>
       <button
         v-if="state.phase === 'error'"
         type="button"
         :aria-label="ui('Close updater')"
         @click="close"
       >
-        ×
+        <AppIcon name="close" :size="16" />
       </button>
     </header>
 
     <div class="emblem" aria-hidden="true">
-      <div class="orbit orbit-one"></div>
-      <div class="orbit orbit-two"></div>
       <img src="/icon.png" alt="" draggable="false" />
-      <span v-if="state.phase === 'error'" class="error-mark">!</span>
+      <span v-if="state.phase === 'error'" class="error-mark">
+        <AppIcon name="warning" :size="16" />
+      </span>
     </div>
 
     <section aria-live="polite" aria-atomic="true">
       <p class="version">
-        {{ ui(state.version ? `VERSION ${state.version}` : "UPDATING") }}
+        {{ ui(state.version ? `Version ${state.version}` : "Updating") }}
       </p>
       <h1>{{ ui(title) }}</h1>
       <p class="message">
@@ -139,7 +140,9 @@ onUnmounted(() => {
           :class="{ active: index === step, complete: index < step }"
           :aria-current="index === step ? 'step' : undefined"
         >
-          <span>{{ index < step ? "✓" : index + 1 }}</span
+          <span>
+            <AppIcon v-if="index < step" name="check" :size="12" />
+            <template v-else>{{ index + 1 }}</template> </span
           >{{ ui(label) }}
         </li>
       </ol>
@@ -183,13 +186,11 @@ button:focus-visible {
 
 .update-window {
   min-height: 440px;
+  max-height: 100dvh;
+  overflow-y: auto;
   padding: 0 32px 24px;
   text-align: center;
-  background: radial-gradient(
-    ellipse at 50% 36%,
-    color-mix(in srgb, var(--accent-soft) 50%, transparent),
-    transparent 62%
-  );
+  background: var(--shell);
   border: 1px solid var(--line);
 }
 
@@ -199,13 +200,14 @@ button:focus-visible {
   justify-content: space-between;
   height: 44px;
   margin: 0 -16px;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 3px;
+  font-size: 12px;
+  font-weight: 500;
   color: var(--muted);
 }
 
 .update-window header button {
+  display: grid;
+  place-items: center;
   width: 28px;
   height: 28px;
   border: 0;
@@ -220,48 +222,26 @@ button:focus-visible {
   place-items: center;
   width: 132px;
   height: 132px;
-  margin: 16px auto 22px;
+  margin: 16px auto 20px;
 }
 
 .emblem img {
   width: 68px;
   height: 68px;
   object-fit: contain;
-  filter: drop-shadow(
-    0 8px 24px color-mix(in srgb, var(--accent) 25%, transparent)
-  );
-  animation: breathe 3s ease-in-out infinite;
-}
-
-.orbit {
-  position: absolute;
-  inset: 0;
-  border: 1px solid color-mix(in srgb, var(--accent) 15%, transparent);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: orbit 3s linear infinite;
-}
-
-.orbit-two {
-  inset: 10px;
-  border-top-color: color-mix(in srgb, var(--accent) 15%, transparent);
-  border-bottom-color: var(--text-accent);
-  animation-direction: reverse;
-  animation-duration: 4s;
 }
 
 .version {
-  margin: 0 0 10px;
-  color: var(--accent);
-  font-size: 10px;
-  letter-spacing: 2px;
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 
 h1 {
-  margin: 0 0 10px;
-  font-size: 23px;
+  margin: 0 0 8px;
+  font-size: 24px;
   font-weight: 600;
-  letter-spacing: -0.5px;
 }
 
 .message {
@@ -273,8 +253,8 @@ h1 {
 }
 
 .activity {
-  height: 3px;
-  margin: 22px 0 18px;
+  height: 4px;
+  margin: 24px 0 16px;
   overflow: hidden;
   border-radius: 4px;
   background: var(--surface-pressed);
@@ -285,7 +265,7 @@ h1 {
   width: 38%;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  background: var(--accent);
   animation: sweep 2s ease-in-out infinite;
 }
 
@@ -296,23 +276,24 @@ h1 {
   margin: 0;
   list-style: none;
   color: var(--subtle);
-  font-size: 10px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
 .steps li {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   align-items: center;
 }
 
 .steps li span {
   display: grid;
   place-items: center;
-  width: 17px;
-  height: 17px;
+  width: 20px;
+  height: 20px;
   border: 1px solid currentColor;
   border-radius: 50%;
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .steps .active,
@@ -323,46 +304,35 @@ h1 {
 .footnote {
   margin: 20px 0 0;
   color: var(--subtle);
-  font-size: 10px;
-}
-
-.failed .orbit,
-.failed .emblem img {
-  animation: none;
+  font-size: 12px;
 }
 
 .error-mark {
   position: absolute;
+  display: grid;
+  place-items: center;
   right: 24px;
   bottom: 24px;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   background: var(--warning);
   color: var(--warning-bg);
-  font-weight: 700;
 }
 
 .close-button {
-  min-width: 110px;
-  margin-top: 22px;
-  padding: 9px 18px;
+  min-width: 112px;
+  min-height: 36px;
+  margin-top: 24px;
+  padding: 8px 16px;
   border: 1px solid var(--line-strong);
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  border-radius: 8px;
+  background: var(--surface-raised);
   font-size: 12px;
 }
 
-@keyframes orbit {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes breathe {
-  50% {
-    transform: translateY(-4px);
-  }
+.close-button:hover {
+  background: var(--surface-hover);
 }
 
 @keyframes sweep {
@@ -375,8 +345,6 @@ h1 {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .orbit,
-  .emblem img,
   .activity span {
     animation: none;
   }

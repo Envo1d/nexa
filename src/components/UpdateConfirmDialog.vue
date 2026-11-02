@@ -69,7 +69,7 @@ onBeforeUnmount(() => {
         <div class="update-confirm-release">
           <img src="/icon.png" alt="" width="38" height="38" />
           <div>
-            <span>{{ ui("NEW VERSION") }}</span>
+            <span>{{ ui("New version") }}</span>
             <strong>Nexa {{ version }}</strong>
           </div>
         </div>
@@ -149,8 +149,8 @@ onBeforeUnmount(() => {
 
 .update-confirm-release span {
   color: var(--muted);
-  font-size: 9px;
-  letter-spacing: 1.5px;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .update-confirm-release strong {

@@ -681,11 +681,10 @@ onMounted(load);
   margin-bottom: 6px;
 }
 .taxonomy-eyebrow {
-  font-size: 10px;
-  letter-spacing: 1.4px;
-  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 500;
   color: var(--muted);
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 .taxonomy-categories {
   display: flex;
