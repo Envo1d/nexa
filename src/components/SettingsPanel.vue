@@ -417,7 +417,7 @@ function resetDrafts() {
           >
             <header class="settings-section-heading">
               <h2 :id="`settings-title-${section.id}`">
-                <AppIcon :name="section.icon" :size="24" />{{ section.label }}
+                <AppIcon :name="section.icon" :size="20" />{{ section.label }}
               </h2>
               <p>{{ section.description }}</p>
             </header>
