@@ -23,6 +23,7 @@ export function useDesktopServices(
   let disposed = false;
   let stopCacheUsage: (() => void) | undefined;
   let stopDiskSync: (() => void) | undefined;
+  let stopHealth: (() => void) | undefined;
 
   const diskSync = ref<{
     running: boolean;
@@ -85,8 +86,24 @@ export function useDesktopServices(
 
     void refreshAll();
 
-    if (isNativeData()) void connectDiskSync();
+    if (isNativeData()) {
+      void connectDiskSync();
+      void connectHealth();
+    }
   });
+
+  async function connectHealth() {
+    try {
+      const stop = await listen("library-health-changed", () => {
+        if (!disposed) void refreshAll();
+      });
+
+      if (disposed) stop();
+      else stopHealth = stop;
+    } catch {
+      if (!disposed) notify("Could not connect library health notifications.");
+    }
+  }
 
   async function connectDiskSync() {
     try {
@@ -129,6 +146,7 @@ export function useDesktopServices(
     disposed = true;
     stopCacheUsage?.();
     stopDiskSync?.();
+    stopHealth?.();
   });
 
   return {

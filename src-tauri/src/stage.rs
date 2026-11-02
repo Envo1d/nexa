@@ -11,6 +11,8 @@ mod watching;
 pub(crate) use watching::start as start_watching;
 
 pub(crate) use scanning::activate_source_for;
+pub(crate) use scanning::refresh_technical_metadata;
+pub(crate) use scanning::video_title_from_filename;
 pub use scanning::{
     __cmd__get_stage_scan_status, __cmd__start_library_scan, __cmd__start_stage_scan,
     __tauri_command_name_get_stage_scan_status, __tauri_command_name_start_library_scan,
@@ -55,7 +57,7 @@ use crate::{media_metadata::MediaKind, preview_cache::PreviewCache};
 
 const BATCH: usize = 64;
 
-const EXTRACTOR_VERSION: i64 = 1;
+pub(crate) const EXTRACTOR_VERSION: i64 = 1;
 
 pub(crate) struct FileActionGuard<'a>(&'a AtomicBool);
 
@@ -164,18 +166,18 @@ fn kind(extension: &str) -> Option<MediaKind> {
 }
 
 #[derive(Clone)]
-struct Discovered {
-    path: PathBuf,
-    relative: String,
-    extension: String,
-    kind: MediaKind,
-    size: i64,
-    modified: Option<i64>,
-    created: Option<i64>,
-    revision: String,
+pub(crate) struct Discovered {
+    pub(crate) path: PathBuf,
+    pub(crate) relative: String,
+    pub(crate) extension: String,
+    pub(crate) kind: MediaKind,
+    pub(crate) size: i64,
+    pub(crate) modified: Option<i64>,
+    pub(crate) created: Option<i64>,
+    pub(crate) revision: String,
 }
 
-fn inspect(path: PathBuf, root: &Path) -> Result<Option<Discovered>, String> {
+pub(crate) fn inspect(path: PathBuf, root: &Path) -> Result<Option<Discovered>, String> {
     let extension = path
         .extension()
         .and_then(|value| value.to_str())

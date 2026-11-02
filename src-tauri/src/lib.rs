@@ -4,6 +4,7 @@ mod config;
 pub mod database;
 mod disk_sync;
 mod duplicates;
+mod health;
 mod legacy_import;
 mod library;
 mod logging;

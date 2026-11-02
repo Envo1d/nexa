@@ -17,6 +17,16 @@ const failed = new Set<string>();
 const jobs: Job[] = [];
 let running = 0;
 
+const retryRevision = ref(0);
+
+export function retryNativePreview(id: string) {
+  for (const key of failed) {
+    if ((JSON.parse(key) as string[])[0] === id) failed.delete(key);
+  }
+
+  retryRevision.value++;
+}
+
 function trim() {
   for (const [key, entry] of cache) {
     if (cache.size <= 96) break;
@@ -103,6 +113,7 @@ export function useNativePreview(
       item.value.path,
       item.value.availability,
       enabled.value,
+      retryRevision.value,
     ],
     () => {
       release();
