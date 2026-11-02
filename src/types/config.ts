@@ -14,6 +14,7 @@ export interface AppConfig {
   gifSubfolder: string;
   syncStructure: boolean;
   autoScan: boolean;
+  watchFolders: boolean;
   autoUpdateCheck: boolean;
   locale: AppLocale;
   theme: AppTheme;
@@ -40,6 +41,7 @@ export function defaultConfig(): AppConfig {
     gifSubfolder: "Animations",
     syncStructure: false,
     autoScan: false,
+    watchFolders: true,
     autoUpdateCheck: false,
     locale: "system",
     theme: "midnight-violet",

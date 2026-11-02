@@ -1,6 +1,30 @@
 use super::*;
 
 #[test]
+fn existing_settings_enable_monitoring_and_explicit_opt_out_round_trips() {
+    let legacy: AppConfig = serde_json::from_str(r#"{"autoScan":false}"#).unwrap();
+    assert!(legacy.watch_folders);
+    assert!(!legacy.auto_scan);
+
+    let dir = tempfile::tempdir().unwrap();
+    let paths = paths(dir.path());
+    let store = ConfigStore::load(paths.clone()).unwrap();
+    let draft = AppConfig {
+        watch_folders: false,
+        ..legacy
+    };
+    assert!(!store.save(draft).unwrap());
+    assert!(
+        !ConfigStore::load(paths)
+            .unwrap()
+            .snapshot()
+            .unwrap()
+            .settings
+            .watch_folders
+    );
+}
+
+#[test]
 fn saves_report_only_disk_structure_changes() {
     let dir = tempfile::tempdir().unwrap();
 

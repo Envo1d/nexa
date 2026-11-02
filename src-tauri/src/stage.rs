@@ -3,8 +3,12 @@
 mod file_actions;
 mod previews;
 mod queries;
+mod renames;
 mod scanning;
 mod viewing;
+mod watching;
+
+pub(crate) use watching::start as start_watching;
 
 pub(crate) use scanning::activate_source_for;
 pub use scanning::{

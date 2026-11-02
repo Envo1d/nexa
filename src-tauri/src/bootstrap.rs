@@ -257,6 +257,7 @@ fn setup(app: &mut tauri::App, paths: config::AppPaths) -> Result<(), Box<dyn st
         }
     }
     disk_sync::start(app.handle().clone());
+    stage::start_watching(app.handle().clone());
 
     tracing::info!("Application setup completed");
     Ok(())
