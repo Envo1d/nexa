@@ -687,15 +687,13 @@ onBeforeUnmount(() => {
   justify-content: space-between;
 }
 .health-eyebrow {
-  color: var(--accent);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
 }
 h1 {
   font-size: 26px;
-  margin: 7px 0;
+  margin: 8px 0;
 }
 h2 {
   font-size: 16px;
