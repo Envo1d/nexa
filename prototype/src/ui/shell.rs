@@ -224,7 +224,11 @@ impl Gallery {
             .rounded_lg()
             .border_1()
             .border_color(rgb(LINE))
-            .bg(rgb(SURFACE))
+            .bg(gpui::linear_gradient(
+                120.0,
+                gpui::linear_color_stop(rgb(SURFACE), 0.0),
+                gpui::linear_color_stop(rgb(0x10101a), 1.0),
+            ))
             .child(
                 control("collapse", label("Библиотека"), "menu", false)
                     .border_0()
