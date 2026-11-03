@@ -6,10 +6,7 @@ use gpui_component::{
     menu::{DropdownMenu, PopupMenuItem},
 };
 
-use super::{
-    ACCENT, Gallery, LINE, MUTED,
-    shell::{control, icon},
-};
+use super::{ACCENT, Gallery, LINE, MUTED, shell::icon};
 
 impl Gallery {
     pub(super) fn collection(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -22,6 +19,7 @@ impl Gallery {
         let layout = super::layout::CollectionLayout::new(width, self.list_mode);
         let columns = layout.columns;
         let rows = self.visible.len().div_ceil(columns);
+        let wide = f32::from(window.viewport_size().width) >= 1450.0;
         let gallery = cx.weak_entity();
         let list = uniform_list(
             "media-grid",
@@ -39,7 +37,7 @@ impl Gallery {
                             .children((0..columns).filter_map(|column| {
                                 let &index = this.visible.get(row * columns + column)?;
                                 Some(
-                                    this.card(index, layout.preview_height, cx)
+                                    this.card(index, layout.preview_height, wide, cx)
                                         .w(px(layout.card_width))
                                         .flex_none(),
                                 )
@@ -80,7 +78,13 @@ impl Gallery {
             .child(gpui_component::scroll::Scrollbar::vertical(&self.scroll))
     }
 
-    fn card(&self, index: usize, preview_height: f32, cx: &mut Context<Self>) -> Stateful<Div> {
+    fn card(
+        &self,
+        index: usize,
+        preview_height: f32,
+        wide: bool,
+        cx: &mut Context<Self>,
+    ) -> Stateful<Div> {
         let entry = &self.entries[index];
         let list = self.list_mode;
         let selected = self.selected == Some(index);
@@ -121,13 +125,26 @@ impl Gallery {
             .child(
                 div()
                     .absolute()
+                    .bottom_0()
+                    .w_full()
+                    .h(gpui::relative(0.35))
+                    .bg(gpui::linear_gradient(
+                        180.0,
+                        gpui::linear_color_stop(gpui::rgba(0x0a0a1200), 0.0),
+                        gpui::linear_color_stop(gpui::rgba(0x0a0a1226), 1.0),
+                    )),
+            )
+            .child(
+                div()
+                    .absolute()
                     .top(px(if list { 5.0 } else { 7.0 }))
                     .left(px(if list { 5.0 } else { 7.0 }))
                     .px(px(5.0))
                     .py(px(3.0))
-                    .rounded_sm()
+                    .rounded(px(4.0))
                     .bg(gpui::rgba(0x0a0a12c2))
                     .text_size(px(if list { 8.0 } else { 10.0 }))
+                    .line_height(px(if list { 10.0 } else { 12.5 }))
                     .child(entry.extension.clone()),
             )
             .when_some(entry.duration.clone(), |view, duration| {
@@ -138,9 +155,10 @@ impl Gallery {
                         .right(px(if list { 5.0 } else { 7.0 }))
                         .px(px(5.0))
                         .py(px(3.0))
-                        .rounded_sm()
+                        .rounded(px(4.0))
                         .bg(gpui::rgba(0x0a0a12c2))
                         .text_size(px(if list { 8.0 } else { 10.0 }))
+                        .line_height(px(if list { 10.0 } else { 12.5 }))
                         .child(duration),
                 )
             });
@@ -155,7 +173,12 @@ impl Gallery {
                     .id("card-title")
                     .min_w_0()
                     .truncate()
-                    .text_size(px(13.0))
+                    .text_size(px(if wide { 12.0 } else { 13.0 }))
+                    .line_height(px(if list {
+                        if wide { 16.8 } else { 18.2 }
+                    } else {
+                        39.0
+                    }))
                     .font_weight(gpui::FontWeight::SEMIBOLD)
                     .child(entry.title.clone())
                     .tooltip(move |window, cx| {
@@ -176,7 +199,8 @@ impl Gallery {
                     .border_color(rgb(LINE))
             })
             .text_color(rgb(MUTED))
-            .text_size(px(10.4))
+            .text_size(px(if wide { 11.0 } else { 10.4 }))
+            .line_height(px(if wide { 13.75 } else { 13.0 }))
             .child(div().flex_shrink_0().child(date))
             .child(
                 div()
@@ -189,7 +213,12 @@ impl Gallery {
                     .when(!list, |view| view.justify_end())
                     .text_color(rgb(if characters { 0xb0dfc7 } else { 0xd0b4fa }))
                     .text_size(px(11.05))
-                    .child(icon(if characters { "person" } else { "tag" }).size(px(15.0)))
+                    .line_height(px(13.8125))
+                    .child(
+                        icon(if characters { "person" } else { "tag" })
+                            .size(px(15.0))
+                            .text_color(rgb(if characters { 0xb0dfc7 } else { ACCENT })),
+                    )
                     .child(div().min_w_0().truncate().child(metadata))
                     .tooltip(move |window, cx| {
                         gpui_component::tooltip::Tooltip::new(metadata_tip.clone())
@@ -245,7 +274,14 @@ impl Gallery {
             .child(preview)
             .child(body)
             .child(
-                control("favorite", "", "heart", false)
+                div()
+                    .id("favorite")
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded(px(5.0))
+                    .cursor_pointer()
+                    .child(icon("heart").size(px(17.0)))
                     .absolute()
                     .top(px(if list { 10.0 } else { 4.0 }))
                     .right(px(if list { 8.0 } else { 4.0 }))
@@ -255,6 +291,7 @@ impl Gallery {
                     .border_0()
                     .bg(gpui::rgba(0x0a0a1273))
                     .text_color(rgb(if entry.favorite { ACCENT } else { 0xffffff }))
+                    .hover(|view| view.bg(gpui::rgba(0x0a0a1273)))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         cx.stop_propagation();
                         this.entries[index].favorite = !this.entries[index].favorite;
@@ -265,8 +302,8 @@ impl Gallery {
             .child(
                 div()
                     .absolute()
-                    .right(px(if list { 8.0 } else { 4.0 }))
-                    .top(px(if list { 40.0 } else { preview_height + 5.0 }))
+                    .right(px(if list { 8.0 } else { 5.2 }))
+                    .bottom(px(if list { 8.0 } else { 40.3 }))
                     .child(self.card_actions(index, cx)),
             )
     }
@@ -276,9 +313,13 @@ impl Gallery {
         let source = self.entries[index].path.clone();
 
         Button::new("card-actions")
-            .icon(IconName::Ellipsis)
+            .child(gpui_component::Icon::new(IconName::Ellipsis).size(px(17.0)))
             .ghost()
-            .small()
+            .with_size(gpui_component::Size::Size(px(28.6)))
+            .w(px(28.6))
+            .h(px(28.6))
+            .p_0()
+            .rounded(px(5.0))
             .text_color(rgb(MUTED))
             .dropdown_menu(move |menu, _, _| {
                 let open = gallery.clone();

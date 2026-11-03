@@ -394,9 +394,12 @@ impl Gallery {
                         .track_scroll(&self.details_scroll)
                         .child(content),
                 )
-                .child(div().absolute().top_0().left_0().size_full().child(
-                    Scrollbar::vertical(&self.details_scroll).scrollbar_show(ScrollbarShow::Scrolling),
-                )),
+                .child(
+                    div().absolute().top_0().left_0().size_full().child(
+                        Scrollbar::vertical(&self.details_scroll)
+                            .scrollbar_show(ScrollbarShow::Scrolling),
+                    ),
+                ),
         )
     }
 
