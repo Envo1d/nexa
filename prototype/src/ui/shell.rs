@@ -77,6 +77,7 @@ pub(super) fn icon(name: &'static str) -> Icon {
         "copy" => Some(IconName::Copy),
         "calendar" => Some(IconName::Calendar),
         "arrow" => Some(IconName::ArrowRight),
+        "staging" => Some(IconName::Inbox),
         "more" => Some(IconName::Ellipsis),
         "down" => Some(IconName::ChevronDown),
         "minimize" => Some(IconName::Minus),
@@ -165,22 +166,47 @@ impl Gallery {
             .pt_2()
             .gap_1()
             .child(
-                div()
+                button("main-tab", "Библиотека")
+                    .h_full()
+                    .py_0()
+                    .border_0()
+                    .rounded_b(px(0.0))
                     .flex()
                     .items_center()
                     .justify_center()
                     .w(px(112.0))
                     .rounded_t(px(9.0))
                     .font_weight(gpui::FontWeight::MEDIUM)
-                    .bg(rgb(0x2c263f))
+                    .bg(if self.stage {
+                        gpui::rgba(0)
+                    } else {
+                        rgb(0x2c263f)
+                    })
                     .border_b_2()
-                    .border_color(rgb(ACCENT))
-                    .child("Библиотека"),
+                    .border_color(if self.stage {
+                        gpui::rgba(0)
+                    } else {
+                        rgb(ACCENT)
+                    })
+                    .text_color(rgb(if self.stage { MUTED } else { super::TEXT }))
+                    .on_click(
+                        cx.listener(|this, _, window, cx| this.switch_workspace(false, window, cx)),
+                    ),
             )
             .child(
                 button("stage", "Входящие")
-                    .bg(gpui::rgba(0))
+                    .bg(if self.stage {
+                        rgb(0x2c263f)
+                    } else {
+                        gpui::rgba(0)
+                    })
                     .border_0()
+                    .border_b_2()
+                    .border_color(if self.stage {
+                        rgb(ACCENT)
+                    } else {
+                        gpui::rgba(0)
+                    })
                     .rounded_t(px(9.0))
                     .rounded_b(px(0.0))
                     .font_weight(gpui::FontWeight::MEDIUM)
@@ -190,8 +216,10 @@ impl Gallery {
                     .flex()
                     .items_center()
                     .justify_center()
-                    .text_color(rgb(MUTED))
-                    .on_click(cx.listener(|this, _, _, cx| this.unavailable("Входящие", cx))),
+                    .text_color(rgb(if self.stage { super::TEXT } else { MUTED }))
+                    .on_click(
+                        cx.listener(|this, _, window, cx| this.switch_workspace(true, window, cx)),
+                    ),
             );
 
         div()
@@ -300,11 +328,17 @@ impl Gallery {
             )
             .child(div().h(px(12.0)).flex_shrink_0())
             .child(
-                navigation_button("gallery", label("Галерея"), "folder", !self.favorites_only)
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.favorites_only = false;
-                        this.refilter(cx);
-                    })),
+                navigation_button(
+                    "gallery",
+                    label("Галерея"),
+                    "folder",
+                    !self.stage && !self.favorites_only,
+                )
+                .on_click(cx.listener(|this, _, window, cx| {
+                    this.switch_workspace(false, window, cx);
+                    this.favorites_only = false;
+                    this.refilter(cx);
+                })),
             )
             .child(div().h(px(4.0)).flex_shrink_0())
             .child(
@@ -312,9 +346,10 @@ impl Gallery {
                     "favorites",
                     label("Избранное"),
                     "nav-star",
-                    self.favorites_only,
+                    !self.stage && self.favorites_only,
                 )
-                .on_click(cx.listener(|this, _, _, cx| {
+                .on_click(cx.listener(|this, _, window, cx| {
+                    this.switch_workspace(false, window, cx);
                     this.favorites_only = true;
                     this.refilter(cx);
                 })),

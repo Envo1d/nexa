@@ -13,8 +13,10 @@ mod details;
 mod filters;
 mod layout;
 mod motion;
+mod selection;
 mod shell;
 mod sort_select;
+mod stage;
 mod toolbar;
 
 pub(crate) use assets::Assets;
@@ -49,6 +51,12 @@ const MUTED: u32 = 0xa39bb5;
 const ACCENT: u32 = 0xa786ff;
 
 pub(super) struct Gallery {
+    stage: bool,
+    inactive_workspace: stage::Workspace,
+    stage_selection: std::collections::BTreeSet<usize>,
+    marquee: Option<selection::Marquee>,
+    marquee_frame_pending: bool,
+    collection_bounds: gpui::Bounds<gpui::Pixels>,
     entries: Vec<Entry>,
     tag_counts: Vec<(String, usize)>,
     visible: Vec<usize>,
@@ -150,6 +158,12 @@ impl Gallery {
         let type_counts = [entries.len(), videos, entries.len() - videos];
 
         Self {
+            stage: false,
+            inactive_workspace: stage::Workspace::incoming(),
+            stage_selection: Default::default(),
+            marquee: None,
+            marquee_frame_pending: false,
+            collection_bounds: Default::default(),
             entries,
             tag_counts,
             visible: (0..catalog::DEMO_COUNT).collect(),
@@ -195,14 +209,16 @@ impl Gallery {
     }
 
     fn refilter(&mut self, cx: &mut Context<Self>) {
+        self.marquee = None;
         (self.visible, self.type_counts) = catalog::browse_with_counts(
             &self.entries,
             &self.search.read(cx).value(),
             catalog::BrowseFilter {
+                path_search: self.stage,
                 videos_only: self.videos_only,
                 images_only: self.images_only,
-                favorites_only: self.favorites_only,
-                tagged_only: self.tagged_only || self.hide_untagged,
+                favorites_only: !self.stage && self.favorites_only,
+                tagged_only: !self.stage && (self.tagged_only || self.hide_untagged),
                 sort: self.sort,
             },
         );
@@ -326,6 +342,7 @@ impl Gallery {
                     this.player = None;
                     this.viewer = false;
                     this.selected = None;
+                    this.stage_selection.clear();
                     this.release_previews(cx);
                     this.entries = entries;
                     this.tag_counts = catalog::tag_counts(&this.entries);
@@ -506,6 +523,9 @@ impl Gallery {
 
 impl Render for Gallery {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if !self.stage || self.viewer || !window.is_window_active() {
+            self.marquee = None;
+        }
         let now = std::time::Instant::now();
         self.drawer_transition.retarget(
             if self.details_open && !self.viewer {
@@ -574,6 +594,7 @@ impl Render for Gallery {
                 this.search.update(cx, |state, cx| state.focus(window, cx));
             }))
             .on_action(cx.listener(|this, _: &CloseDetails, _, cx| {
+                this.marquee = None;
                 this.details_open = false;
                 this.notice = None;
                 cx.notify();
@@ -651,7 +672,12 @@ impl Render for Gallery {
                     .pb_2()
                     .gap(px(2.0))
                     .child(self.navigation(cx))
-                    .when(!self.viewer, |view| view.child(self.filters(window, cx)))
+                    .when(!self.viewer && !self.stage, |view| {
+                        view.child(self.filters(window, cx))
+                    })
+                    .when(!self.viewer && self.stage, |view| {
+                        view.child(self.stage_sidebar(window, cx))
+                    })
                     .child(
                         div()
                             .flex()
@@ -663,9 +689,21 @@ impl Render for Gallery {
                             .border_color(rgb(LINE))
                             .rounded_lg()
                             .bg(rgb(0x10101a))
-                            .px_4()
+                            .when(!self.stage || self.viewer, |view| view.px_4())
                             .pb(px(12.0))
-                            .child(self.toolbar(cx))
+                            .child(
+                                div()
+                                    .when(self.stage && !self.viewer, |view| view.px_4())
+                                    .child(self.toolbar(cx)),
+                            )
+                            .when(self.stage && !self.viewer, |view| {
+                                view.child(
+                                    div()
+                                        .px_4()
+                                        .flex_shrink_0()
+                                        .child(self.stage_selection_bar(cx)),
+                                )
+                            })
                             .child(content)
                             .when(self.player.is_some(), |this| {
                                 this.child(

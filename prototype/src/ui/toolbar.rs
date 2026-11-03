@@ -189,6 +189,7 @@ impl Gallery {
                                     .py_1()
                                     .on_click(cx.listener(|this, _, _, cx| {
                                         this.list_mode = false;
+                                        this.marquee = None;
                                         cx.notify();
                                     })),
                             )
@@ -209,6 +210,7 @@ impl Gallery {
                                     .py_1()
                                     .on_click(cx.listener(|this, _, _, cx| {
                                         this.list_mode = true;
+                                        this.marquee = None;
                                         cx.notify();
                                     })),
                             ),

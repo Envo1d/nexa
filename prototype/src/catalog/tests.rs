@@ -1,5 +1,59 @@
 use super::*;
 
+#[test]
+fn incoming_search_matches_filename_and_relative_folder_before_kind_counts() {
+    let entries = incoming_demo_entries();
+    let (all, counts) = browse_with_counts(
+        &entries,
+        " bAtCh 1 ",
+        BrowseFilter {
+            path_search: true,
+            ..Default::default()
+        },
+    );
+    assert_eq!(entries.len(), 48);
+    assert_eq!(all.len(), 8);
+    assert_eq!(counts[0], counts[1] + counts[2]);
+    let (videos, video_counts) = browse_with_counts(
+        &entries,
+        "batch 1",
+        BrowseFilter {
+            path_search: true,
+            videos_only: true,
+            ..Default::default()
+        },
+    );
+    assert_eq!(counts, video_counts);
+    assert_eq!(videos.len(), counts[1]);
+    assert!(videos.iter().all(|&index| entries[index].video));
+    assert_eq!(
+        browse(
+            &entries,
+            "INCOMING-001",
+            BrowseFilter {
+                path_search: true,
+                ..Default::default()
+            }
+        ),
+        vec![0]
+    );
+    assert!(
+        browse(
+            &entries,
+            "Nature",
+            BrowseFilter {
+                path_search: true,
+                ..Default::default()
+            }
+        )
+        .is_empty()
+    );
+    assert!(entries.iter().all(|entry| entry.tags.is_empty()
+        && entry.characters.is_empty()
+        && entry.details.artist.is_none()
+        && entry.details.copyrights.is_empty()));
+}
+
 fn browse(entries: &[Entry], query: &str, filter: BrowseFilter) -> Vec<usize> {
     browse_with_counts(entries, query, filter).0
 }
