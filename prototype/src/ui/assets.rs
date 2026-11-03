@@ -1,0 +1,87 @@
+use std::borrow::Cow;
+
+use gpui::{AssetSource, SharedString};
+
+// Supplemental variants from the original Tauri Lucide version, omitted by
+// gpui-component 0.5.1's default set. No locally redrawn icon geometry.
+const SUPPLEMENTAL: &[(&str, &[u8])] = &[
+    (
+        "icons/clock.svg",
+        include_bytes!("../../assets/icons/clock.svg"),
+    ),
+    (
+        "icons/film.svg",
+        include_bytes!("../../assets/icons/film.svg"),
+    ),
+    (
+        "icons/scan.svg",
+        include_bytes!("../../assets/icons/scan.svg"),
+    ),
+    (
+        "icons/square.svg",
+        include_bytes!("../../assets/icons/square.svg"),
+    ),
+    (
+        "icons/tag.svg",
+        include_bytes!("../../assets/icons/tag.svg"),
+    ),
+    (
+        "icons/circle-alert.svg",
+        include_bytes!("../../assets/icons/circle-alert.svg"),
+    ),
+    (
+        "icons/files.svg",
+        include_bytes!("../../assets/icons/files.svg"),
+    ),
+    (
+        "icons/video.svg",
+        include_bytes!("../../assets/icons/video.svg"),
+    ),
+    (
+        "icons/image.svg",
+        include_bytes!("../../assets/icons/image.svg"),
+    ),
+    (
+        "icons/layout-grid.svg",
+        include_bytes!("../../assets/icons/layout-grid.svg"),
+    ),
+    (
+        "icons/list.svg",
+        include_bytes!("../../assets/icons/list.svg"),
+    ),
+    (
+        "icons/rotate-ccw.svg",
+        include_bytes!("../../assets/icons/rotate-ccw.svg"),
+    ),
+    (
+        "icons/user-round.svg",
+        include_bytes!("../../assets/icons/user-round.svg"),
+    ),
+];
+
+pub(crate) struct Assets;
+
+impl AssetSource for Assets {
+    fn load(&self, path: &str) -> gpui::Result<Option<Cow<'static, [u8]>>> {
+        if let Some((_, bytes)) = SUPPLEMENTAL.iter().find(|(name, _)| *name == path) {
+            return Ok(Some(Cow::Borrowed(bytes)));
+        }
+
+        gpui_component_assets::Assets.load(path)
+    }
+
+    fn list(&self, path: &str) -> gpui::Result<Vec<SharedString>> {
+        let mut assets = gpui_component_assets::Assets.list(path)?;
+        assets.extend(
+            SUPPLEMENTAL
+                .iter()
+                .filter(|(name, _)| name.starts_with(path))
+                .map(|(name, _)| SharedString::from(*name)),
+        );
+
+        Ok(assets)
+    }
+}
+
+#[cfg(test)]
+mod tests;
