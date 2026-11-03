@@ -2,7 +2,7 @@ use std::{collections::HashMap, path::PathBuf, rc::Rc, sync::Arc, time::Duration
 
 use gpui::{
     App, Context, Div, Entity, FocusHandle, ObjectFit, PathPromptOptions, Render, RenderImage,
-    Stateful, Subscription, Task, UniformListScrollHandle, Window, div, img, prelude::*, px, rgb,
+    Subscription, Task, UniformListScrollHandle, Window, div, img, prelude::*, px, rgb,
 };
 use gpui_component::input::{InputEvent, InputState};
 
@@ -12,6 +12,7 @@ mod collection;
 mod details;
 mod filters;
 mod layout;
+mod motion;
 mod shell;
 mod sort_select;
 mod toolbar;
@@ -77,6 +78,8 @@ pub(super) struct Gallery {
     sort_focus: FocusHandle,
     type_counts: [usize; 3],
     details_open: bool,
+    drawer_transition: motion::Transition,
+    sort_transition: motion::Transition,
     loading: bool,
     dialog_open: bool,
     viewer: bool,
@@ -176,6 +179,8 @@ impl Gallery {
             sort_focus: cx.focus_handle(),
             type_counts,
             details_open: false,
+            drawer_transition: motion::Transition::new(0.0, 220),
+            sort_transition: motion::Transition::new(0.0, 150),
             loading: false,
             dialog_open: false,
             viewer: false,
@@ -501,6 +506,26 @@ impl Gallery {
 
 impl Render for Gallery {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let now = std::time::Instant::now();
+        self.drawer_transition.retarget(
+            if self.details_open && !self.viewer {
+                1.0
+            } else {
+                0.0
+            },
+            now,
+        );
+        self.sort_transition
+            .retarget(if self.sort_open { 1.0 } else { 0.0 }, now);
+        let (mut drawer_amount, drawer_moving) = self.drawer_transition.sample(now);
+        let (_, sort_moving) = self.sort_transition.sample(now);
+        if !motion::enabled() {
+            drawer_amount = if self.details_open { 1.0 } else { 0.0 };
+        }
+        if motion::enabled() && (drawer_moving || sort_moving) {
+            window.request_animation_frame();
+        }
+
         // A rendered frame must not keep the native player alive after its owner
         // closes the viewer/window or replaces the active source.
         let media = self.player.as_ref().map(Rc::downgrade);
@@ -706,17 +731,25 @@ impl Render for Gallery {
                             }),
                     ),
             )
-            .when(self.details_open && !self.viewer, |view| {
-                view.child(
-                    div()
-                        .absolute()
-                        .top(px(layout::DRAWER_TOP))
-                        .right(px(8.0))
-                        .bottom(px(8.0))
-                        .w(px(360.0))
-                        .child(self.details(window, cx)),
-                )
-            })
+            .when(
+                (self.details_open || drawer_amount > 0.0) && !self.viewer,
+                |view| {
+                    view.child(
+                        div()
+                            .absolute()
+                            .top(px(layout::DRAWER_TOP))
+                            .right(px(8.0 - 367.0 * (1.0 - drawer_amount)))
+                            .bottom(px(8.0))
+                            .w(px(360.0))
+                            .opacity(drawer_amount)
+                            .when(!self.details_open, |view| {
+                                view.capture_any_mouse_down(|_, _, cx| cx.stop_propagation())
+                                    .capture_any_mouse_up(|_, _, cx| cx.stop_propagation())
+                            })
+                            .child(self.details(window, cx)),
+                    )
+                },
+            )
             .when_some(self.notice.clone(), |view, notice| {
                 view.child(
                     div()
@@ -750,13 +783,12 @@ impl Render for Gallery {
     }
 }
 
-fn button(id: &'static str, title: &str) -> Stateful<Div> {
+fn button(id: &'static str, title: &str) -> motion::MotionDiv {
     button_with_hover(id, title, 0x242034)
 }
 
-fn button_with_hover(id: &'static str, title: &str, hover_background: u32) -> Stateful<Div> {
-    div()
-        .id(id)
+fn button_with_hover(id: &'static str, title: &str, hover_background: u32) -> motion::MotionDiv {
+    motion::button(id)
         .px_3()
         .py_2()
         .rounded_md()
@@ -764,6 +796,6 @@ fn button_with_hover(id: &'static str, title: &str, hover_background: u32) -> St
         .border_1()
         .border_color(rgb(LINE))
         .cursor_pointer()
-        .hover(move |style| style.bg(rgb(hover_background)))
+        .hover_colors(Some(rgb(hover_background).into()), None, None)
         .when(!title.is_empty(), |view| view.child(title.to_owned()))
 }

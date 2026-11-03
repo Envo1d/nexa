@@ -1,6 +1,6 @@
 use gpui::{
-    App, BoxShadow, Context, Focusable, IntoElement, RenderOnce, WeakEntity, Window, div, point,
-    prelude::*, px, rgb, rgba,
+    Animation, AnimationExt, App, BoxShadow, Context, Focusable, IntoElement, RenderOnce,
+    WeakEntity, Window, div, point, prelude::*, px, rgb, rgba,
 };
 use gpui_component::{Selectable, popover::Popover};
 
@@ -43,6 +43,13 @@ impl Gallery {
                 sort: self.sort,
                 open: self.sort_open,
                 focus: self.sort_focus.clone(),
+                rotation: if super::motion::enabled() {
+                    self.sort_transition.sample(std::time::Instant::now()).0
+                } else if self.sort_open {
+                    1.0
+                } else {
+                    0.0
+                },
             })
             // Popover adds a 4px anchor offset; the reference gap is 6px.
             .pt(px(2.0))
@@ -50,7 +57,7 @@ impl Gallery {
                 state.focus_handle(cx).focus(window);
 
                 let Some(entity) = gallery.upgrade() else {
-                    return div().id("sort-unavailable");
+                    return div().id("sort-unavailable").into_any_element();
                 };
                 let view = entity.read(cx);
                 let active = view.sort_active;
@@ -156,6 +163,15 @@ impl Gallery {
                                 state.dismiss(window, cx);
                             }))
                     }))
+                    .with_animation(
+                        "sort-entrance",
+                        Animation::new(std::time::Duration::from_millis(
+                            if super::motion::enabled() { 150 } else { 1 },
+                        ))
+                        .with_easing(super::motion::ease),
+                        |view, progress| view.opacity(progress).top(px(-4.0 * (1.0 - progress))),
+                    )
+                    .into_any_element()
             })
     }
 }
@@ -166,6 +182,7 @@ struct SortTrigger {
     sort: SortMode,
     open: bool,
     focus: gpui::FocusHandle,
+    rotation: f32,
 }
 
 impl Selectable for SortTrigger {
@@ -181,8 +198,7 @@ impl Selectable for SortTrigger {
 
 impl RenderOnce for SortTrigger {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        div()
-            .id("sort-trigger")
+        super::motion::button("sort-trigger")
             .track_focus(&self.focus)
             .tab_index(0)
             .flex()
@@ -200,21 +216,17 @@ impl RenderOnce for SortTrigger {
             .text_size(px(11.0))
             .line_height(px(13.75))
             .cursor_pointer()
-            .hover(move |style| {
-                style
-                    .bg(rgb(0x242034))
-                    .border_color(rgb(if self.open { ACCENT } else { 0x6d5aa4 }))
-            })
+            .hover_colors(
+                Some(rgb(0x242034).into()),
+                None,
+                Some(rgb(if self.open { ACCENT } else { 0x6d5aa4 }).into()),
+            )
             .child(self.sort.label())
             .child(
                 icon("down")
                     .size(px(15.0))
                     .text_color(rgb(MUTED))
-                    .rotate(gpui::Radians(if self.open {
-                        std::f32::consts::PI
-                    } else {
-                        0.0
-                    })),
+                    .rotate(gpui::Radians(std::f32::consts::PI * self.rotation)),
             )
             .on_key_down(move |event, _, cx| {
                 if matches!(

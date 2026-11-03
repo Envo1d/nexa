@@ -1,4 +1,4 @@
-use gpui::{BoxShadow, Context, Div, Focusable, Stateful, div, point, prelude::*, px, rgb, rgba};
+use gpui::{BoxShadow, Context, Div, Focusable, div, point, prelude::*, px, rgb, rgba};
 use gpui_component::input::Input;
 
 use super::{
@@ -70,8 +70,7 @@ impl Gallery {
                             .text_size(px(12.0))
                             .when(!search_empty, |input| {
                                 input.suffix(
-                                    div()
-                                        .id("clear-search")
+                                    super::motion::button("clear-search")
                                         .w(px(18.0))
                                         .h(px(24.0))
                                         .flex()
@@ -79,7 +78,7 @@ impl Gallery {
                                         .justify_center()
                                         .cursor_pointer()
                                         .text_color(rgb(MUTED))
-                                        .hover(|style| style.text_color(rgb(TEXT)))
+                                        .hover_colors(None, Some(rgb(TEXT).into()), None)
                                         .child(icon("close").size(px(14.0)))
                                         .on_click(cx.listener(|this, _, window, cx| {
                                             this.search.update(cx, |state, cx| {
@@ -242,7 +241,7 @@ fn type_control(
     name: &'static str,
     count: usize,
     active: bool,
-) -> Stateful<Div> {
+) -> super::motion::MotionDiv {
     // The collection filters have their own transparent/selected surfaces;
     // shared shell controls use a raised background and different active colors.
     super::button_with_hover(id, "", 0x242034)

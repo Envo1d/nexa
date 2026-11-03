@@ -1,7 +1,7 @@
 # Supplemental Lucide Icons
 
 The application uses `gpui-component::Icon` and `IconName` with the official
-`gpui-component-assets = 0.5.1` resource bundle. These thirteen files provide only
+`gpui-component-assets = 0.5.1` resource bundle. These files provide only
 reference variants absent from that release's default icon set:
 
 - `tag.svg`
@@ -17,6 +17,8 @@ reference variants absent from that release's default icon set:
 - `film.svg`
 - `scan.svg`
 - `square.svg`
+- `share-2.svg`
+- `nav-menu.svg`, `nav-star.svg`, `nav-settings.svg`: sidebar-specific reference variants
 
 Geometry was extracted without redrawing from the exported `__iconData.node`
 values in `@lucide/vue` 1.52.0, the exact version in the reference
