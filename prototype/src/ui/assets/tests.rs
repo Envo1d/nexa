@@ -50,6 +50,7 @@ fn component_icon_names_and_reference_variants_resolve_from_the_same_provider() 
         assert!(Assets.load(&name.path()).unwrap().is_some());
     }
     for name in [
+        "share-2",
         "tag",
         "circle-alert",
         "files",

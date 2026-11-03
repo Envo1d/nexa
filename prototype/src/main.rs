@@ -65,6 +65,8 @@ fn main() {
             theme.muted_foreground = gpui::rgb(0xa39bb5).into();
             theme.popover = gpui::rgb(0x1a1827).into();
             theme.primary = gpui::rgb(0x7b43d9).into();
+            theme.scrollbar_thumb = gpui::rgb(0x4d4a5c).into();
+            theme.scrollbar_thumb_hover = gpui::rgb(0x4d4a5c).into();
             cx.on_window_closed(|cx| {
                 if cx.windows().is_empty() {
                     cx.quit();

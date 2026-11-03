@@ -1,7 +1,7 @@
 // Exact sizing rules from MediaCollection.vue at the reference 13px root size.
 pub(super) const GAP: f32 = 13.0;
 pub(super) const TITLEBAR_HEIGHT: f32 = 56.0;
-pub(super) const DRAWER_TOP: f32 = TITLEBAR_HEIGHT + 59.0;
+pub(super) const DRAWER_TOP: f32 = TITLEBAR_HEIGHT + 60.0;
 const GRID_PADDING: f32 = 3.9;
 const MIN_CARD_WIDTH: f32 = 227.5;
 const CARD_BODY_HEIGHT: f32 = 74.75;
