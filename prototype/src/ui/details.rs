@@ -74,7 +74,12 @@ impl Gallery {
                             })),
                     ),
             );
-        let Some(index) = self.selected else {
+        let selected = if self.stage && self.stage_selection.len() != 1 {
+            None
+        } else {
+            self.selected
+        };
+        let Some(index) = selected else {
             return panel.child(
                 div()
                     .flex_1()
@@ -91,7 +96,11 @@ impl Gallery {
                         div()
                             .text_color(rgb(TEXT))
                             .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .child("Файл не выбран"),
+                            .child(if self.stage && self.stage_selection.len() > 1 {
+                                "Выбрано несколько файлов"
+                            } else {
+                                "Файл не выбран"
+                            }),
                     )
                     .child("Выберите один файл, чтобы просмотреть информацию."),
             );
@@ -232,44 +241,46 @@ impl Gallery {
                         }),
                 )
             })
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap(px(12.0))
-                    .pt(px(20.0))
-                    .pb(px(16.0))
-                    .border_b_1()
-                    .border_color(rgb(LINE))
-                    .child(self.metadata_group(
-                        "copyrights",
-                        "Произведение",
-                        &entry.details.copyrights,
-                        (0x382128, 0xf0c2cd, chip_size),
-                        cx,
-                    ))
-                    .child(self.metadata_group(
-                        "artist",
-                        "Автор",
-                        &artist,
-                        (0x262544, 0xd6d1ff, chip_size),
-                        cx,
-                    ))
-                    .child(self.metadata_group(
-                        "characters",
-                        "Персонажи",
-                        &characters,
-                        (0x203b32, 0xb0dfc7, chip_size),
-                        cx,
-                    ))
-                    .child(self.metadata_group(
-                        "tags",
-                        "Теги",
-                        &entry.tags,
-                        (0x2c2644, 0xd0b4fa, chip_size),
-                        cx,
-                    )),
-            )
+            .when(!self.stage, |view| {
+                view.child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(12.0))
+                        .pt(px(20.0))
+                        .pb(px(16.0))
+                        .border_b_1()
+                        .border_color(rgb(LINE))
+                        .child(self.metadata_group(
+                            "copyrights",
+                            "Произведение",
+                            &entry.details.copyrights,
+                            (0x382128, 0xf0c2cd, chip_size),
+                            cx,
+                        ))
+                        .child(self.metadata_group(
+                            "artist",
+                            "Автор",
+                            &artist,
+                            (0x262544, 0xd6d1ff, chip_size),
+                            cx,
+                        ))
+                        .child(self.metadata_group(
+                            "characters",
+                            "Персонажи",
+                            &characters,
+                            (0x203b32, 0xb0dfc7, chip_size),
+                            cx,
+                        ))
+                        .child(self.metadata_group(
+                            "tags",
+                            "Теги",
+                            &entry.tags,
+                            (0x2c2644, 0xd0b4fa, chip_size),
+                            cx,
+                        )),
+                )
+            })
             .child(
                 div()
                     .mt(px(10.0))
@@ -329,68 +340,84 @@ impl Gallery {
                             }),
                         ),
                     )
-                    .child(
-                        detail_button("copy-detail", "Копировать путь", "copy", false)
-                            .h(px(34.0))
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                cx.write_to_clipboard(ClipboardItem::new_string(
-                                    this.entries[index].path.to_string_lossy().into_owned(),
-                                ));
-                                tracing::debug!(operation = "copy_path", "Selected path copied");
-                            })),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .gap(px(6.0))
-                            .child(
-                                detail_button("detail-favorite", "", "heart", false)
-                                    .flex_1()
-                                    .flex_basis(px(0.0))
-                                    .when(entry.favorite, |view| view.text_color(rgb(0xd0b4fa)))
-                                    .tooltip(move |window, cx| {
-                                        gpui_component::tooltip::Tooltip::new(if entry_favorite {
-                                            "Убрать из избранного"
-                                        } else {
-                                            "Добавить в избранное"
+                    .when(!self.stage, |view| {
+                        view.child(
+                            detail_button("copy-detail", "Копировать путь", "copy", false)
+                                .h(px(34.0))
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    cx.write_to_clipboard(ClipboardItem::new_string(
+                                        this.entries[index].path.to_string_lossy().into_owned(),
+                                    ));
+                                    tracing::debug!(
+                                        operation = "copy_path",
+                                        "Selected path copied"
+                                    );
+                                })),
+                        )
+                    })
+                    .when(self.stage, |view| {
+                        view.child(self.distribution_button(
+                            "detail-distribute",
+                            "Распределить",
+                            cx,
+                        ))
+                    })
+                    .when(!self.stage, |view| {
+                        view.child(
+                            div()
+                                .flex()
+                                .gap(px(6.0))
+                                .child(
+                                    detail_button("detail-favorite", "", "heart", false)
+                                        .flex_1()
+                                        .flex_basis(px(0.0))
+                                        .when(entry.favorite, |view| view.text_color(rgb(0xd0b4fa)))
+                                        .tooltip(move |window, cx| {
+                                            gpui_component::tooltip::Tooltip::new(
+                                                if entry_favorite {
+                                                    "Убрать из избранного"
+                                                } else {
+                                                    "Добавить в избранное"
+                                                },
+                                            )
+                                            .build(window, cx)
                                         })
-                                        .build(window, cx)
-                                    })
-                                    .on_click(cx.listener(move |this, _, _, cx| {
-                                        this.entries[index].favorite =
-                                            !this.entries[index].favorite;
-                                        tracing::debug!(
-                                            operation = "local_favorite",
-                                            "Session favorite toggled"
-                                        );
-                                        this.refilter(cx);
-                                    })),
-                            )
-                            .child(
-                                detail_button("detail-share", "", "share", false)
-                                    .flex_1()
-                                    .flex_basis(px(0.0))
-                                    .on_click(cx.listener(|this, _, _, cx| {
-                                        this.unavailable("Поделиться файлом", cx)
-                                    })),
-                            )
-                            .child(
-                                detail_button("detail-tags", "", "tag", false)
-                                    .flex_1()
-                                    .flex_basis(px(0.0))
-                                    .on_click(cx.listener(|this, _, _, cx| {
-                                        this.unavailable("Редактор тегов", cx)
-                                    })),
-                            )
-                            .child(
-                                detail_button("detail-more", "", "more", false)
-                                    .flex_1()
-                                    .flex_basis(px(0.0))
-                                    .on_click(cx.listener(|this, _, _, cx| {
-                                        this.unavailable("Расширенные операции", cx)
-                                    })),
-                            ),
-                    ),
+                                        .on_click(cx.listener(move |this, _, _, cx| {
+                                            this.entries[index].favorite =
+                                                !this.entries[index].favorite;
+                                            tracing::debug!(
+                                                operation = "local_favorite",
+                                                "Session favorite toggled"
+                                            );
+                                            this.refilter(cx);
+                                        })),
+                                )
+                                .child(
+                                    detail_button("detail-share", "", "share", false)
+                                        .flex_1()
+                                        .flex_basis(px(0.0))
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.unavailable("Поделиться файлом", cx)
+                                        })),
+                                )
+                                .child(
+                                    detail_button("detail-tags", "", "tag", false)
+                                        .flex_1()
+                                        .flex_basis(px(0.0))
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.unavailable("Редактор тегов", cx)
+                                        })),
+                                )
+                                .child(
+                                    detail_button("detail-more", "", "more", false)
+                                        .flex_1()
+                                        .flex_basis(px(0.0))
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.unavailable("Расширенные операции", cx)
+                                        })),
+                                ),
+                        )
+                    }),
             );
 
         panel.child(
@@ -577,7 +604,7 @@ fn detail_button(
         })
 }
 
-fn format_size(bytes: u64) -> String {
+pub(super) fn format_size(bytes: u64) -> String {
     if bytes >= 1024 * 1024 * 1024 {
         format!("{:.2} ГБ", bytes as f64 / 1024.0_f64.powi(3))
     } else {

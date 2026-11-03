@@ -221,7 +221,7 @@ impl Gallery {
                                     })),
                             )
                             .child(
-                                toggle("previews", "Показывать миниатюры", self.show_previews)
+                                toggle("previews", "Показывать превью", self.show_previews)
                                     .on_click(cx.listener(|this, _, _, cx| {
                                         this.show_previews = !this.show_previews;
                                         cx.notify();
@@ -297,7 +297,7 @@ fn tag_mode(id: &'static str, label: &str, active: bool) -> Stateful<Div> {
         .child(label.to_owned())
 }
 
-fn toggle(id: &'static str, label: &str, active: bool) -> Stateful<Div> {
+pub(super) fn toggle(id: &'static str, label: &str, active: bool) -> Stateful<Div> {
     div()
         .id(id)
         .flex()

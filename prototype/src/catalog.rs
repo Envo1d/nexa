@@ -29,6 +29,7 @@ impl SortMode {
 
 #[derive(Clone, Copy, Default)]
 pub(super) struct BrowseFilter {
+    pub path_search: bool,
     pub videos_only: bool,
     pub images_only: bool,
     pub favorites_only: bool,
@@ -41,7 +42,20 @@ pub(super) fn browse_with_counts(
     query: &str,
     filter: BrowseFilter,
 ) -> (Vec<usize>, [usize; 3]) {
-    let mut visible = matching(entries, query, false);
+    let mut visible = if filter.path_search {
+        let query = crate::naming::name_key(query.trim());
+        entries
+            .iter()
+            .enumerate()
+            .filter(|(_, entry)| {
+                crate::naming::name_key(&entry.details.filename).contains(&query)
+                    || crate::naming::name_key(&entry.details.relative_path).contains(&query)
+            })
+            .map(|(index, _)| index)
+            .collect()
+    } else {
+        matching(entries, query, false)
+    };
     visible.retain(|&index| {
         let entry = &entries[index];
         let favorite_matches = !filter.favorites_only || entry.favorite;
@@ -97,6 +111,7 @@ pub(super) struct Entry {
 #[derive(Clone, Default)]
 pub(super) struct EntryDetails {
     pub filename: String,
+    pub relative_path: String,
     pub artist: Option<String>,
     pub copyrights: Vec<String>,
     pub size: Option<u64>,
@@ -140,6 +155,39 @@ pub(super) fn demo_entries() -> Vec<Entry> {
         .collect()
 }
 
+pub(super) fn incoming_demo_entries() -> Vec<Entry> {
+    demo_entries()
+        .into_iter()
+        .take(48)
+        .enumerate()
+        .map(|(index, mut entry)| {
+            entry.title = format!(
+                "incoming-{:03}.{}",
+                index + 1,
+                entry.extension.to_lowercase()
+            );
+            entry.details.filename = entry.title.clone();
+            entry.details.relative_path = if index % 3 == 0 {
+                entry.title.clone()
+            } else {
+                format!(
+                    "Batch {}/{}/{}",
+                    index / 12 + 1,
+                    if entry.video { "Videos" } else { "Images" },
+                    entry.title
+                )
+            };
+            entry.tags.clear();
+            entry.characters.clear();
+            entry.details.artist = None;
+            entry.details.copyrights.clear();
+            entry.favorite = false;
+
+            entry
+        })
+        .collect()
+}
+
 pub(super) fn entry(path: PathBuf) -> Option<Entry> {
     let extension = path.extension()?.to_str()?.to_ascii_lowercase();
     let video = matches!(
@@ -161,6 +209,7 @@ pub(super) fn entry(path: PathBuf) -> Option<Entry> {
     let filename = path.file_name()?.to_string_lossy().into_owned();
     let details = EntryDetails {
         filename: filename.clone(),
+        relative_path: path.to_string_lossy().into_owned(),
         size: metadata.as_ref().map(|metadata| metadata.len()),
         created_label: metadata
             .as_ref()
@@ -230,6 +279,7 @@ fn demo_details(index: usize) -> EntryDetails {
 
     EntryDetails {
         filename,
+        relative_path: String::new(),
         artist: Some(artist),
         copyrights,
         size: Some(if video {

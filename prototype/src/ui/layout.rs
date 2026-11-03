@@ -1,5 +1,6 @@
 // Exact sizing rules from MediaCollection.vue at the reference 13px root size.
 pub(super) const GAP: f32 = 13.0;
+pub(super) const COLLECTION_INSET: f32 = 16.0;
 pub(super) const TITLEBAR_HEIGHT: f32 = 56.0;
 pub(super) const DRAWER_TOP: f32 = TITLEBAR_HEIGHT + 60.0;
 const GRID_PADDING: f32 = 3.9;
@@ -57,6 +58,7 @@ pub(super) fn compact_date(date: Option<&str>) -> String {
     }
 }
 
+#[derive(Clone, Copy)]
 pub(super) struct CollectionLayout {
     pub columns: usize,
     pub card_width: f32,
