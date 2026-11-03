@@ -6,6 +6,10 @@ use gpui_component::scroll::{Scrollbar, ScrollbarShow};
 
 use super::{Gallery, LINE, MUTED, SURFACE, TEXT, shell::icon};
 
+mod scrolling;
+
+pub(super) use scrolling::ScrollMotion;
+
 impl Gallery {
     pub(super) fn details(&self, window: &Window, cx: &mut Context<Self>) -> Div {
         let chip_size = if f32::from(window.viewport_size().width) >= 1450.0 {
@@ -180,6 +184,12 @@ impl Gallery {
         }
 
         let content = div()
+            .id("details-scroll-content")
+            .on_scroll_wheel(
+                cx.listener(|this, event: &gpui::ScrollWheelEvent, window, cx| {
+                    this.scroll_details(event, window, cx);
+                }),
+            )
             .flex()
             .flex_col()
             .w_full()
@@ -386,6 +396,12 @@ impl Gallery {
                 .flex_1()
                 .min_h_0()
                 .overflow_hidden()
+                .on_mouse_down(
+                    gpui::MouseButton::Left,
+                    cx.listener(|this, _, _, _| {
+                        this.details_motion = None;
+                    }),
+                )
                 .child(
                     div()
                         .id("details-scroll")
