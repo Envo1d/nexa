@@ -54,8 +54,7 @@ impl Gallery {
                             .child("Информация о файле"),
                     )
                     .child(
-                        div()
-                            .id("close-details")
+                        super::motion::button("close-details")
                             .size(px(28.0))
                             .flex()
                             .items_center()
@@ -63,7 +62,11 @@ impl Gallery {
                             .rounded(px(5.0))
                             .text_color(rgb(MUTED))
                             .cursor_pointer()
-                            .hover(|style| style.text_color(rgb(TEXT)).bg(rgba(0xa786ff1a)))
+                            .hover_colors(
+                                Some(rgba(0xa786ff1a).into()),
+                                Some(rgb(TEXT).into()),
+                                None,
+                            )
                             .child(icon("close").size(px(18.0)))
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.details_open = false;
@@ -449,8 +452,13 @@ impl Gallery {
                     .gap(px(5.0))
                     .children(values.iter().enumerate().map(|(index, value)| {
                         let search = value.clone();
-                        div()
-                            .id(index)
+                        let brighten = |shift: u32| {
+                            (((background >> shift) & 0xff) as f32 * 1.3).min(255.0) as u32
+                        };
+                        let hover_background =
+                            (brighten(16) << 16) | (brighten(8) << 8) | brighten(0);
+
+                        super::motion::button(index)
                             .min_w_0()
                             .max_w_full()
                             .whitespace_normal()
@@ -469,14 +477,7 @@ impl Gallery {
                             .text_size(px(chip_size))
                             .line_height(px(14.0))
                             .cursor_pointer()
-                            .hover(move |style| {
-                                let brighten = |shift: u32| {
-                                    (((background >> shift) & 0xff) as f32 * 1.3).min(255.0) as u32
-                                };
-                                style.bg(rgb((brighten(16) << 16)
-                                    | (brighten(8) << 8)
-                                    | brighten(0)))
-                            })
+                            .hover_colors(Some(rgb(hover_background).into()), None, None)
                             .child(SharedString::from(value.clone()))
                             .on_click(cx.listener(move |this, _, window, cx| {
                                 this.add_search(&search, window, cx);
@@ -516,7 +517,7 @@ fn detail_button(
     label: &str,
     name: &'static str,
     primary: bool,
-) -> Stateful<Div> {
+) -> super::motion::MotionDiv {
     let icon_only = label.is_empty();
     let tooltip = if icon_only {
         match name {
@@ -529,8 +530,7 @@ fn detail_button(
         ""
     };
 
-    div()
-        .id(id)
+    super::motion::button(id)
         .flex()
         .items_center()
         .justify_center()
@@ -542,10 +542,10 @@ fn detail_button(
         .border_color(if primary { rgba(0) } else { rgb(LINE) })
         .bg(rgb(0x1a1827))
         .when(primary, |view| {
-            view.bg(gpui::linear_gradient(
+            view.bg(super::motion::Surface::gradient(
                 120.0,
-                gpui::linear_color_stop(rgb(0x7b43d9), 0.0),
-                gpui::linear_color_stop(rgb(0x6839ce), 1.0),
+                rgb(0x7b43d9),
+                rgb(0x6839ce),
             ))
         })
         .text_color(rgb(if primary { 0xffffff } else { TEXT }))
@@ -553,11 +553,15 @@ fn detail_button(
         .line_height(px(13.75))
         .font_weight(gpui::FontWeight::MEDIUM)
         .cursor_pointer()
-        .hover(move |style| {
-            style
-                .bg(rgb(if primary { 0x8853e1 } else { 0x242034 }))
-                .border_color(if primary { rgba(0) } else { rgb(0x6d5aa4) })
-        })
+        .hover_colors(
+            Some(rgb(if primary { 0x8853e1 } else { 0x242034 }).into()),
+            None,
+            Some(if primary {
+                rgba(0).into()
+            } else {
+                rgb(0x6d5aa4).into()
+            }),
+        )
         .child(icon(name).size(px(if icon_only {
             18.0
         } else if name == "copy" {

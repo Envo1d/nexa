@@ -1,7 +1,9 @@
 use gpui::{Context, Div, FontWeight, Stateful, Window, div, prelude::*, px, rgb, rgba};
 use gpui_component::scroll::{Scrollbar, ScrollbarShow};
 
-use super::{ACCENT, Gallery, LINE, MUTED, SURFACE, TEXT, shell::control};
+use super::{ACCENT, Gallery, LINE, MUTED, SURFACE, shell::control};
+
+mod switch;
 
 impl Gallery {
     pub(super) fn filters(&self, window: &Window, cx: &mut Context<Self>) -> Div {
@@ -112,8 +114,7 @@ impl Gallery {
                                             .children(tags.into_iter().enumerate().map(
                                                 |(index, (tag, count))| {
                                                     let text = tag.clone();
-                                                    div()
-                                                        .id(index)
+                                                    super::motion::button(index)
                                                         .flex()
                                                         .items_center()
                                                         .gap_2()
@@ -124,10 +125,11 @@ impl Gallery {
                                                         .border_b_1()
                                                         .border_color(rgb(LINE))
                                                         .cursor_pointer()
-                                                        .hover(|view| {
-                                                            view.bg(rgba(0xeeedf60a))
-                                                                .text_color(rgb(0xd0b4fa))
-                                                        })
+                                                        .hover_colors(
+                                                            Some(rgba(0xeeedf60a).into()),
+                                                            Some(rgb(0xd0b4fa).into()),
+                                                            None,
+                                                        )
                                                         .child(
                                                             div()
                                                                 .flex_1()
@@ -305,22 +307,6 @@ fn toggle(id: &'static str, label: &str, active: bool) -> Stateful<Div> {
         .h(px(18.0))
         .line_height(px(16.5))
         .cursor_pointer()
-        .child(
-            div()
-                .w(px(30.0))
-                .h(px(18.0))
-                .border_1()
-                .border_color(rgb(if active { ACCENT } else { 0x514361 }))
-                .rounded_full()
-                .p(px(2.0))
-                .bg(rgb(if active { 0x7b43d9 } else { 0x1a1827 }))
-                .flex()
-                .when(active, |view| view.justify_end())
-                .child(div().size(px(12.0)).rounded_full().bg(rgb(if active {
-                    0xffffff
-                } else {
-                    TEXT
-                }))),
-        )
+        .child(switch::Switch { active })
         .child(div().text_size(px(11.0)).child(label.to_owned()))
 }

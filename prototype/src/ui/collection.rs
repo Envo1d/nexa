@@ -313,8 +313,23 @@ impl Gallery {
         let source = self.entries[index].path.clone();
 
         Button::new("card-actions")
-            .child(gpui_component::Icon::new(IconName::Ellipsis).size(px(17.0)))
-            .ghost()
+            .child(
+                super::motion::button("card-actions-content")
+                    .size(px(28.6))
+                    .flex_shrink_0()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded(px(5.0))
+                    .text_color(rgb(MUTED))
+                    .hover_colors(
+                        Some(rgb(0x242034).into()),
+                        Some(rgb(super::TEXT).into()),
+                        None,
+                    )
+                    .child(gpui_component::Icon::new(IconName::Ellipsis).size(px(17.0))),
+            )
+            .text()
             .with_size(gpui_component::Size::Size(px(28.6)))
             .w(px(28.6))
             .h(px(28.6))

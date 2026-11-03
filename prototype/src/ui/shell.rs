@@ -1,13 +1,69 @@
 use std::path::PathBuf;
 
-use gpui::{Context, Div, Stateful, Window, WindowControlArea, div, img, prelude::*, px, rgb};
+use gpui::{Context, Div, Window, WindowControlArea, div, img, prelude::*, px, rgb};
 use gpui_component::{
-    Icon, IconName,
+    Icon, IconName, Sizable,
     button::{Button, ButtonVariants},
     menu::{DropdownMenu, PopupMenuItem},
 };
 
-use super::{ACCENT, Gallery, LINE, MUTED, SURFACE, button, button_with_hover};
+use super::{ACCENT, Gallery, LINE, MUTED, SURFACE, TEXT, button, button_with_hover, motion};
+
+fn navigation_button(
+    id: &'static str,
+    label: &str,
+    name: &'static str,
+    active: bool,
+) -> motion::MotionDiv {
+    motion::button(id)
+        .relative()
+        .flex()
+        .items_center()
+        .w_full()
+        .min_w_0()
+        .h(px(36.0))
+        .flex_shrink_0()
+        .px(px(10.0))
+        .gap(px(12.0))
+        .rounded(px(7.0))
+        .overflow_hidden()
+        .text_size(px(13.0))
+        .line_height(px(16.25))
+        .text_color(rgb(if active { 0xffffff } else { MUTED }))
+        .cursor_pointer()
+        .when(!active, |view| {
+            view.hover_colors(Some(rgb(0x242034).into()), Some(rgb(TEXT).into()), None)
+        })
+        .when(active, |view| {
+            view.bg(motion::Surface::gradient(
+                140.0,
+                rgb(0x7b43d9),
+                rgb(0x6839ce),
+            ))
+            .child(
+                div()
+                    .absolute()
+                    .inset_0()
+                    .rounded(px(7.0))
+                    .border_l_2()
+                    .border_color(rgb(ACCENT)),
+            )
+        })
+        .child(icon(name).size(px(20.0)).flex_shrink_0())
+        .when(!label.is_empty(), |view| {
+            view.child(
+                div()
+                    .relative()
+                    .top(px(-1.0))
+                    .flex_1()
+                    .min_w_0()
+                    // GPUI 0.2.2's Windows ellipsis path can split Cyrillic UTF-8.
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .child(label.to_owned()),
+            )
+        })
+}
 
 pub(super) fn icon(name: &'static str) -> Icon {
     let bundled = match name {
@@ -51,7 +107,7 @@ pub(super) fn control(
     label: &str,
     name: &'static str,
     active: bool,
-) -> Stateful<Div> {
+) -> motion::MotionDiv {
     control_with_hover(id, label, name, active, 0x242034)
 }
 
@@ -61,7 +117,7 @@ fn control_with_hover(
     name: &'static str,
     active: bool,
     hover_background: u32,
-) -> Stateful<Div> {
+) -> motion::MotionDiv {
     button_with_hover(id, "", hover_background)
         .h(px(36.0))
         .flex()
@@ -75,7 +131,12 @@ fn control_with_hover(
         .when(!label.is_empty(), |view| view.child(label.to_owned()))
 }
 
-fn window_control(id: &'static str, name: &'static str, size: f32, hover: u32) -> Stateful<Div> {
+fn window_control(
+    id: &'static str,
+    name: &'static str,
+    size: f32,
+    hover: u32,
+) -> motion::MotionDiv {
     button_with_hover(id, "", hover)
         .w(px(44.0))
         .h_full()
@@ -218,10 +279,10 @@ impl Gallery {
             .flex_col()
             .w(px(if expanded { 146.0 } else { 60.0 }))
             .flex_shrink_0()
-            .p_2()
-            .pt_3()
-            .gap_1()
-            .rounded_lg()
+            .px(px(8.0))
+            .py(px(12.0))
+            .overflow_hidden()
+            .rounded(px(10.0))
             .border_1()
             .border_color(rgb(LINE))
             .bg(gpui::linear_gradient(
@@ -230,53 +291,64 @@ impl Gallery {
                 gpui::linear_color_stop(rgb(0x10101a), 1.0),
             ))
             .child(
-                control("collapse", label("Библиотека"), "menu", false)
-                    .border_0()
-                    .on_click(cx.listener(|this, _, _, cx| {
+                navigation_button("collapse", label("Библиотека"), "nav-menu", false).on_click(
+                    cx.listener(|this, _, _, cx| {
                         this.sidebar_expanded = !this.sidebar_expanded;
                         cx.notify();
-                    })),
+                    }),
+                ),
             )
-            .child(div().h(px(8.0)))
+            .child(div().h(px(12.0)).flex_shrink_0())
             .child(
-                control("gallery", label("Галерея"), "folder", !self.favorites_only)
-                    .border_0()
-                    .when(!self.favorites_only, |view| view.bg(rgb(0x7b43d9)))
+                navigation_button("gallery", label("Галерея"), "folder", !self.favorites_only)
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.favorites_only = false;
                         this.refilter(cx);
                     })),
             )
+            .child(div().h(px(4.0)).flex_shrink_0())
             .child(
-                control("favorites", label("Избранное"), "star", self.favorites_only)
-                    .border_0()
-                    .when(self.favorites_only, |view| view.bg(rgb(0x7b43d9)))
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.favorites_only = true;
-                        this.refilter(cx);
-                    })),
+                navigation_button(
+                    "favorites",
+                    label("Избранное"),
+                    "nav-star",
+                    self.favorites_only,
+                )
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.favorites_only = true;
+                    this.refilter(cx);
+                })),
             )
+            .child(div().h(px(4.0)).flex_shrink_0())
             .child(
-                control("tags", label("Теги"), "tag", false)
-                    .border_0()
+                navigation_button("tags", label("Теги"), "tag", false)
                     .on_click(cx.listener(|this, _, _, cx| this.unavailable("Редактор тегов", cx))),
             )
+            .child(div().h(px(4.0)).flex_shrink_0())
             .child(
-                control("health", label("Состояние"), "warning", false)
-                    .border_0()
-                    .on_click(
-                        cx.listener(|this, _, _, cx| this.unavailable("Состояние библиотеки", cx)),
-                    ),
+                navigation_button("health", label("Проверка"), "warning", false).on_click(
+                    cx.listener(|this, _, _, cx| this.unavailable("Состояние библиотеки", cx)),
+                ),
             )
             .child(div().flex_1())
             .child(
                 Button::new("settings")
-                    .icon(IconName::Settings)
-                    .label(label("Настройки"))
-                    .ghost()
+                    .text()
+                    .with_size(px(36.0))
                     .w_full()
-                    .h(px(36.0))
-                    .text_color(rgb(MUTED))
+                    .p_0()
+                    .border_0()
+                    .rounded(px(7.0))
+                    .child(
+                        navigation_button(
+                            "settings-content",
+                            label("Настройки"),
+                            "nav-settings",
+                            false,
+                        )
+                        // Button's inner label row otherwise shrink-wraps this child.
+                        .w(px(if expanded { 128.0 } else { 42.0 })),
+                    )
                     .dropdown_menu(move |menu, _, _| {
                         let settings = gallery.clone();
                         let files = gallery.clone();
