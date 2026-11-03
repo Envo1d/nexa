@@ -1,0 +1,28 @@
+[package]
+name = "nexa-gpui-prototype"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+gpui = { version = "=0.2.2", default-features = false, features = ["windows-manifest"] }
+gpui-component = { version = "=0.5.1", default-features = false }
+gpui-component-assets = "=0.5.1"
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp"] }
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+libloading = "0.8"
+raw-window-handle = "0.6"
+tempfile = "3.27"
+chrono = "=0.4.45"
+caseless = "=0.2.2"
+unicode-normalization = "=0.1.25"
+
+[dev-dependencies]
+resvg = { version = "=0.45.1", default-features = false }
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62.2", features = ["Win32_Graphics_Gdi", "Win32_UI_Shell", "Win32_System_Com", "Win32_UI_WindowsAndMessaging", "Win32_System_LibraryLoader", "Win32_System_SystemServices", "Win32_UI_Input_KeyboardAndMouse"] }
+
+
