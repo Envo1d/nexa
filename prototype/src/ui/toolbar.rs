@@ -1,15 +1,8 @@
-use gpui::{Context, Div, Stateful, div, prelude::*, px, rgb};
-use gpui_component::{
-    Sizable,
-    button::Button,
-    input::Input,
-    menu::{DropdownMenu, PopupMenuItem},
-};
-
-use crate::catalog::SortMode;
+use gpui::{BoxShadow, Context, Div, Focusable, Stateful, div, point, prelude::*, px, rgb, rgba};
+use gpui_component::input::Input;
 
 use super::{
-    Gallery, LINE, MUTED, button,
+    ACCENT, Gallery, LINE, MUTED, TEXT, button,
     shell::{control, icon},
 };
 
@@ -38,8 +31,6 @@ impl Gallery {
                 );
         }
         let search_empty = self.search.read(cx).value().is_empty();
-        let gallery = cx.weak_entity();
-        let sort = self.sort;
 
         div()
             .flex()
@@ -49,24 +40,61 @@ impl Gallery {
             .flex_shrink_0()
             .child(
                 div()
+                    .id("collection-search")
+                    .track_focus(&self.search.focus_handle(cx))
+                    .flex()
+                    .items_center()
                     .h(px(40.0))
                     .rounded(px(6.0))
                     .bg(rgb(0x1a1827))
                     .border_1()
                     .border_color(rgb(LINE))
+                    .focus(|style| {
+                        style.border_color(rgb(ACCENT)).shadow(vec![BoxShadow {
+                            color: rgba(0xa786ff1c).into(),
+                            offset: point(px(0.0), px(0.0)),
+                            blur_radius: px(0.0),
+                            spread_radius: px(2.0),
+                        }])
+                    })
                     .child(
                         Input::new(&self.search)
                             .appearance(false)
-                            .with_size(gpui_component::Size::Size(px(40.0)))
+                            .h(px(38.0))
+                            .flex_shrink_0()
+                            .px(px(12.0))
+                            .py(px(0.0))
+                            .gap(px(8.0))
+                            .text_color(rgb(TEXT))
                             .prefix(icon("search").size(px(17.0)).text_color(rgb(MUTED)))
                             .text_size(px(12.0))
-                            .cleanable(true)
+                            .when(!search_empty, |input| {
+                                input.suffix(
+                                    div()
+                                        .id("clear-search")
+                                        .w(px(18.0))
+                                        .h(px(24.0))
+                                        .flex()
+                                        .items_center()
+                                        .justify_center()
+                                        .cursor_pointer()
+                                        .text_color(rgb(MUTED))
+                                        .hover(|style| style.text_color(rgb(TEXT)))
+                                        .child(icon("close").size(px(14.0)))
+                                        .on_click(cx.listener(|this, _, window, cx| {
+                                            this.search.update(cx, |state, cx| {
+                                                state.set_value("", window, cx);
+                                                state.focus(window, cx);
+                                            });
+                                        })),
+                                )
+                            })
                             .when(search_empty, |input| {
                                 input.suffix(
                                     div()
                                         .px_1()
                                         .py(px(2.0))
-                                        .rounded_sm()
+                                        .rounded(px(3.0))
                                         .bg(rgb(0x242034))
                                         .text_color(rgb(MUTED))
                                         .text_size(px(10.0))
@@ -136,37 +164,7 @@ impl Gallery {
                                 )),
                             ),
                     )
-                    .child(
-                        Button::new("sort")
-                            .label(sort.label())
-                            .dropdown_caret(true)
-                            .w(px(150.0))
-                            .h(px(36.0))
-                            .text_size(px(11.0))
-                            .bg(rgb(0x1a1927))
-                            .border_color(rgb(LINE))
-                            .dropdown_menu(move |mut menu, _, _| {
-                                for mode in [
-                                    SortMode::Newest,
-                                    SortMode::Oldest,
-                                    SortMode::NameAscending,
-                                    SortMode::NameDescending,
-                                ] {
-                                    let gallery = gallery.clone();
-                                    menu = menu.item(
-                                        PopupMenuItem::new(mode.label())
-                                            .checked(mode == sort)
-                                            .on_click(move |_, _, cx| {
-                                                let _ = gallery.update(cx, |this, cx| {
-                                                    this.sort = mode;
-                                                    this.refilter(cx);
-                                                });
-                                            }),
-                                    );
-                                }
-                                menu
-                            }),
-                    )
+                    .child(self.sort_select(cx))
                     .child(
                         div()
                             .flex()
@@ -245,18 +243,33 @@ fn type_control(
     count: usize,
     active: bool,
 ) -> Stateful<Div> {
-    control(id, label, name, active)
-        .h(px(44.0))
+    // The collection filters have their own transparent/selected surfaces;
+    // shared shell controls use a raised background and different active colors.
+    super::button_with_hover(id, "", 0x242034)
+        .flex()
+        .items_center()
+        .flex_shrink_0()
+        .h(px(43.0))
         .px(px(12.0))
-        .gap_2()
+        .py(px(10.0))
+        .gap(px(8.0))
+        .rounded(px(7.0))
+        .text_size(px(12.0))
+        .line_height(px(15.0))
+        .text_color(rgb(TEXT))
+        .bg(if active { rgba(0x2c2644ff) } else { rgba(0) })
+        .border_color(rgb(if active { 0x6d5aa4 } else { LINE }))
+        .child(icon(name).size(px(17.0)))
+        .child(label.to_owned())
         .child(
             div()
                 .px(px(6.0))
                 .py(px(3.0))
                 .rounded(px(6.0))
                 .text_size(px(12.0))
+                .line_height(px(15.0))
                 .text_color(rgb(if active { 0xa786ff } else { MUTED }))
-                .bg(rgb(0x1a1827))
+                .bg(rgb(if active { 0x2c2644 } else { 0x1a1827 }))
                 .child(count.to_string()),
         )
 }

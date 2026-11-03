@@ -7,7 +7,7 @@ use gpui_component::{
     menu::{DropdownMenu, PopupMenuItem},
 };
 
-use super::{ACCENT, Gallery, LINE, MUTED, SHELL, SURFACE, button, button_with_hover};
+use super::{ACCENT, Gallery, LINE, MUTED, SURFACE, button, button_with_hover};
 
 pub(super) fn icon(name: &'static str) -> Icon {
     let bundled = match name {
@@ -36,6 +36,7 @@ pub(super) fn icon(name: &'static str) -> Icon {
             "grid" => "layout-grid",
             "reset" => "rotate-ccw",
             "person" => "user-round",
+            "share" => "share-2",
             other => other,
         };
 
@@ -137,11 +138,6 @@ impl Gallery {
             .flex()
             .items_center()
             .h(px(super::layout::TITLEBAR_HEIGHT))
-            .bg(gpui::linear_gradient(
-                90.0,
-                gpui::linear_color_stop(rgb(0x181421), 0.0),
-                gpui::linear_color_stop(rgb(SHELL), 1.0),
-            ))
             .flex_shrink_0()
             .pl(px(20.0))
             .gap_3()

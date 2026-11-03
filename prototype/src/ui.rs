@@ -7,11 +7,13 @@ use gpui::{
 use gpui_component::input::{InputEvent, InputState};
 
 mod assets;
+mod background;
 mod collection;
 mod details;
 mod filters;
 mod layout;
 mod shell;
+mod sort_select;
 mod toolbar;
 
 pub(crate) use assets::Assets;
@@ -50,8 +52,10 @@ pub(super) struct Gallery {
     tag_counts: Vec<(String, usize)>,
     visible: Vec<usize>,
     scroll: UniformListScrollHandle,
+    details_scroll: gpui::ScrollHandle,
     collection_width: f32,
     previews: HashMap<usize, Arc<RenderImage>>,
+    shell_background: Arc<RenderImage>,
     search: Entity<InputState>,
     focus: FocusHandle,
     selected: Option<usize>,
@@ -65,6 +69,9 @@ pub(super) struct Gallery {
     sidebar_expanded: bool,
     list_mode: bool,
     sort: catalog::SortMode,
+    sort_open: bool,
+    sort_active: usize,
+    sort_focus: FocusHandle,
     type_counts: [usize; 3],
     details_open: bool,
     loading: bool,
@@ -141,8 +148,10 @@ impl Gallery {
             tag_counts,
             visible: (0..catalog::DEMO_COUNT).collect(),
             scroll: UniformListScrollHandle::new(),
+            details_scroll: gpui::ScrollHandle::new(),
             collection_width: 0.0,
             previews: HashMap::new(),
+            shell_background: background::shell_image(),
             search,
             focus,
             selected: None,
@@ -156,6 +165,9 @@ impl Gallery {
             sidebar_expanded: false,
             list_mode: false,
             sort: catalog::SortMode::Newest,
+            sort_open: false,
+            sort_active: 0,
+            sort_focus: cx.focus_handle(),
             type_counts,
             details_open: false,
             loading: false,
@@ -439,10 +451,12 @@ impl Gallery {
             .size_full()
             .overflow_hidden()
             .bg(rgb(BACKGROUND))
+            .when(card_list.is_none() && cover, |view| view.rounded(px(5.0)))
             .when(entry.demo, |this| {
                 this.child(
                     img(entry.path.clone())
                         .size_full()
+                        .when(card_list.is_none() && cover, |image| image.rounded(px(5.0)))
                         .when(card_list == Some(false), |image| image.rounded_t(px(7.0)))
                         .when(card_list == Some(true), |image| image.rounded_l(px(7.0)))
                         .object_fit(if cover {
@@ -456,6 +470,7 @@ impl Gallery {
                 this.child(
                     img(preview)
                         .size_full()
+                        .when(card_list.is_none() && cover, |image| image.rounded(px(5.0)))
                         .when(card_list == Some(false), |image| image.rounded_t(px(7.0)))
                         .when(card_list == Some(true), |image| image.rounded_l(px(7.0)))
                         .object_fit(if cover {
@@ -585,6 +600,13 @@ impl Render for Gallery {
             .text_color(rgb(TEXT))
             .text_size(px(13.0))
             .font_family("Segoe UI")
+            .child(
+                div().absolute().size_full().child(
+                    img(self.shell_background.clone())
+                        .size_full()
+                        .object_fit(ObjectFit::Fill),
+                ),
+            )
             .child(self.titlebar(window, cx))
             .child(
                 div()
@@ -683,10 +705,10 @@ impl Render for Gallery {
                     div()
                         .absolute()
                         .top(px(layout::DRAWER_TOP))
-                        .right(px(7.0))
-                        .bottom(px(7.0))
+                        .right(px(8.0))
+                        .bottom(px(8.0))
                         .w(px(360.0))
-                        .child(self.details(cx)),
+                        .child(self.details(window, cx)),
                 )
             })
             .when_some(self.notice.clone(), |view, notice| {
