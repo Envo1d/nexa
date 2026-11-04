@@ -1,6 +1,5 @@
 mod catalog;
 mod dialogs;
-mod media;
 mod previews;
 mod taxonomy;
 mod ui;
@@ -20,11 +19,6 @@ use gpui::{App, AppContext, Application, Bounds, WindowBounds, WindowOptions, px
 use gpui_component::{Root, Theme, ThemeMode};
 
 fn main() {
-    // SAFETY: this is the first action in main, before GPUI, logging, or any
-    // application threads are started. This changes only this process's setting.
-    // GPUI 0.2.2 otherwise places its opaque composition tree above child HWNDs.
-    unsafe { std::env::set_var("GPUI_DISABLE_DIRECT_COMPOSITION", "1") };
-
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -33,11 +27,14 @@ fn main() {
         .init();
 
     let mut arguments = std::env::args_os().skip(1);
-    let dll = match (arguments.next(), arguments.next(), arguments.next()) {
-        (None, None, None) => None,
-        (Some(flag), Some(path), None) if flag == "--mpv-dll" => Some(PathBuf::from(path)),
-        _ => {
-            eprintln!("Usage: nexa-gpui-prototype [--mpv-dll <absolute mpv DLL path>]");
+    let preview_paths: Vec<PathBuf> = match arguments.next() {
+        None => Vec::new(),
+        Some(flag) if flag == "--preview" => arguments
+            .take(catalog::MAX_OPEN_FILES)
+            .map(PathBuf::from)
+            .collect(),
+        Some(_) => {
+            eprintln!("Usage: nexa-gpui-prototype [--preview <local media files...>]");
             std::process::exit(2);
         }
     };
@@ -45,10 +42,6 @@ fn main() {
     tracing::info!(
         version = env!("CARGO_PKG_VERSION"),
         "Starting isolated GPUI prototype"
-    );
-    tracing::info!(
-        renderer = "hwnd_swapchain",
-        "Using GPUI's native-child-compatible DirectX presentation path"
     );
     Application::new()
         .with_assets(ui::Assets)
@@ -91,7 +84,11 @@ fn main() {
                     ..Default::default()
                 },
                 |window, cx| {
-                    let view = cx.new(|cx| ui::Gallery::new(dll, window, cx));
+                    let view = cx.new(|cx| {
+                        let mut gallery = ui::Gallery::new(window, cx);
+                        gallery.preview_local_files(preview_paths, window, cx);
+                        gallery
+                    });
                     cx.new(|cx| Root::new(view, window, cx))
                 },
             );

@@ -35,3 +35,5 @@ paths to `gpui-component-assets`. Its tests parse and rasterize both sets with
 resvg 0.45.1, the renderer version already used by the pinned GPUI release,
 and assert nonempty alpha coverage. There are no runtime icon downloads or
 frontend/package-install requirements.
+
+PLAN-376 (2026-11-05) adds keyboard/external/playback/volume/repeat/fullscreen icons extracted from the same installed @lucide/vue __iconData.node export. player-fullscreen and player-fullscreen-exit avoid collisions with native window-control icon names. viewer-heart-filled uses the reference heart geometry with currentColor fill for the favorite state.

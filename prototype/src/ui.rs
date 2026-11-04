@@ -1,8 +1,8 @@
-use std::{collections::HashMap, path::PathBuf, rc::Rc, sync::Arc, time::Duration};
+use std::{collections::HashMap, sync::Arc};
 
 use gpui::{
     App, Context, Div, Entity, FocusHandle, ObjectFit, PathPromptOptions, Render, RenderImage,
-    Subscription, Task, UniformListScrollHandle, Window, div, img, prelude::*, px, rgb,
+    Subscription, UniformListScrollHandle, Window, div, img, prelude::*, px, rgb,
 };
 use gpui_component::input::{InputEvent, InputState};
 
@@ -21,6 +21,7 @@ mod sort_select;
 mod stage;
 mod taxonomy;
 mod toolbar;
+mod viewer;
 
 pub(crate) use assets::Assets;
 
@@ -40,10 +41,7 @@ pub(super) fn init(cx: &mut App) {
     ]);
 }
 
-use crate::{
-    catalog::{self, Entry},
-    media::Player,
-};
+use crate::catalog::{self, Entry};
 
 const BACKGROUND: u32 = 0x080910;
 const SHELL: u32 = 0x0b0b13;
@@ -100,17 +98,15 @@ pub(super) struct Gallery {
     loading: bool,
     dialog_open: bool,
     viewer: bool,
-    overlay: bool,
-    dll: Option<PathBuf>,
-    player: Option<Rc<Player>>,
+    viewer_state: viewer::Viewer,
+    player: Option<Entity<alhazen_gpui::VideoPlayer>>,
     status: String,
     notice: Option<String>,
-    poll_task: Option<Task<()>>,
     _search_subscription: Subscription,
 }
 
 impl Gallery {
-    pub(super) fn new(dll: Option<PathBuf>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub(super) fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let search = cx
             .new(|cx| InputState::new(window, cx).placeholder("Метаданные через точку с запятой"));
         let focus = cx.focus_handle();
@@ -123,8 +119,7 @@ impl Gallery {
         let gallery = cx.weak_entity();
         window.on_window_should_close(cx, move |_, cx| {
             let _ = gallery.update(cx, |this, _| {
-                // Cancel polling and stop libmpv while its HWND is still valid.
-                this.poll_task = None;
+                // Release the media entity before the native window is destroyed.
                 this.player = None;
             });
             if cx.windows().len() == 1 {
@@ -135,28 +130,6 @@ impl Gallery {
                 false
             } else {
                 true
-            }
-        });
-        let poll_task = cx.spawn(async move |this, cx| {
-            loop {
-                cx.background_executor()
-                    .timer(Duration::from_millis(200))
-                    .await;
-                if this
-                    .update(cx, |this, cx| {
-                        if let Some(result) = this.player.as_ref().and_then(|player| player.poll())
-                        {
-                            match result {
-                                Ok(status) => this.status = status,
-                                Err(error) => this.fail(error),
-                            }
-                            cx.notify();
-                        }
-                    })
-                    .is_err()
-                {
-                    break;
-                }
             }
         });
         tracing::info!(records = catalog::DEMO_COUNT, "Demo gallery initialized");
@@ -213,12 +186,10 @@ impl Gallery {
             loading: false,
             dialog_open: false,
             viewer: false,
-            overlay: true,
-            dll,
+            viewer_state: viewer::Viewer::new(window, cx),
             player: None,
             status: "Demo library · 10,000 records · no production catalog opened".into(),
             notice: None,
-            poll_task: Some(poll_task),
             _search_subscription: subscription,
         }
     }
@@ -387,102 +358,10 @@ impl Gallery {
         cx.notify();
     }
 
-    fn choose_dll(&mut self, window: &Window, cx: &mut Context<Self>) {
-        if self.loading || self.dialog_open {
-            return;
-        }
-        self.dialog_open = true;
-        self.notice = None;
-        let prompt = crate::dialogs::open(
-            window,
-            cx,
-            PathPromptOptions {
-                files: true,
-                directories: false,
-                multiple: false,
-                prompt: Some("Select a trusted libmpv DLL".into()),
-            },
-            "select_media_engine",
-        );
-        cx.spawn(async move |this, cx| {
-            let result = prompt.await;
-            let _ = this.update(cx, |this, cx| {
-                this.dialog_open = false;
-                match result {
-                    Ok(Some(paths)) => {
-                        this.dll = paths.into_iter().next();
-                        this.status =
-                            "libmpv path selected. Open a video to validate playback.".into();
-                        this.notice = Some(
-                            "Медиадвижок выбран. Откройте локальное видео для просмотра.".into(),
-                        );
-                    }
-                    Ok(None) => {}
-                    Err(error) => this.fail(error),
-                }
-                cx.notify();
-            });
-        })
-        .detach();
-    }
-
     fn open_selected(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.dialog_open {
-            return;
+        if !self.dialog_open && self.selected.is_some() {
+            self.open_viewer(window, cx);
         }
-
-        let Some(index) = self.selected else {
-            return;
-        };
-        let entry = &self.entries[index];
-        if entry.video && !entry.demo {
-            let Some(dll) = &self.dll else {
-                self.status = "Select a trusted libmpv DLL first using Media engine.".into();
-                self.notice = Some("Сначала выберите libmpv: Настройки → Медиадвижок.".into());
-                tracing::warn!(
-                    operation = "open_preview",
-                    reason = "media_engine_required",
-                    "Video preview requires media engine selection"
-                );
-                cx.notify();
-                return;
-            };
-            // Release the old native surface before creating its replacement.
-            self.player = None;
-            self.viewer = false;
-
-            match Player::open(dll, &entry.path, window) {
-                Ok(player) => {
-                    self.overlay = true;
-                    self.player = Some(Rc::new(player));
-                    self.viewer = true;
-                    self.status = "Opening native video…".into();
-                }
-                Err(error) => self.fail(error),
-            }
-        } else {
-            self.viewer = true;
-            self.status = if entry.demo {
-                "Demo image preview"
-            } else {
-                "Bounded 512 px Shell preview · original file is unchanged"
-            }
-            .into();
-        }
-        cx.notify();
-    }
-
-    fn playback(&mut self, arguments: &[&str], cx: &mut Context<Self>) {
-        if let Some(player) = &self.player
-            && let Err(error) = player.send(arguments)
-        {
-            self.fail(error);
-        }
-        cx.notify();
-    }
-
-    fn picture(&self, index: usize) -> Div {
-        self.picture_fitted(index, false)
     }
 
     fn picture_fitted(&self, index: usize, cover: bool) -> Div {
@@ -562,36 +441,10 @@ impl Render for Gallery {
             window.request_animation_frame();
         }
 
-        // A rendered frame must not keep the native player alive after its owner
-        // closes the viewer/window or replaces the active source.
-        let media = self.player.as_ref().map(Rc::downgrade);
-        let content = if self.viewer {
-            div()
-                .flex_1()
-                .min_h_0()
-                .overflow_hidden()
-                .when_some(media, |this, player| {
-                    this.child(
-                        gpui::canvas(
-                            |_, _, _| (),
-                            move |bounds, (), window, _| {
-                                if let Some(player) = player.upgrade() {
-                                    player.resize(bounds, window.scale_factor());
-                                }
-                            },
-                        )
-                        .size_full(),
-                    )
-                })
-                .when(self.player.is_none(), |this| {
-                    if let Some(index) = self.selected {
-                        this.child(self.picture(index))
-                    } else {
-                        this
-                    }
-                })
-                .into_any_element()
-        } else {
+        if self.viewer {
+            return self.viewer_workspace(window, cx).into_any_element();
+        }
+        let content = {
             div()
                 .flex()
                 .flex_col()
@@ -626,50 +479,6 @@ impl Render for Gallery {
                 this.notice = None;
                 cx.notify();
             }))
-            .on_mouse_move(
-                cx.listener(|this, event: &gpui::MouseMoveEvent, window, _| {
-                    if let Some(player) = &this.player {
-                        let release = if event.pressed_button.is_none() {
-                            Some(false)
-                        } else {
-                            None
-                        };
-                        if let Err(error) =
-                            player.pointer(event.position, window.scale_factor(), release)
-                        {
-                            this.fail(error);
-                        }
-                    }
-                }),
-            )
-            .on_mouse_down(
-                gpui::MouseButton::Left,
-                cx.listener(|this, event: &gpui::MouseDownEvent, window, _| {
-                    if let Some(player) = &this.player
-                        && let Err(error) =
-                            player.pointer(event.position, window.scale_factor(), Some(true))
-                    {
-                        this.fail(error);
-                    }
-                }),
-            )
-            .on_mouse_up(
-                gpui::MouseButton::Left,
-                cx.listener(|this, event: &gpui::MouseUpEvent, window, _| {
-                    if let Some(player) = &this.player
-                        && let Err(error) =
-                            player.pointer(event.position, window.scale_factor(), Some(false))
-                    {
-                        this.fail(error);
-                    }
-                    if !this.dialog_open
-                        && let Some(player) = &this.player
-                        && player.take_fullscreen_request()
-                    {
-                        window.toggle_fullscreen();
-                    }
-                }),
-            )
             .size_full()
             .relative()
             .overflow_hidden()
@@ -753,69 +562,7 @@ impl Render for Gallery {
                                                 .child(self.stage_selection_bar(cx)),
                                         )
                                     })
-                                    .child(content)
-                                    .when(self.player.is_some(), |this| {
-                                        this.child(
-                            div()
-                                .flex()
-                                .gap_3()
-                                .child(button("pause", "Play / Pause").on_click(cx.listener(
-                                    |this, _, _, cx| this.playback(&["cycle", "pause"], cx),
-                                )))
-                                .child(button("rewind", "−10 s").on_click(cx.listener(
-                                    |this, _, _, cx| {
-                                        this.playback(&["seek", "-10", "relative"], cx)
-                                    },
-                                )))
-                                .child(button("forward", "+10 s").on_click(cx.listener(
-                                    |this, _, _, cx| this.playback(&["seek", "10", "relative"], cx),
-                                )))
-                                .child(button("mute", "Mute").on_click(cx.listener(
-                                    |this, _, _, cx| this.playback(&["cycle", "mute"], cx),
-                                )))
-                                .child(
-                                    button(
-                                        "overlay",
-                                        if self.overlay {
-                                            "Hide video controls"
-                                        } else {
-                                            "Show video controls"
-                                        },
-                                    )
-                                    .on_click(cx.listener(|this, _, _, cx| {
-                                        this.overlay = !this.overlay;
-                                        let visibility =
-                                            if this.overlay { "always" } else { "never" };
-                                        tracing::info!(
-                                            visibility,
-                                            "OSC visibility requested; native verification pending"
-                                        );
-                                        if let Some(player) = &this.player
-                                            && let Err(error) =
-                                                player.set_panel_visible(this.overlay)
-                                        {
-                                            this.fail(error);
-                                        }
-                                        cx.notify();
-                                    })),
-                                )
-                                .child(button("fullscreen", "Fullscreen").on_click(cx.listener(
-                                    |this, _, window, _| {
-                                        if !this.dialog_open {
-                                            window.toggle_fullscreen();
-                                        }
-                                    },
-                                ))),
-                        )
-                                    })
-                                    .when(self.viewer, |view| {
-                                        view.child(
-                                            div()
-                                                .text_size(px(12.0))
-                                                .text_color(rgb(MUTED))
-                                                .child(self.status.clone()),
-                                        )
-                                    }),
+                                    .child(content),
                             )
                         },
                     ),
@@ -869,6 +616,7 @@ impl Render for Gallery {
                         ),
                 )
             })
+            .into_any_element()
     }
 }
 
