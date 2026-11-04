@@ -47,6 +47,7 @@ impl Gallery {
             return;
         }
         self.taxonomy_open = false;
+        self.health_open = false;
         if self.stage == stage {
             cx.notify();
             return;
