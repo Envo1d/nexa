@@ -8,16 +8,21 @@ publish = false
 gpui = { version = "=0.2.2", default-features = false, features = ["windows-manifest"] }
 gpui-component = { version = "=0.5.1", default-features = false }
 gpui-component-assets = "=0.5.1"
-image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp"] }
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp", "tiff", "avif"] }
 thiserror = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-libloading = "0.8"
-raw-window-handle = "0.6"
 tempfile = "3.27"
 chrono = "=0.4.45"
 caseless = "=0.2.2"
 unicode-normalization = "=0.1.25"
+alhazen-gpui = { version = "=0.7.1", default-features = false, features = [
+    "native",
+    "media-foundation",
+    "audio-output",
+    "native-aac",
+    "native-mp3",
+] }
 
 [dev-dependencies]
 resvg = { version = "=0.45.1", default-features = false }
@@ -26,3 +31,9 @@ resvg = { version = "=0.45.1", default-features = false }
 windows = { version = "0.62.2", features = ["Win32_Graphics_Gdi", "Win32_UI_Shell", "Win32_System_Com", "Win32_UI_WindowsAndMessaging", "Win32_System_LibraryLoader", "Win32_System_SystemServices", "Win32_UI_Input_KeyboardAndMouse"] }
 
 
+
+[profile.dev.package.rav1d]
+opt-level = 3
+
+[profile.dev.package.vp9-mt]
+opt-level = 3

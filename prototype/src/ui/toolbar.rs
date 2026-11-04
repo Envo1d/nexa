@@ -2,34 +2,12 @@ use gpui::{BoxShadow, Context, Div, Focusable, div, point, prelude::*, px, rgb, 
 use gpui_component::input::Input;
 
 use super::{
-    ACCENT, Gallery, LINE, MUTED, TEXT, button,
+    ACCENT, Gallery, LINE, MUTED, TEXT,
     shell::{control, icon},
 };
 
 impl Gallery {
     pub(super) fn toolbar(&self, cx: &mut Context<Self>) -> Div {
-        if self.viewer {
-            return div()
-                .flex()
-                .items_center()
-                .py_3()
-                .gap_2()
-                .child(button("back", "Назад в библиотеку").on_click(cx.listener(
-                    |this, _, _, cx| {
-                        this.player = None;
-                        this.viewer = false;
-                        cx.notify();
-                    },
-                )))
-                .child(
-                    button("open-files", "Открыть файлы")
-                        .on_click(cx.listener(|this, _, window, cx| this.choose_files(window, cx))),
-                )
-                .child(
-                    button("engine", "Медиадвижок")
-                        .on_click(cx.listener(|this, _, window, cx| this.choose_dll(window, cx))),
-                );
-        }
         let search_empty = self.search.read(cx).value().is_empty();
 
         div()

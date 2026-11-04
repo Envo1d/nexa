@@ -326,7 +326,6 @@ impl Gallery {
                     .child(
                         window_control("close-window", "close", 18.0, 0xa53d5a).on_click(
                             cx.listener(|this, _, _, cx| {
-                                this.poll_task = None;
                                 this.player = None;
                                 tracing::info!(operation = "shutdown", "Titlebar close requested");
                                 cx.quit();
@@ -441,7 +440,6 @@ impl Gallery {
                     .context_menu(move |menu, _, _| {
                         let settings = gallery.clone();
                         let files = gallery.clone();
-                        let engine = gallery.clone();
 
                         menu.item(
                             PopupMenuItem::new("Настройки").on_click(move |_, window, cx| {
@@ -450,14 +448,9 @@ impl Gallery {
                             }),
                         )
                         .separator()
-                        .item(PopupMenuItem::new("Открыть файлы…").on_click(
-                            move |_, window, cx| {
-                                let _ = files.update(cx, |this, cx| this.choose_files(window, cx));
-                            },
-                        ))
                         .item(
-                            PopupMenuItem::new("Медиадвижок…").on_click(move |_, window, cx| {
-                                let _ = engine.update(cx, |this, cx| this.choose_dll(window, cx));
+                            PopupMenuItem::new("Открыть файлы…").on_click(move |_, window, cx| {
+                                let _ = files.update(cx, |this, cx| this.choose_files(window, cx));
                             }),
                         )
                     }),

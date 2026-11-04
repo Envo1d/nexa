@@ -6,6 +6,70 @@ use gpui::{AssetSource, SharedString};
 // gpui-component 0.5.1's default set. No locally redrawn icon geometry.
 const SUPPLEMENTAL: &[(&str, &[u8])] = &[
     (
+        "icons/player-fullscreen.svg",
+        include_bytes!("../../assets/icons/player-fullscreen.svg"),
+    ),
+    (
+        "icons/player-fullscreen-exit.svg",
+        include_bytes!("../../assets/icons/player-fullscreen-exit.svg"),
+    ),
+    (
+        "icons/viewer-heart-filled.svg",
+        include_bytes!("../../assets/icons/viewer-heart-filled.svg"),
+    ),
+    (
+        "icons/keyboard.svg",
+        include_bytes!("../../assets/icons/keyboard.svg"),
+    ),
+    (
+        "icons/external-link.svg",
+        include_bytes!("../../assets/icons/external-link.svg"),
+    ),
+    (
+        "icons/play.svg",
+        include_bytes!("../../assets/icons/play.svg"),
+    ),
+    (
+        "icons/pause.svg",
+        include_bytes!("../../assets/icons/pause.svg"),
+    ),
+    (
+        "icons/repeat.svg",
+        include_bytes!("../../assets/icons/repeat.svg"),
+    ),
+    (
+        "icons/volume-2.svg",
+        include_bytes!("../../assets/icons/volume-2.svg"),
+    ),
+    (
+        "icons/volume-x.svg",
+        include_bytes!("../../assets/icons/volume-x.svg"),
+    ),
+    (
+        "icons/maximize.svg",
+        include_bytes!("../../assets/icons/maximize.svg"),
+    ),
+    (
+        "icons/minimize.svg",
+        include_bytes!("../../assets/icons/minimize.svg"),
+    ),
+    (
+        "icons/arrow-left.svg",
+        include_bytes!("../../assets/icons/arrow-left.svg"),
+    ),
+    (
+        "icons/arrow-right.svg",
+        include_bytes!("../../assets/icons/arrow-right.svg"),
+    ),
+    (
+        "icons/plus.svg",
+        include_bytes!("../../assets/icons/plus.svg"),
+    ),
+    (
+        "icons/minus.svg",
+        include_bytes!("../../assets/icons/minus.svg"),
+    ),
+    (
         "icons/check.svg",
         include_bytes!("../../assets/icons/check.svg"),
     ),

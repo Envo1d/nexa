@@ -152,6 +152,7 @@ pub(super) struct MotionDiv {
     hover_background: Option<Surface>,
     hover_text: Option<Hsla>,
     hover_border: Option<Hsla>,
+    keyboard_focus: bool,
 }
 
 pub(super) fn button(id: impl Into<ElementId>) -> MotionDiv {
@@ -163,10 +164,16 @@ pub(super) fn button(id: impl Into<ElementId>) -> MotionDiv {
         hover_background: None,
         hover_text: None,
         hover_border: None,
+        keyboard_focus: false,
     }
 }
 
 impl MotionDiv {
+    pub(super) fn keyboard_focus(mut self, enabled: bool) -> Self {
+        self.keyboard_focus = enabled;
+        self
+    }
+
     pub(super) fn bg(mut self, surface: impl Into<Surface>) -> Self {
         self.background = surface.into();
         self.element = self.element.bg(self.background.mix(self.background, 0.0));
@@ -208,6 +215,22 @@ impl StatefulInteractiveElement for MotionDiv {}
 
 impl RenderOnce for MotionDiv {
     fn render(mut self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        if self.keyboard_focus {
+            let focus = window.use_keyed_state(self.id.clone(), cx, |_, cx| {
+                cx.focus_handle().tab_stop(true)
+            });
+            self.element = self.element.track_focus(focus.read(cx)).focus(|style| {
+                style
+                    .border_color(gpui::rgb(super::ACCENT))
+                    .shadow(vec![gpui::BoxShadow {
+                        color: gpui::rgba(0xa786ff80).into(),
+                        offset: gpui::point(gpui::px(0.0), gpui::px(0.0)),
+                        blur_radius: gpui::px(0.0),
+                        spread_radius: gpui::px(2.0),
+                    }])
+            });
+        }
+
         let motion = window.use_keyed_state(self.id.clone(), cx, |_, _| Transition::new(0.0, 140));
         let (mut amount, mut moving) = motion.read(cx).sample(Instant::now());
         if !enabled() {
