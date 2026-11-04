@@ -4,7 +4,7 @@ use gpui::{Context, Div, Window, WindowControlArea, div, img, prelude::*, px, rg
 use gpui_component::{
     Icon, IconName, Sizable,
     button::{Button, ButtonVariants},
-    menu::{DropdownMenu, PopupMenuItem},
+    menu::{ContextMenuExt, PopupMenuItem},
 };
 
 use super::{ACCENT, Gallery, LINE, MUTED, SURFACE, TEXT, button, button_with_hover, motion};
@@ -179,19 +179,35 @@ impl Gallery {
                     .w(px(112.0))
                     .rounded_t(px(9.0))
                     .font_weight(gpui::FontWeight::MEDIUM)
-                    .bg(if self.stage || self.taxonomy_open || self.health_open {
-                        gpui::rgba(0)
-                    } else {
-                        rgb(0x2c263f)
-                    })
+                    .bg(
+                        if self.stage
+                            || self.taxonomy_open
+                            || self.health_open
+                            || self.settings_open
+                        {
+                            gpui::rgba(0)
+                        } else {
+                            rgb(0x2c263f)
+                        },
+                    )
                     .border_b_2()
-                    .border_color(if self.stage || self.taxonomy_open || self.health_open {
-                        gpui::rgba(0)
-                    } else {
-                        rgb(ACCENT)
-                    })
+                    .border_color(
+                        if self.stage
+                            || self.taxonomy_open
+                            || self.health_open
+                            || self.settings_open
+                        {
+                            gpui::rgba(0)
+                        } else {
+                            rgb(ACCENT)
+                        },
+                    )
                     .text_color(rgb(
-                        if self.stage || self.taxonomy_open || self.health_open {
+                        if self.stage
+                            || self.taxonomy_open
+                            || self.health_open
+                            || self.settings_open
+                        {
                             MUTED
                         } else {
                             super::TEXT
@@ -203,18 +219,30 @@ impl Gallery {
             )
             .child(
                 button("stage", "Входящие")
-                    .bg(if self.stage && !self.taxonomy_open && !self.health_open {
-                        rgb(0x2c263f)
-                    } else {
-                        gpui::rgba(0)
-                    })
+                    .bg(
+                        if self.stage
+                            && !self.taxonomy_open
+                            && !self.health_open
+                            && !self.settings_open
+                        {
+                            rgb(0x2c263f)
+                        } else {
+                            gpui::rgba(0)
+                        },
+                    )
                     .border_0()
                     .border_b_2()
-                    .border_color(if self.stage && !self.taxonomy_open && !self.health_open {
-                        rgb(ACCENT)
-                    } else {
-                        gpui::rgba(0)
-                    })
+                    .border_color(
+                        if self.stage
+                            && !self.taxonomy_open
+                            && !self.health_open
+                            && !self.settings_open
+                        {
+                            rgb(ACCENT)
+                        } else {
+                            gpui::rgba(0)
+                        },
+                    )
                     .rounded_t(px(9.0))
                     .rounded_b(px(0.0))
                     .font_weight(gpui::FontWeight::MEDIUM)
@@ -225,7 +253,11 @@ impl Gallery {
                     .items_center()
                     .justify_center()
                     .text_color(rgb(
-                        if self.stage && !self.taxonomy_open && !self.health_open {
+                        if self.stage
+                            && !self.taxonomy_open
+                            && !self.health_open
+                            && !self.settings_open
+                        {
                             super::TEXT
                         } else {
                             MUTED
@@ -346,7 +378,11 @@ impl Gallery {
                     "gallery",
                     label("Галерея"),
                     "folder",
-                    !self.health_open && !self.taxonomy_open && !self.stage && !self.favorites_only,
+                    !self.settings_open
+                        && !self.health_open
+                        && !self.taxonomy_open
+                        && !self.stage
+                        && !self.favorites_only,
                 )
                 .on_click(cx.listener(|this, _, window, cx| {
                     this.switch_workspace(false, window, cx);
@@ -360,7 +396,11 @@ impl Gallery {
                     "favorites",
                     label("Избранное"),
                     "nav-star",
-                    !self.health_open && !self.taxonomy_open && !self.stage && self.favorites_only,
+                    !self.settings_open
+                        && !self.health_open
+                        && !self.taxonomy_open
+                        && !self.stage
+                        && self.favorites_only,
                 )
                 .on_click(cx.listener(|this, _, window, cx| {
                     this.switch_workspace(false, window, cx);
@@ -392,20 +432,23 @@ impl Gallery {
                             "settings-content",
                             label("Настройки"),
                             "nav-settings",
-                            false,
+                            self.settings_open,
                         )
                         // Button's inner label row otherwise shrink-wraps this child.
                         .w(px(if expanded { 128.0 } else { 42.0 })),
                     )
-                    .dropdown_menu(move |menu, _, _| {
+                    .on_click(cx.listener(|this, _, window, cx| this.open_settings(window, cx)))
+                    .context_menu(move |menu, _, _| {
                         let settings = gallery.clone();
                         let files = gallery.clone();
                         let engine = gallery.clone();
 
-                        menu.item(PopupMenuItem::new("Настройки").on_click(move |_, _, cx| {
-                            let _ =
-                                settings.update(cx, |this, cx| this.unavailable("Настройки", cx));
-                        }))
+                        menu.item(
+                            PopupMenuItem::new("Настройки").on_click(move |_, window, cx| {
+                                let _ =
+                                    settings.update(cx, |this, cx| this.open_settings(window, cx));
+                            }),
+                        )
                         .separator()
                         .item(PopupMenuItem::new("Открыть файлы…").on_click(
                             move |_, window, cx| {

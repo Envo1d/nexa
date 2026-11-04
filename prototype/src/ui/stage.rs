@@ -46,6 +46,7 @@ impl Gallery {
         if self.loading || self.dialog_open {
             return;
         }
+        self.settings_open = false;
         self.taxonomy_open = false;
         self.health_open = false;
         if self.stage == stage {

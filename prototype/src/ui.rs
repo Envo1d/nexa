@@ -15,6 +15,7 @@ mod health;
 mod layout;
 mod motion;
 mod selection;
+mod settings;
 mod shell;
 mod sort_select;
 mod stage;
@@ -53,6 +54,8 @@ const MUTED: u32 = 0xa39bb5;
 const ACCENT: u32 = 0xa786ff;
 
 pub(super) struct Gallery {
+    settings_open: bool,
+    settings: settings::Settings,
     health_open: bool,
     health: health::Health,
     taxonomy_open: bool,
@@ -164,6 +167,8 @@ impl Gallery {
         let type_counts = [entries.len(), videos, entries.len() - videos];
 
         Self {
+            settings_open: false,
+            settings: settings::Settings::new(window, cx),
             health_open: false,
             health: health::Health::new(),
             taxonomy_open: false,
@@ -602,7 +607,7 @@ impl Render for Gallery {
         div()
             .key_context("NexaGallery")
             .on_action(cx.listener(|this, _: &FocusSearch, window, cx| {
-                if this.health_open {
+                if this.health_open || this.settings_open {
                     return;
                 }
                 let search = if this.taxonomy_open {
@@ -694,50 +699,63 @@ impl Render for Gallery {
                     .pb_2()
                     .gap(px(2.0))
                     .child(self.navigation(cx))
+                    .when(self.settings_open, |view| {
+                        view.child(self.settings_workspace(window, cx))
+                    })
                     .when(self.health_open, |view| {
                         view.child(self.health_workspace(cx))
                     })
                     .when(
-                        !self.health_open && !self.taxonomy_open && !self.viewer && !self.stage,
+                        !self.settings_open
+                            && !self.health_open
+                            && !self.taxonomy_open
+                            && !self.viewer
+                            && !self.stage,
                         |view| view.child(self.filters(window, cx)),
                     )
                     .when(
-                        !self.health_open && !self.taxonomy_open && !self.viewer && self.stage,
+                        !self.settings_open
+                            && !self.health_open
+                            && !self.taxonomy_open
+                            && !self.viewer
+                            && self.stage,
                         |view| view.child(self.stage_sidebar(window, cx)),
                     )
                     .when(self.taxonomy_open, |view| {
                         view.child(self.taxonomy_workspace(cx))
                     })
-                    .when(!self.health_open && !self.taxonomy_open, |view| {
-                        view.child(
-                            div()
-                                .flex()
-                                .flex_col()
-                                .flex_1()
-                                .min_w_0()
-                                .min_h_0()
-                                .border_1()
-                                .border_color(rgb(LINE))
-                                .rounded_lg()
-                                .bg(rgb(0x10101a))
-                                .when(!self.stage || self.viewer, |view| view.px_4())
-                                .pb(px(12.0))
-                                .child(
-                                    div()
-                                        .when(self.stage && !self.viewer, |view| view.px_4())
-                                        .child(self.toolbar(cx)),
-                                )
-                                .when(self.stage && !self.viewer, |view| {
-                                    view.child(
+                    .when(
+                        !self.settings_open && !self.health_open && !self.taxonomy_open,
+                        |view| {
+                            view.child(
+                                div()
+                                    .flex()
+                                    .flex_col()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .min_h_0()
+                                    .border_1()
+                                    .border_color(rgb(LINE))
+                                    .rounded_lg()
+                                    .bg(rgb(0x10101a))
+                                    .when(!self.stage || self.viewer, |view| view.px_4())
+                                    .pb(px(12.0))
+                                    .child(
                                         div()
-                                            .px_4()
-                                            .flex_shrink_0()
-                                            .child(self.stage_selection_bar(cx)),
+                                            .when(self.stage && !self.viewer, |view| view.px_4())
+                                            .child(self.toolbar(cx)),
                                     )
-                                })
-                                .child(content)
-                                .when(self.player.is_some(), |this| {
-                                    this.child(
+                                    .when(self.stage && !self.viewer, |view| {
+                                        view.child(
+                                            div()
+                                                .px_4()
+                                                .flex_shrink_0()
+                                                .child(self.stage_selection_bar(cx)),
+                                        )
+                                    })
+                                    .child(content)
+                                    .when(self.player.is_some(), |this| {
+                                        this.child(
                             div()
                                 .flex()
                                 .gap_3()
@@ -789,17 +807,18 @@ impl Render for Gallery {
                                     },
                                 ))),
                         )
-                                })
-                                .when(self.viewer, |view| {
-                                    view.child(
-                                        div()
-                                            .text_size(px(12.0))
-                                            .text_color(rgb(MUTED))
-                                            .child(self.status.clone()),
-                                    )
-                                }),
-                        )
-                    }),
+                                    })
+                                    .when(self.viewer, |view| {
+                                        view.child(
+                                            div()
+                                                .text_size(px(12.0))
+                                                .text_color(rgb(MUTED))
+                                                .child(self.status.clone()),
+                                        )
+                                    }),
+                            )
+                        },
+                    ),
             )
             .when(
                 (self.details_open || drawer_amount > 0.0) && !self.viewer,
