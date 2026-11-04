@@ -6,6 +6,22 @@ use gpui::{AssetSource, SharedString};
 // gpui-component 0.5.1's default set. No locally redrawn icon geometry.
 const SUPPLEMENTAL: &[(&str, &[u8])] = &[
     (
+        "icons/check.svg",
+        include_bytes!("../../assets/icons/check.svg"),
+    ),
+    (
+        "icons/file-text.svg",
+        include_bytes!("../../assets/icons/file-text.svg"),
+    ),
+    (
+        "icons/database.svg",
+        include_bytes!("../../assets/icons/database.svg"),
+    ),
+    (
+        "icons/folder-input.svg",
+        include_bytes!("../../assets/icons/folder-input.svg"),
+    ),
+    (
         "icons/git-branch.svg",
         include_bytes!("../../assets/icons/git-branch.svg"),
     ),

@@ -5,8 +5,8 @@ use gpui::{App, IntoElement, RenderOnce, Window, div, prelude::*, px, rgb};
 use super::super::{ACCENT, TEXT, motion};
 
 #[derive(IntoElement)]
-pub(super) struct Switch {
-    pub(super) active: bool,
+pub(in crate::ui) struct Switch {
+    pub(in crate::ui) active: bool,
 }
 
 impl RenderOnce for Switch {

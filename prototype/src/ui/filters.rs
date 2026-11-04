@@ -4,6 +4,7 @@ use gpui_component::scroll::{Scrollbar, ScrollbarShow};
 use super::{ACCENT, Gallery, LINE, MUTED, SURFACE, shell::control};
 
 mod switch;
+pub(super) use switch::Switch;
 
 impl Gallery {
     pub(super) fn filters(&self, window: &Window, cx: &mut Context<Self>) -> Div {
