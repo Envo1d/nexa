@@ -9,11 +9,11 @@ use super::{Gallery, LINE, MUTED, SURFACE, TEXT, shell::control};
 use crate::catalog::{self, Entry, SortMode};
 
 pub(super) struct Workspace {
-    entries: Vec<Entry>,
-    previews: HashMap<usize, Arc<RenderImage>>,
+    pub(super) entries: Vec<Entry>,
+    pub(super) previews: HashMap<usize, Arc<RenderImage>>,
     query: String,
-    selected: Option<usize>,
-    selection: BTreeSet<usize>,
+    pub(super) selected: Option<usize>,
+    pub(super) selection: BTreeSet<usize>,
     videos_only: bool,
     images_only: bool,
     sort: SortMode,
@@ -43,7 +43,12 @@ impl Gallery {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.stage == stage || self.loading || self.dialog_open {
+        if self.loading || self.dialog_open {
+            return;
+        }
+        self.taxonomy_open = false;
+        if self.stage == stage {
+            cx.notify();
             return;
         }
 

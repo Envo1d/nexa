@@ -2,6 +2,7 @@ mod catalog;
 mod dialogs;
 mod media;
 mod previews;
+mod taxonomy;
 mod ui;
 
 #[path = "../../src-tauri/src/naming.rs"]

@@ -17,6 +17,7 @@ mod selection;
 mod shell;
 mod sort_select;
 mod stage;
+mod taxonomy;
 mod toolbar;
 
 pub(crate) use assets::Assets;
@@ -51,6 +52,8 @@ const MUTED: u32 = 0xa39bb5;
 const ACCENT: u32 = 0xa786ff;
 
 pub(super) struct Gallery {
+    taxonomy_open: bool,
+    taxonomy: taxonomy::Editor,
     stage: bool,
     inactive_workspace: stage::Workspace,
     stage_selection: std::collections::BTreeSet<usize>,
@@ -158,6 +161,8 @@ impl Gallery {
         let type_counts = [entries.len(), videos, entries.len() - videos];
 
         Self {
+            taxonomy_open: false,
+            taxonomy: taxonomy::Editor::new(window, cx),
             stage: false,
             inactive_workspace: stage::Workspace::incoming(),
             stage_selection: Default::default(),
@@ -341,6 +346,7 @@ impl Gallery {
                 } else {
                     this.player = None;
                     this.viewer = false;
+                    this.taxonomy_open = false;
                     this.selected = None;
                     this.stage_selection.clear();
                     this.release_previews(cx);
@@ -591,9 +597,17 @@ impl Render for Gallery {
         div()
             .key_context("NexaGallery")
             .on_action(cx.listener(|this, _: &FocusSearch, window, cx| {
-                this.search.update(cx, |state, cx| state.focus(window, cx));
+                let search = if this.taxonomy_open {
+                    &this.taxonomy.search
+                } else {
+                    &this.search
+                };
+                search.update(cx, |state, cx| state.focus(window, cx));
             }))
-            .on_action(cx.listener(|this, _: &CloseDetails, _, cx| {
+            .on_action(cx.listener(|this, _: &CloseDetails, window, cx| {
+                if this.taxonomy_open {
+                    this.reset_taxonomy(window, cx);
+                }
                 this.marquee = None;
                 this.details_open = false;
                 this.notice = None;
@@ -672,41 +686,45 @@ impl Render for Gallery {
                     .pb_2()
                     .gap(px(2.0))
                     .child(self.navigation(cx))
-                    .when(!self.viewer && !self.stage, |view| {
+                    .when(!self.taxonomy_open && !self.viewer && !self.stage, |view| {
                         view.child(self.filters(window, cx))
                     })
-                    .when(!self.viewer && self.stage, |view| {
+                    .when(!self.taxonomy_open && !self.viewer && self.stage, |view| {
                         view.child(self.stage_sidebar(window, cx))
                     })
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .flex_1()
-                            .min_w_0()
-                            .min_h_0()
-                            .border_1()
-                            .border_color(rgb(LINE))
-                            .rounded_lg()
-                            .bg(rgb(0x10101a))
-                            .when(!self.stage || self.viewer, |view| view.px_4())
-                            .pb(px(12.0))
-                            .child(
-                                div()
-                                    .when(self.stage && !self.viewer, |view| view.px_4())
-                                    .child(self.toolbar(cx)),
-                            )
-                            .when(self.stage && !self.viewer, |view| {
-                                view.child(
+                    .when(self.taxonomy_open, |view| {
+                        view.child(self.taxonomy_workspace(cx))
+                    })
+                    .when(!self.taxonomy_open, |view| {
+                        view.child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .flex_1()
+                                .min_w_0()
+                                .min_h_0()
+                                .border_1()
+                                .border_color(rgb(LINE))
+                                .rounded_lg()
+                                .bg(rgb(0x10101a))
+                                .when(!self.stage || self.viewer, |view| view.px_4())
+                                .pb(px(12.0))
+                                .child(
                                     div()
-                                        .px_4()
-                                        .flex_shrink_0()
-                                        .child(self.stage_selection_bar(cx)),
+                                        .when(self.stage && !self.viewer, |view| view.px_4())
+                                        .child(self.toolbar(cx)),
                                 )
-                            })
-                            .child(content)
-                            .when(self.player.is_some(), |this| {
-                                this.child(
+                                .when(self.stage && !self.viewer, |view| {
+                                    view.child(
+                                        div()
+                                            .px_4()
+                                            .flex_shrink_0()
+                                            .child(self.stage_selection_bar(cx)),
+                                    )
+                                })
+                                .child(content)
+                                .when(self.player.is_some(), |this| {
+                                    this.child(
                             div()
                                 .flex()
                                 .gap_3()
@@ -758,16 +776,17 @@ impl Render for Gallery {
                                     },
                                 ))),
                         )
-                            })
-                            .when(self.viewer, |view| {
-                                view.child(
-                                    div()
-                                        .text_size(px(12.0))
-                                        .text_color(rgb(MUTED))
-                                        .child(self.status.clone()),
-                                )
-                            }),
-                    ),
+                                })
+                                .when(self.viewer, |view| {
+                                    view.child(
+                                        div()
+                                            .text_size(px(12.0))
+                                            .text_color(rgb(MUTED))
+                                            .child(self.status.clone()),
+                                    )
+                                }),
+                        )
+                    }),
             )
             .when(
                 (self.details_open || drawer_amount > 0.0) && !self.viewer,
@@ -821,11 +840,15 @@ impl Render for Gallery {
     }
 }
 
-fn button(id: &'static str, title: &str) -> motion::MotionDiv {
+fn button(id: impl Into<gpui::ElementId>, title: &str) -> motion::MotionDiv {
     button_with_hover(id, title, 0x242034)
 }
 
-fn button_with_hover(id: &'static str, title: &str, hover_background: u32) -> motion::MotionDiv {
+fn button_with_hover(
+    id: impl Into<gpui::ElementId>,
+    title: &str,
+    hover_background: u32,
+) -> motion::MotionDiv {
     motion::button(id)
         .px_3()
         .py_2()

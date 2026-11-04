@@ -18,6 +18,9 @@ reference variants absent from that release's default icon set:
 - `scan.svg`
 - `square.svg`
 - `share-2.svg`
+- `copyright.svg`
+- `pen-tool.svg`
+- `trash-2.svg`
 - `nav-menu.svg`, `nav-star.svg`, `nav-settings.svg`: sidebar-specific reference variants
 
 Geometry was extracted without redrawing from the exported `__iconData.node`

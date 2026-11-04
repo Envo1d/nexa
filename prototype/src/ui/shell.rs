@@ -93,6 +93,8 @@ pub(super) fn icon(name: &'static str) -> Icon {
             "grid" => "layout-grid",
             "reset" => "rotate-ccw",
             "person" => "user-round",
+            "artist" => "pen-tool",
+            "trash" => "trash-2",
             "share" => "share-2",
             other => other,
         };
@@ -177,32 +179,36 @@ impl Gallery {
                     .w(px(112.0))
                     .rounded_t(px(9.0))
                     .font_weight(gpui::FontWeight::MEDIUM)
-                    .bg(if self.stage {
+                    .bg(if self.stage || self.taxonomy_open {
                         gpui::rgba(0)
                     } else {
                         rgb(0x2c263f)
                     })
                     .border_b_2()
-                    .border_color(if self.stage {
+                    .border_color(if self.stage || self.taxonomy_open {
                         gpui::rgba(0)
                     } else {
                         rgb(ACCENT)
                     })
-                    .text_color(rgb(if self.stage { MUTED } else { super::TEXT }))
+                    .text_color(rgb(if self.stage || self.taxonomy_open {
+                        MUTED
+                    } else {
+                        super::TEXT
+                    }))
                     .on_click(
                         cx.listener(|this, _, window, cx| this.switch_workspace(false, window, cx)),
                     ),
             )
             .child(
                 button("stage", "Входящие")
-                    .bg(if self.stage {
+                    .bg(if self.stage && !self.taxonomy_open {
                         rgb(0x2c263f)
                     } else {
                         gpui::rgba(0)
                     })
                     .border_0()
                     .border_b_2()
-                    .border_color(if self.stage {
+                    .border_color(if self.stage && !self.taxonomy_open {
                         rgb(ACCENT)
                     } else {
                         gpui::rgba(0)
@@ -216,7 +222,11 @@ impl Gallery {
                     .flex()
                     .items_center()
                     .justify_center()
-                    .text_color(rgb(if self.stage { super::TEXT } else { MUTED }))
+                    .text_color(rgb(if self.stage && !self.taxonomy_open {
+                        super::TEXT
+                    } else {
+                        MUTED
+                    }))
                     .on_click(
                         cx.listener(|this, _, window, cx| this.switch_workspace(true, window, cx)),
                     ),
@@ -332,7 +342,7 @@ impl Gallery {
                     "gallery",
                     label("Галерея"),
                     "folder",
-                    !self.stage && !self.favorites_only,
+                    !self.taxonomy_open && !self.stage && !self.favorites_only,
                 )
                 .on_click(cx.listener(|this, _, window, cx| {
                     this.switch_workspace(false, window, cx);
@@ -346,7 +356,7 @@ impl Gallery {
                     "favorites",
                     label("Избранное"),
                     "nav-star",
-                    !self.stage && self.favorites_only,
+                    !self.taxonomy_open && !self.stage && self.favorites_only,
                 )
                 .on_click(cx.listener(|this, _, window, cx| {
                     this.switch_workspace(false, window, cx);
@@ -356,8 +366,8 @@ impl Gallery {
             )
             .child(div().h(px(4.0)).flex_shrink_0())
             .child(
-                navigation_button("tags", label("Теги"), "tag", false)
-                    .on_click(cx.listener(|this, _, _, cx| this.unavailable("Редактор тегов", cx))),
+                navigation_button("tags", label("Теги"), "tag", self.taxonomy_open)
+                    .on_click(cx.listener(|this, _, window, cx| this.open_taxonomy(window, cx))),
             )
             .child(div().h(px(4.0)).flex_shrink_0())
             .child(
