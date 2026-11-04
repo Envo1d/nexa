@@ -110,6 +110,7 @@ pub(super) struct Entry {
 
 #[derive(Clone, Default)]
 pub(super) struct EntryDetails {
+    pub character_copyrights: Vec<(String, String)>,
     pub filename: String,
     pub relative_path: String,
     pub artist: Option<String>,
@@ -179,6 +180,7 @@ pub(super) fn incoming_demo_entries() -> Vec<Entry> {
             };
             entry.tags.clear();
             entry.characters.clear();
+            entry.details.character_copyrights.clear();
             entry.details.artist = None;
             entry.details.copyrights.clear();
             entry.favorite = false;
@@ -264,7 +266,7 @@ fn demo_details(index: usize) -> EntryDetails {
         "{}{title} [{artist}].{extension}",
         demo_characters(index).replace(", ", " х ")
     );
-    let copyrights = if matches!(group, 2 | 5) {
+    let copyrights: Vec<String> = if matches!(group, 2 | 5) {
         vec!["Wonderland".into(), "Lunar Tales".into()]
     } else {
         vec![
@@ -278,6 +280,10 @@ fn demo_details(index: usize) -> EntryDetails {
     };
 
     EntryDetails {
+        character_copyrights: demo_characters(index)
+            .split(", ")
+            .map(|name| (name.to_owned(), copyrights[0].clone()))
+            .collect(),
         filename,
         relative_path: String::new(),
         artist: Some(artist),
