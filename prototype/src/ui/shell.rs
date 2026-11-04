@@ -179,36 +179,38 @@ impl Gallery {
                     .w(px(112.0))
                     .rounded_t(px(9.0))
                     .font_weight(gpui::FontWeight::MEDIUM)
-                    .bg(if self.stage || self.taxonomy_open {
+                    .bg(if self.stage || self.taxonomy_open || self.health_open {
                         gpui::rgba(0)
                     } else {
                         rgb(0x2c263f)
                     })
                     .border_b_2()
-                    .border_color(if self.stage || self.taxonomy_open {
+                    .border_color(if self.stage || self.taxonomy_open || self.health_open {
                         gpui::rgba(0)
                     } else {
                         rgb(ACCENT)
                     })
-                    .text_color(rgb(if self.stage || self.taxonomy_open {
-                        MUTED
-                    } else {
-                        super::TEXT
-                    }))
+                    .text_color(rgb(
+                        if self.stage || self.taxonomy_open || self.health_open {
+                            MUTED
+                        } else {
+                            super::TEXT
+                        },
+                    ))
                     .on_click(
                         cx.listener(|this, _, window, cx| this.switch_workspace(false, window, cx)),
                     ),
             )
             .child(
                 button("stage", "Входящие")
-                    .bg(if self.stage && !self.taxonomy_open {
+                    .bg(if self.stage && !self.taxonomy_open && !self.health_open {
                         rgb(0x2c263f)
                     } else {
                         gpui::rgba(0)
                     })
                     .border_0()
                     .border_b_2()
-                    .border_color(if self.stage && !self.taxonomy_open {
+                    .border_color(if self.stage && !self.taxonomy_open && !self.health_open {
                         rgb(ACCENT)
                     } else {
                         gpui::rgba(0)
@@ -222,11 +224,13 @@ impl Gallery {
                     .flex()
                     .items_center()
                     .justify_center()
-                    .text_color(rgb(if self.stage && !self.taxonomy_open {
-                        super::TEXT
-                    } else {
-                        MUTED
-                    }))
+                    .text_color(rgb(
+                        if self.stage && !self.taxonomy_open && !self.health_open {
+                            super::TEXT
+                        } else {
+                            MUTED
+                        },
+                    ))
                     .on_click(
                         cx.listener(|this, _, window, cx| this.switch_workspace(true, window, cx)),
                     ),
@@ -342,7 +346,7 @@ impl Gallery {
                     "gallery",
                     label("Галерея"),
                     "folder",
-                    !self.taxonomy_open && !self.stage && !self.favorites_only,
+                    !self.health_open && !self.taxonomy_open && !self.stage && !self.favorites_only,
                 )
                 .on_click(cx.listener(|this, _, window, cx| {
                     this.switch_workspace(false, window, cx);
@@ -356,7 +360,7 @@ impl Gallery {
                     "favorites",
                     label("Избранное"),
                     "nav-star",
-                    !self.taxonomy_open && !self.stage && self.favorites_only,
+                    !self.health_open && !self.taxonomy_open && !self.stage && self.favorites_only,
                 )
                 .on_click(cx.listener(|this, _, window, cx| {
                     this.switch_workspace(false, window, cx);
@@ -371,9 +375,8 @@ impl Gallery {
             )
             .child(div().h(px(4.0)).flex_shrink_0())
             .child(
-                navigation_button("health", label("Проверка"), "warning", false).on_click(
-                    cx.listener(|this, _, _, cx| this.unavailable("Состояние библиотеки", cx)),
-                ),
+                navigation_button("health", label("Проверка"), "warning", self.health_open)
+                    .on_click(cx.listener(|this, _, window, cx| this.open_health(window, cx))),
             )
             .child(div().flex_1())
             .child(

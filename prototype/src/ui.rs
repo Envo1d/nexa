@@ -11,6 +11,7 @@ mod background;
 mod collection;
 mod details;
 mod filters;
+mod health;
 mod layout;
 mod motion;
 mod selection;
@@ -52,6 +53,8 @@ const MUTED: u32 = 0xa39bb5;
 const ACCENT: u32 = 0xa786ff;
 
 pub(super) struct Gallery {
+    health_open: bool,
+    health: health::Health,
     taxonomy_open: bool,
     taxonomy: taxonomy::Editor,
     stage: bool,
@@ -161,6 +164,8 @@ impl Gallery {
         let type_counts = [entries.len(), videos, entries.len() - videos];
 
         Self {
+            health_open: false,
+            health: health::Health::new(),
             taxonomy_open: false,
             taxonomy: taxonomy::Editor::new(window, cx),
             stage: false,
@@ -597,6 +602,9 @@ impl Render for Gallery {
         div()
             .key_context("NexaGallery")
             .on_action(cx.listener(|this, _: &FocusSearch, window, cx| {
+                if this.health_open {
+                    return;
+                }
                 let search = if this.taxonomy_open {
                     &this.taxonomy.search
                 } else {
@@ -686,16 +694,21 @@ impl Render for Gallery {
                     .pb_2()
                     .gap(px(2.0))
                     .child(self.navigation(cx))
-                    .when(!self.taxonomy_open && !self.viewer && !self.stage, |view| {
-                        view.child(self.filters(window, cx))
+                    .when(self.health_open, |view| {
+                        view.child(self.health_workspace(cx))
                     })
-                    .when(!self.taxonomy_open && !self.viewer && self.stage, |view| {
-                        view.child(self.stage_sidebar(window, cx))
-                    })
+                    .when(
+                        !self.health_open && !self.taxonomy_open && !self.viewer && !self.stage,
+                        |view| view.child(self.filters(window, cx)),
+                    )
+                    .when(
+                        !self.health_open && !self.taxonomy_open && !self.viewer && self.stage,
+                        |view| view.child(self.stage_sidebar(window, cx)),
+                    )
                     .when(self.taxonomy_open, |view| {
                         view.child(self.taxonomy_workspace(cx))
                     })
-                    .when(!self.taxonomy_open, |view| {
+                    .when(!self.health_open && !self.taxonomy_open, |view| {
                         view.child(
                             div()
                                 .flex()
