@@ -10,6 +10,7 @@ mod assets;
 mod background;
 mod collection;
 mod details;
+mod duplicates;
 mod filters;
 mod health;
 mod layout;
@@ -52,6 +53,8 @@ const MUTED: u32 = 0xa39bb5;
 const ACCENT: u32 = 0xa786ff;
 
 pub(super) struct Gallery {
+    duplicates_open: bool,
+    duplicates: duplicates::Duplicates,
     settings_open: bool,
     settings: settings::Settings,
     health_open: bool,
@@ -140,6 +143,8 @@ impl Gallery {
         let type_counts = [entries.len(), videos, entries.len() - videos];
 
         Self {
+            duplicates_open: false,
+            duplicates: duplicates::Duplicates::new(),
             settings_open: false,
             settings: settings::Settings::new(window, cx),
             health_open: false,
@@ -460,7 +465,7 @@ impl Render for Gallery {
         div()
             .key_context("NexaGallery")
             .on_action(cx.listener(|this, _: &FocusSearch, window, cx| {
-                if this.health_open || this.settings_open {
+                if this.health_open || this.settings_open || this.duplicates_open {
                     return;
                 }
                 let search = if this.taxonomy_open {
@@ -471,6 +476,9 @@ impl Render for Gallery {
                 search.update(cx, |state, cx| state.focus(window, cx));
             }))
             .on_action(cx.listener(|this, _: &CloseDetails, window, cx| {
+                if this.duplicates_open {
+                    this.cancel_duplicate_confirmation();
+                }
                 if this.taxonomy_open {
                     this.reset_taxonomy(window, cx);
                 }
@@ -508,6 +516,9 @@ impl Render for Gallery {
                     .pb_2()
                     .gap(px(2.0))
                     .child(self.navigation(cx))
+                    .when(self.duplicates_open, |view| {
+                        view.child(self.duplicates_workspace(window, cx))
+                    })
                     .when(self.settings_open, |view| {
                         view.child(self.settings_workspace(window, cx))
                     })
@@ -516,6 +527,7 @@ impl Render for Gallery {
                     })
                     .when(
                         !self.settings_open
+                            && !self.duplicates_open
                             && !self.health_open
                             && !self.taxonomy_open
                             && !self.viewer
@@ -524,6 +536,7 @@ impl Render for Gallery {
                     )
                     .when(
                         !self.settings_open
+                            && !self.duplicates_open
                             && !self.health_open
                             && !self.taxonomy_open
                             && !self.viewer
@@ -534,7 +547,10 @@ impl Render for Gallery {
                         view.child(self.taxonomy_workspace(cx))
                     })
                     .when(
-                        !self.settings_open && !self.health_open && !self.taxonomy_open,
+                        !self.settings_open
+                            && !self.health_open
+                            && !self.taxonomy_open
+                            && !self.duplicates_open,
                         |view| {
                             view.child(
                                 div()

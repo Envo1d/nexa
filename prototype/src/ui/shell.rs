@@ -184,6 +184,7 @@ impl Gallery {
                             || self.taxonomy_open
                             || self.health_open
                             || self.settings_open
+                            || self.duplicates_open
                         {
                             gpui::rgba(0)
                         } else {
@@ -196,6 +197,7 @@ impl Gallery {
                             || self.taxonomy_open
                             || self.health_open
                             || self.settings_open
+                            || self.duplicates_open
                         {
                             gpui::rgba(0)
                         } else {
@@ -207,6 +209,7 @@ impl Gallery {
                             || self.taxonomy_open
                             || self.health_open
                             || self.settings_open
+                            || self.duplicates_open
                         {
                             MUTED
                         } else {
@@ -224,6 +227,7 @@ impl Gallery {
                             && !self.taxonomy_open
                             && !self.health_open
                             && !self.settings_open
+                            && !self.duplicates_open
                         {
                             rgb(0x2c263f)
                         } else {
@@ -237,6 +241,7 @@ impl Gallery {
                             && !self.taxonomy_open
                             && !self.health_open
                             && !self.settings_open
+                            && !self.duplicates_open
                         {
                             rgb(ACCENT)
                         } else {
@@ -257,6 +262,7 @@ impl Gallery {
                             && !self.taxonomy_open
                             && !self.health_open
                             && !self.settings_open
+                            && !self.duplicates_open
                         {
                             super::TEXT
                         } else {
@@ -378,6 +384,7 @@ impl Gallery {
                     label("Галерея"),
                     "folder",
                     !self.settings_open
+                        && !self.duplicates_open
                         && !self.health_open
                         && !self.taxonomy_open
                         && !self.stage
@@ -396,6 +403,7 @@ impl Gallery {
                     label("Избранное"),
                     "nav-star",
                     !self.settings_open
+                        && !self.duplicates_open
                         && !self.health_open
                         && !self.taxonomy_open
                         && !self.stage
@@ -416,6 +424,16 @@ impl Gallery {
             .child(
                 navigation_button("health", label("Проверка"), "warning", self.health_open)
                     .on_click(cx.listener(|this, _, window, cx| this.open_health(window, cx))),
+            )
+            .child(div().h(px(4.0)).flex_shrink_0())
+            .child(
+                navigation_button(
+                    "duplicates-nav",
+                    label("Дубликаты"),
+                    "copy",
+                    self.duplicates_open,
+                )
+                .on_click(cx.listener(|this, _, window, cx| this.open_duplicates(window, cx))),
             )
             .child(div().flex_1())
             .child(

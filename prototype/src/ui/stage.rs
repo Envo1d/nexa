@@ -47,6 +47,7 @@ impl Gallery {
             return;
         }
         self.settings_open = false;
+        self.duplicates_open = false;
         self.taxonomy_open = false;
         self.health_open = false;
         if self.stage == stage {
