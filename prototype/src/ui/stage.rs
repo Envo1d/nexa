@@ -130,20 +130,6 @@ impl Gallery {
         }
     }
 
-    pub(super) fn request_distribution(&mut self, cx: &mut Context<Self>) {
-        if self.stage_selection.is_empty() {
-            return;
-        }
-
-        tracing::info!(
-            operation = "distribution",
-            selected = self.stage_selection.len(),
-            outcome = "unavailable",
-            "Production distribution is not connected in the isolated prototype"
-        );
-        self.unavailable("Распределение файлов", cx);
-    }
-
     pub(super) fn stage_sidebar(&self, window: &Window, cx: &mut Context<Self>) -> Div {
         let count = self.stage_selection.len();
 
@@ -299,6 +285,6 @@ impl Gallery {
             } else {
                 1.0
             })
-            .on_click(cx.listener(|this, _, _, cx| this.request_distribution(cx)))
+            .on_click(cx.listener(|this, _, window, cx| this.open_distribution(window, cx)))
     }
 }

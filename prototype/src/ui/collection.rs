@@ -517,7 +517,7 @@ impl Gallery {
                     let distribute = gallery.clone();
                     let source = source.clone();
                     menu.item(
-                        PopupMenuItem::new("Распределить").on_click(move |_, _, cx| {
+                        PopupMenuItem::new("Распределить").on_click(move |_, window, cx| {
                             let _ = distribute.update(cx, |this, cx| {
                                 if this.stage
                                     && this
@@ -528,7 +528,7 @@ impl Gallery {
                                     if !this.stage_selection.contains(&index) {
                                         this.select_card(index, gpui::Modifiers::default());
                                     }
-                                    this.request_distribution(cx);
+                                    this.open_distribution(window, cx);
                                 }
                             });
                         }),
