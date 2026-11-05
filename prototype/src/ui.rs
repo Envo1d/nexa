@@ -10,6 +10,7 @@ mod assets;
 mod background;
 mod collection;
 mod details;
+mod distribution;
 mod duplicates;
 mod filters;
 mod health;
@@ -53,6 +54,7 @@ const MUTED: u32 = 0xa39bb5;
 const ACCENT: u32 = 0xa786ff;
 
 pub(super) struct Gallery {
+    distribution: Option<distribution::Wizard>,
     duplicates_open: bool,
     duplicates: duplicates::Duplicates,
     settings_open: bool,
@@ -143,6 +145,7 @@ impl Gallery {
         let type_counts = [entries.len(), videos, entries.len() - videos];
 
         Self {
+            distribution: None,
             duplicates_open: false,
             duplicates: duplicates::Duplicates::new(),
             settings_open: false,
@@ -476,6 +479,10 @@ impl Render for Gallery {
                 search.update(cx, |state, cx| state.focus(window, cx));
             }))
             .on_action(cx.listener(|this, _: &CloseDetails, window, cx| {
+                if this.distribution.is_some() {
+                    this.close_distribution(cx);
+                    return;
+                }
                 if this.duplicates_open {
                     this.cancel_duplicate_confirmation();
                 }
@@ -631,6 +638,9 @@ impl Render for Gallery {
                                 })),
                         ),
                 )
+            })
+            .when(self.distribution.is_some(), |view| {
+                view.child(self.distribution_dialog(window, cx))
             })
             .into_any_element()
     }
