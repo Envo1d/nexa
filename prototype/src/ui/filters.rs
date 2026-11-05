@@ -260,19 +260,6 @@ impl Gallery {
                                     .update(cx, |state, cx| state.set_value("", window, cx));
                                 this.refilter(cx);
                             })),
-                    )
-                    .child(
-                        control("duplicates", "Найти дубликаты", "copy", false)
-                            .h(px(34.0))
-                            .py_0()
-                            .justify_center()
-                            .text_size(px(11.0))
-                            .font_weight(FontWeight::MEDIUM)
-                            .rounded(px(6.0))
-                            .bg(rgb(0x1a1827))
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.unavailable("Поиск дубликатов", cx)
-                            })),
                     ),
             )
     }
