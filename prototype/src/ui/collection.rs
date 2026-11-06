@@ -456,6 +456,12 @@ impl Gallery {
         let gallery = cx.weak_entity();
         let source = self.entries[index].path.clone();
         let stage = self.stage;
+        let video = self.entries[index].video;
+        let selected_count = if stage && self.stage_selection.contains(&index) {
+            self.stage_selection.len()
+        } else {
+            1
+        };
         let build_menu =
             move |menu: gpui_component::menu::PopupMenu,
                   _: &mut Window,
@@ -474,8 +480,12 @@ impl Gallery {
                                     .get(index)
                                     .is_some_and(|entry| entry.path == open_source)
                             {
-                                this.select_card(index, gpui::Modifiers::default());
-                                this.open_selected(window, cx);
+                                this.run_file_action(
+                                    index,
+                                    super::file_operations::Action::Open,
+                                    window,
+                                    cx,
+                                );
                             }
                         });
                     }),
@@ -496,6 +506,24 @@ impl Gallery {
                         });
                     }),
                 )
+                .item(super::file_operations::menu_action(
+                    "Показать в Проводнике",
+                    super::file_operations::Action::Reveal,
+                    index,
+                    stage,
+                    source.clone(),
+                    gallery.clone(),
+                ))
+                .when(!stage, |menu| {
+                    menu.item(super::file_operations::menu_action(
+                        "Изменить порядок файлов",
+                        super::file_operations::Action::Order,
+                        index,
+                        stage,
+                        source.clone(),
+                        gallery.clone(),
+                    ))
+                })
                 .when(!stage, |menu| {
                     let edit = gallery.clone();
                     let source = source.clone();
@@ -535,6 +563,38 @@ impl Gallery {
                         }),
                     )
                 })
+                .when(stage && selected_count == 1, |menu| {
+                    menu.item(super::file_operations::menu_action(
+                        "Заменить в Main Library…",
+                        super::file_operations::Action::Replace,
+                        index,
+                        stage,
+                        source.clone(),
+                        gallery.clone(),
+                    ))
+                })
+                .when(!stage && video, |menu| {
+                    menu.item(super::file_operations::menu_action(
+                        "Копировать имя файла",
+                        super::file_operations::Action::CopyName,
+                        index,
+                        stage,
+                        source.clone(),
+                        gallery.clone(),
+                    ))
+                })
+                .item(super::file_operations::menu_action(
+                    &if selected_count > 1 {
+                        format!("Удалить {selected_count} файлов")
+                    } else {
+                        "Удалить файл".into()
+                    },
+                    super::file_operations::Action::Delete,
+                    index,
+                    stage,
+                    source.clone(),
+                    gallery.clone(),
+                ))
             };
 
         if wide {

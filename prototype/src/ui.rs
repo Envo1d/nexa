@@ -12,6 +12,7 @@ mod collection;
 mod details;
 mod distribution;
 mod duplicates;
+mod file_operations;
 mod file_tags;
 mod filters;
 mod health;
@@ -59,6 +60,8 @@ const MUTED: u32 = 0xa39bb5;
 const ACCENT: u32 = 0xa786ff;
 
 pub(super) struct Gallery {
+    file_operation: Option<file_operations::Draft>,
+    file_action_busy: bool,
     tag_editor: Option<file_tags::Editor>,
     distribution: Option<distribution::Wizard>,
     duplicates_open: bool,
@@ -168,6 +171,8 @@ impl Gallery {
         let type_counts = [entries.len(), videos, entries.len() - videos];
 
         Self {
+            file_operation: None,
+            file_action_busy: false,
             tag_editor: None,
             distribution: None,
             duplicates_open: false,
@@ -512,14 +517,18 @@ impl Render for Gallery {
         div()
             .key_context("NexaGallery")
             .on_action(cx.listener(|this, _: &NextFocus, window, cx| {
-                if this.tag_editor.is_some() {
+                if this.file_operation.is_some() {
+                    this.file_operation_tab(false, window, cx);
+                } else if this.tag_editor.is_some() {
                     this.file_tags_tab(false, window, cx);
                 } else {
                     this.distribution_tab(false, window, cx);
                 }
             }))
             .on_action(cx.listener(|this, _: &PreviousFocus, window, cx| {
-                if this.tag_editor.is_some() {
+                if this.file_operation.is_some() {
+                    this.file_operation_tab(true, window, cx);
+                } else if this.tag_editor.is_some() {
                     this.file_tags_tab(true, window, cx);
                 } else {
                     this.distribution_tab(true, window, cx);
@@ -531,6 +540,7 @@ impl Render for Gallery {
                     || this.duplicates_open
                     || this.distribution.is_some()
                     || this.tag_editor.is_some()
+                    || this.file_operation.is_some()
                 {
                     return;
                 }
@@ -542,6 +552,10 @@ impl Render for Gallery {
                 search.update(cx, |state, cx| state.focus(window, cx));
             }))
             .on_action(cx.listener(|this, _: &CloseDetails, window, cx| {
+                if this.file_operation.is_some() {
+                    this.close_file_operation(window, cx);
+                    return;
+                }
                 if this.tag_editor.is_some() {
                     this.close_file_tags(window, cx);
                     return;
@@ -705,6 +719,9 @@ impl Render for Gallery {
                                 })),
                         ),
                 )
+            })
+            .when(self.file_operation.is_some(), |view| {
+                view.child(self.file_operation_dialog(window, cx))
             })
             .when(self.tag_editor.is_some(), |view| {
                 view.child(self.file_tags_dialog(window, cx))

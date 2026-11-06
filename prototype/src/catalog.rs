@@ -110,6 +110,7 @@ pub(super) struct Entry {
 
 #[derive(Clone, Default)]
 pub(super) struct EntryDetails {
+    pub order_position: Option<usize>,
     pub character_copyrights: Vec<(String, String)>,
     pub filename: String,
     pub relative_path: String,
@@ -280,6 +281,7 @@ fn demo_details(index: usize) -> EntryDetails {
     };
 
     EntryDetails {
+        order_position: None,
         character_copyrights: demo_characters(index)
             .split(", ")
             .map(|name| (name.to_owned(), copyrights[0].clone()))
