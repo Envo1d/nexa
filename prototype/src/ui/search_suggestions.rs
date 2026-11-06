@@ -29,7 +29,7 @@ impl Suggestions {
     }
 }
 
-fn matches(query: &str, records: &[Record]) -> Vec<Record> {
+pub(super) fn matches(query: &str, records: &[Record]) -> Vec<Record> {
     let mut parts: Vec<_> = query.split(';').map(str::trim).collect();
     let query = parts.pop().unwrap_or_default().to_lowercase();
     if query.is_empty() {
@@ -60,7 +60,7 @@ fn matches(query: &str, records: &[Record]) -> Vec<Record> {
     values
 }
 
-fn choose(query: &str, name: &str) -> String {
+pub(super) fn choose(query: &str, name: &str) -> String {
     let mut parts: Vec<_> = query.split(';').collect();
     parts.pop();
     parts.push(name);
@@ -231,7 +231,7 @@ impl Gallery {
     }
 }
 
-fn next_index(active: Option<usize>, count: usize, down: bool) -> Option<usize> {
+pub(super) fn next_index(active: Option<usize>, count: usize, down: bool) -> Option<usize> {
     if count == 0 {
         return None;
     }

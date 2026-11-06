@@ -9,6 +9,12 @@ use super::super::{ACCENT, Gallery, LINE, MUTED, SURFACE, TEXT, motion, shell::i
 fn button(id: &'static str, label: &str) -> motion::MotionDiv {
     super::super::button(id, label)
         .keyboard_focus(true)
+        .flex()
+        .items_center()
+        .justify_center()
+        .py(px(0.))
+        .gap(px(8.))
+        .line_height(px(13.75))
         .h(px(34.))
         .px(px(18.))
         .rounded(px(6.))
