@@ -42,3 +42,15 @@ fn missing_file_repair_requires_both_proposal_and_confirmation() {
     assert!(!health.proposal);
     assert!(!health.confirmed);
 }
+
+#[test]
+fn metadata_save_resolves_only_metadata_problem_and_keeps_session_values() {
+    let mut health = Health::new();
+    health.metadata_entry.title = "Updated title".into();
+    health.metadata_saved();
+    assert_eq!(health.remaining, [true, true, true, false]);
+    assert_eq!(health.metadata_entry.title, "Updated title");
+    health.choose(2);
+    assert_eq!(health.metadata_entry.title, "Updated title");
+    assert!(!health.remaining[3]);
+}

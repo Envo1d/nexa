@@ -16,8 +16,7 @@ impl Metadata {
 
     fn summary(&self) -> String {
         let characters = self.values[2].iter().map(|value| {
-            value
-                .rsplit_once(" (")
+            super::metadata::character_parts(value, &self.values[0])
                 .map_or(value.as_str(), |(name, _)| name)
         });
         let summary = self.values[0]
@@ -251,7 +250,7 @@ impl Gallery {
                 advance(window);
             }
         } else {
-            let first = if w.done {
+            let first = if w.done || w.editing {
                 &w.close_focus
             } else {
                 &w.preset_state.trigger_focus

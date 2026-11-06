@@ -153,6 +153,7 @@ pub(super) struct MotionDiv {
     hover_text: Option<Hsla>,
     hover_border: Option<Hsla>,
     keyboard_focus: bool,
+    selected: bool,
     focus_ring_background: Option<Rgba>,
     focus_handle: Option<gpui::FocusHandle>,
 }
@@ -167,6 +168,7 @@ pub(super) fn button(id: impl Into<ElementId>) -> MotionDiv {
         hover_text: None,
         hover_border: None,
         keyboard_focus: false,
+        selected: false,
         focus_ring_background: None,
         focus_handle: None,
     }
@@ -227,6 +229,19 @@ impl InteractiveElement for MotionDiv {
 }
 
 impl StatefulInteractiveElement for MotionDiv {}
+
+impl gpui_component::Selectable for MotionDiv {
+    fn selected(mut self, selected: bool) -> Self {
+        self.selected = selected;
+        self
+    }
+
+    fn is_selected(&self) -> bool {
+        self.selected
+    }
+}
+
+impl gpui_component::menu::DropdownMenu for MotionDiv {}
 
 impl RenderOnce for MotionDiv {
     fn render(mut self, window: &mut Window, cx: &mut App) -> impl IntoElement {

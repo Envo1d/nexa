@@ -12,6 +12,7 @@ mod collection;
 mod details;
 mod distribution;
 mod duplicates;
+mod file_tags;
 mod filters;
 mod health;
 mod layout;
@@ -57,6 +58,7 @@ const MUTED: u32 = 0xa39bb5;
 const ACCENT: u32 = 0xa786ff;
 
 pub(super) struct Gallery {
+    tag_editor: Option<file_tags::Editor>,
     distribution: Option<distribution::Wizard>,
     duplicates_open: bool,
     duplicates: duplicates::Duplicates,
@@ -148,6 +150,7 @@ impl Gallery {
         let type_counts = [entries.len(), videos, entries.len() - videos];
 
         Self {
+            tag_editor: None,
             distribution: None,
             duplicates_open: false,
             duplicates: duplicates::Duplicates::new(),
@@ -471,16 +474,25 @@ impl Render for Gallery {
         div()
             .key_context("NexaGallery")
             .on_action(cx.listener(|this, _: &NextFocus, window, cx| {
-                this.distribution_tab(false, window, cx);
+                if this.tag_editor.is_some() {
+                    this.file_tags_tab(false, window, cx);
+                } else {
+                    this.distribution_tab(false, window, cx);
+                }
             }))
             .on_action(cx.listener(|this, _: &PreviousFocus, window, cx| {
-                this.distribution_tab(true, window, cx);
+                if this.tag_editor.is_some() {
+                    this.file_tags_tab(true, window, cx);
+                } else {
+                    this.distribution_tab(true, window, cx);
+                }
             }))
             .on_action(cx.listener(|this, _: &FocusSearch, window, cx| {
                 if this.health_open
                     || this.settings_open
                     || this.duplicates_open
                     || this.distribution.is_some()
+                    || this.tag_editor.is_some()
                 {
                     return;
                 }
@@ -492,6 +504,10 @@ impl Render for Gallery {
                 search.update(cx, |state, cx| state.focus(window, cx));
             }))
             .on_action(cx.listener(|this, _: &CloseDetails, window, cx| {
+                if this.tag_editor.is_some() {
+                    this.close_file_tags(window, cx);
+                    return;
+                }
                 if this.distribution.is_some() {
                     this.distribution_escape(window, cx);
                     return;
@@ -651,6 +667,9 @@ impl Render for Gallery {
                                 })),
                         ),
                 )
+            })
+            .when(self.tag_editor.is_some(), |view| {
+                view.child(self.file_tags_dialog(window, cx))
             })
             .when(self.distribution.is_some(), |view| {
                 view.child(self.distribution_dialog(window, cx))
