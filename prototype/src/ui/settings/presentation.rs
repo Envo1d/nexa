@@ -151,7 +151,7 @@ impl Gallery {
             2 => self.settings_structure_card(width, cx),
             3 => self.settings_indexing_card(cx),
             4 => self.settings_cache_card(cx),
-            5 => self.settings_catalog_card(),
+            5 => self.settings_catalog_card(cx),
             6 => self.settings_logs_card(cx),
             7 => self.settings_updates_card(cx),
             _ => self.settings_appearance_card(cx),
@@ -278,6 +278,7 @@ impl Gallery {
                         .hover_colors(None, None, None)
                         .on_click(cx.listener(|this, _, window, cx| {
                             this.settings.toggles = [true, true, false, false, false];
+                            this.settings.paths = [None, None];
                             this.settings.language = 0;
                             this.settings.theme = 0;
                             this.settings.saved = false;
@@ -295,7 +296,13 @@ impl Gallery {
                         .gap(px(8.0))
                         .child(
                             action("settings-cancel", "cancel", None).on_click(cx.listener(
-                                |this, _, window, cx| this.switch_workspace(false, window, cx),
+                                |this, _, window, cx| {
+                                    if this.dialog_open {
+                                        return;
+                                    }
+                                    this.settings.paths = this.settings.saved_paths.clone();
+                                    this.switch_workspace(false, window, cx);
+                                },
                             )),
                         )
                         .child(
@@ -309,6 +316,10 @@ impl Gallery {
                                 .text_color(rgb(0xffffff))
                                 .hover_colors(Some(rgb(0x8853e1).into()), None, None)
                                 .on_click(cx.listener(|this, _, _, cx| {
+                                    if this.dialog_open {
+                                        return;
+                                    }
+                                    this.settings.saved_paths = this.settings.paths.clone();
                                     this.settings.saved = true;
                                     this.settings.message = None;
                                     tracing::info!(

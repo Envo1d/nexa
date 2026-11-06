@@ -104,3 +104,72 @@ pub(super) fn open(
         result
     }
 }
+
+/// Save destination picker with the same bounded fullscreen handoff as `open`.
+pub(super) fn save(
+    window: &Window,
+    cx: &mut App,
+    directory: PathBuf,
+    name: String,
+) -> impl Future<Output = Result<Option<PathBuf>, String>> + 'static {
+    let handle = window.window_handle();
+    let restore_fullscreen = window.is_fullscreen();
+    let mut cx = cx.to_async();
+
+    if restore_fullscreen {
+        window.toggle_fullscreen();
+    }
+
+    async move {
+        let deadline = Instant::now() + Duration::from_secs(3);
+        let ready = loop {
+            cx.background_executor()
+                .timer(Duration::from_millis(16))
+                .await;
+            match handle.update(&mut cx, |_, window, _| window.is_fullscreen()) {
+                Ok(false) => break Ok(()),
+                Ok(true) if Instant::now() < deadline => continue,
+                Ok(true) => break Err("Не удалось выйти из полноэкранного режима.".to_owned()),
+                Err(_) => break Err("Окно закрыто.".to_owned()),
+            }
+        };
+        let result = match ready {
+            Ok(()) => match cx.update(|cx| cx.prompt_for_new_path(&directory, Some(&name))) {
+                Ok(prompt) => match prompt.await {
+                    Ok(Ok(path)) => Ok(path),
+                    _ => Err("Не удалось открыть диалог сохранения.".into()),
+                },
+                Err(_) => Err("Окно закрыто.".into()),
+            },
+            Err(error) => Err(error),
+        };
+
+        if restore_fullscreen {
+            let _ = handle.update(&mut cx, |_, window, _| {
+                if !window.is_fullscreen() {
+                    window.toggle_fullscreen();
+                }
+            });
+            let deadline = Instant::now() + Duration::from_secs(3);
+            loop {
+                cx.background_executor()
+                    .timer(Duration::from_millis(16))
+                    .await;
+                match handle.update(&mut cx, |_, window, _| window.is_fullscreen()) {
+                    Ok(true) => break,
+                    Ok(false) if Instant::now() < deadline => continue,
+                    Ok(false) => {
+                        tracing::warn!(
+                            operation = "session_backup_export",
+                            "Fullscreen restoration timed out; retaining save result"
+                        );
+                        break;
+                    }
+                    Err(_) => break,
+                }
+            }
+        }
+
+        result
+    }
+}
