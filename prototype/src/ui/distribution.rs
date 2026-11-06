@@ -3,6 +3,11 @@ use gpui_component::input::{Input, InputEvent, InputState};
 
 use super::{Gallery, LINE, MUTED, SHELL, SURFACE, TEXT, motion, shell};
 
+mod batch;
+mod metadata;
+mod presets;
+mod workflow;
+
 const STEPS: [&str; 6] = [
     "Информация",
     "Произведения",
@@ -20,14 +25,23 @@ pub(super) struct Wizard {
     completed: usize,
     all: bool,
     retain: bool,
+    batch_expanded: bool,
+    batch_scroll: presets::scrolling::ScrollState,
+    scope_focus: [gpui::FocusHandle; 2],
     values: [Vec<String>; 3],
     query: Entity<InputState>,
     artist: Entity<InputState>,
     title: Entity<InputState>,
     scroll: gpui::ScrollHandle,
     background: std::sync::Arc<gpui::RenderImage>,
+    backdrop: Option<std::sync::Arc<gpui::RenderImage>>,
     source_previews: std::collections::HashMap<usize, std::sync::Arc<gpui::RenderImage>>,
     presets: bool,
+    preset_state: presets::State,
+    save_preset_focus: gpui::FocusHandle,
+    focus: gpui::FocusHandle,
+    close_focus: gpui::FocusHandle,
+    next_focus: gpui::FocusHandle,
     copyright: usize,
     assignment: Option<String>,
     focused: bool,
@@ -97,7 +111,10 @@ impl Gallery {
             done: false,
             completed: 0,
             all: false,
-            retain: true,
+            retain: false,
+            batch_expanded: true,
+            batch_scroll: presets::scrolling::ScrollState::default(),
+            scope_focus: std::array::from_fn(|_| cx.focus_handle()),
             values: Default::default(),
             query,
             _query_subscription: subscription,
@@ -109,12 +126,19 @@ impl Gallery {
             title: cx.new(|cx| InputState::new(window, cx).placeholder("Введите название видео")),
             scroll: gpui::ScrollHandle::new(),
             background: wizard_background(),
+            backdrop: super::modal_backdrop::capture(window.scale_factor()),
             source_previews,
             presets: false,
+            preset_state: presets::State::new(window, cx),
+            save_preset_focus: cx.focus_handle().tab_stop(true),
+            focus: cx.focus_handle(),
+            close_focus: cx.focus_handle().tab_stop(true),
+            next_focus: cx.focus_handle().tab_stop(true),
             copyright: 0,
             assignment: None,
             error: None,
         });
+        self.distribution.as_ref().unwrap().focus.focus(window);
         tracing::info!(
             operation = "distribution",
             count = self.stage_selection.len(),
@@ -148,6 +172,7 @@ impl Gallery {
             )
         });
         w.scroll.set_offset(gpui::point(px(0.), px(0.)));
+        w.focus.focus(window);
         cx.notify();
     }
 
@@ -160,18 +185,13 @@ impl Gallery {
         if value.is_empty() || (category == 2 && w.values[0].is_empty()) {
             return;
         }
-        let qualified = w.values[0]
-            .iter()
-            .any(|c| value.ends_with(&format!(" ({c})")));
+        let qualified = w.values[0].iter().any(|c| metadata::belongs_to(&value, c));
         if category == 2 && !qualified && w.values[0].len() > 1 {
             w.assignment = Some(value);
             cx.notify();
             return;
         }
-        let value = if category == 2
-            && !w.values[0]
-                .iter()
-                .any(|c| value.ends_with(&format!(" ({c})")))
+        let value = if category == 2 && !w.values[0].iter().any(|c| metadata::belongs_to(&value, c))
         {
             format!(
                 "{} ({})",
@@ -181,9 +201,7 @@ impl Gallery {
         } else {
             value
         };
-        if !w.values[category].contains(&value) {
-            w.values[category].push(value);
-        }
+        metadata::insert_value(&mut w.values[category], value);
         w.query.update(cx, |s, cx| s.set_value("", window, cx));
         cx.notify();
     }
@@ -193,13 +211,15 @@ impl Gallery {
             return;
         };
         let count = if w.all { w.queue.len() - w.position } else { 1 };
-        let artist = w.artist.read(cx).value().to_string();
-        let title = w.title.read(cx).value().to_string();
+        w.error = None;
+        let artist = w.artist.read(cx).value().trim().to_string();
+        let title = w.title.read(cx).value().trim().to_string();
         let needs_title = w.queue[w.position..w.position + count]
             .iter()
             .any(|&index| self.entries[index].video);
         if artist.trim().is_empty() || (needs_title && title.trim().is_empty()) {
             w.error = Some("Укажите художника и название для видео.".into());
+            w.scroll.scroll_to_bottom();
             cx.notify();
             return;
         }
@@ -207,7 +227,6 @@ impl Gallery {
             let entry = &mut self.entries[index];
             entry.tags = w.values[1].clone();
             entry.details.copyrights = w.values[0].clone();
-            entry.characters = w.values[2].join(", ");
             entry.details.character_copyrights = w.values[2]
                 .iter()
                 .filter_map(|value| {
@@ -218,6 +237,13 @@ impl Gallery {
                     ))
                 })
                 .collect();
+            entry.characters = entry
+                .details
+                .character_copyrights
+                .iter()
+                .map(|(name, _)| name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
             entry.details.artist = Some(artist.clone());
             if entry.video && !title.trim().is_empty() {
                 entry.title = title.clone();
@@ -239,14 +265,14 @@ impl Gallery {
             return;
         };
         let completed: Vec<_> = w.queue[w.position..w.position + w.completed].to_vec();
-        w.position += w.completed;
-        if w.position >= w.queue.len() {
+        if !workflow::advance_position(&mut w.position, w.completed, w.queue.len()) {
             self.close_distribution(cx);
             return;
         }
         w.done = false;
         w.step = 0;
         w.all = false;
+        w.error = None;
         if !w.retain {
             w.values = Default::default();
             w.artist.update(cx, |s, cx| s.set_value("", window, cx));
@@ -289,23 +315,27 @@ impl Gallery {
         let w = self.distribution.as_ref().expect("open wizard");
         let entry = &self.entries[w.queue[w.position]];
         let remaining = w.queue.len() - w.position;
+        let compact = f32::from(window.viewport_size().height) <= 650.;
         let height = (f32::from(window.viewport_size().height) - 24.).min(820.);
         let width = (f32::from(window.viewport_size().width) - 48.).min(680.);
         let mut body = div()
             .id("wizard-body")
-            .flex_1()
-            .min_h_0()
-            .when(!(1..=3).contains(&w.step), |d| d.overflow_y_scroll())
-            .track_scroll(&w.scroll)
+            .w_full()
             .px(px(24.))
-            .pt(px(if w.step == 0 { 15. } else { 25. }))
+            .pt(px(if compact {
+                16.
+            } else if w.step == 0 {
+                15.
+            } else {
+                25.
+            }))
             .pb(px(if w.step == 0 { 14. } else { 24. }))
             .flex()
             .flex_col();
         if w.done {
             let mut summary = div()
                 .w_full()
-                .mt(px(24.))
+                .mt(px(14.))
                 .px(px(14.))
                 .py_2()
                 .rounded_lg()
@@ -378,10 +408,11 @@ impl Gallery {
                             .line_height(px(27.))
                             .mb_2(),
                     )
-                    .child(note(&format!(
-                        "{} файл(ов) распределено в этой демосессии.",
-                        w.completed
-                    )))
+                    .child(note(&if w.completed == 1 {
+                        "Файл распределён на время демосеанса.".into()
+                    } else {
+                        format!("Файлы ({}) распределены на время демосеанса.", w.completed)
+                    }))
                     .child(summary),
             );
         } else {
@@ -394,21 +425,26 @@ impl Gallery {
                 "Проверьте сведения перед подтверждением.",
             ];
             body = body
-                .child(heading(if w.step == 0 {
-                    "Информация о файле"
-                } else {
-                    match w.step {
-                        4 => "Дополнительные сведения",
-                        5 => "Подтвердить распределение",
-                        _ => STEPS[w.step],
-                    }
-                }))
                 .child(
-                    div()
-                        .mt_2()
-                        .mb(px(if w.step == 0 { 12. } else { 22. }))
-                        .child(note(descriptions[w.step]).line_height(px(19.2))),
-                );
+                    heading(if w.step == 0 {
+                        "Информация о файле"
+                    } else {
+                        match w.step {
+                            4 => "Дополнительные сведения",
+                            5 => "Подтвердить распределение",
+                            _ => STEPS[w.step],
+                        }
+                    })
+                    .when(compact && w.step == 0, |d| d.mb(px(10.))),
+                )
+                .when(!(compact && w.step == 0), |d| {
+                    d.child(
+                        div()
+                            .mt(px(if w.step == 0 { 6. } else { 8. }))
+                            .mb(px(if w.step == 0 { 12. } else { 22. }))
+                            .child(note(descriptions[w.step]).line_height(px(19.2))),
+                    )
+                });
             match w.step {
                 0 => {
                     let preview = div()
@@ -483,20 +519,23 @@ impl Gallery {
                         .min_w_0()
                         .flex()
                         .flex_col()
-                        .gap_2()
+                        .gap(px(if compact { 6. } else { 8. }))
                         .child(technical_inline(
+                            compact,
                             "Имя файла",
                             entry.details.filename.clone(),
                         ))
                         .child(technical_inline(
+                            compact,
                             "Путь во входящих",
                             entry.details.relative_path.clone(),
                         ))
                         .child(
                             div()
                                 .flex()
-                                .gap_2()
+                                .gap(px(if compact { 6. } else { 8. }))
                                 .child(technical(
+                                    compact,
                                     "Тип файла",
                                     format!(
                                         "{} ({})",
@@ -509,6 +548,7 @@ impl Gallery {
                                     ),
                                 ))
                                 .child(technical(
+                                    compact,
                                     "Изменён",
                                     entry.date_label.clone().unwrap_or("—".into()),
                                 )),
@@ -516,8 +556,9 @@ impl Gallery {
                         .child(
                             div()
                                 .flex()
-                                .gap_2()
+                                .gap(px(if compact { 6. } else { 8. }))
                                 .child(technical(
+                                    compact,
                                     "Размер",
                                     entry
                                         .details
@@ -526,6 +567,7 @@ impl Gallery {
                                         .unwrap_or("—".into()),
                                 ))
                                 .child(technical(
+                                    compact,
                                     "Разрешение",
                                     entry
                                         .details
@@ -538,8 +580,9 @@ impl Gallery {
                             d.child(
                                 div()
                                     .flex()
-                                    .gap_2()
+                                    .gap(px(if compact { 6. } else { 8. }))
                                     .child(technical(
+                                        compact,
                                         "Длительность",
                                         entry
                                             .duration
@@ -553,7 +596,7 @@ impl Gallery {
                                             })
                                             .unwrap_or("—".into()),
                                     ))
-                                    .child(technical("FPS", "29.97".into())),
+                                    .child(technical(compact, "FPS", "29.97".into())),
                             )
                         });
                     body = body.child(div().flex().gap(px(22.)).child(preview).child(data));
@@ -592,8 +635,11 @@ impl Gallery {
                                 .text_size(px(10.))
                                 .h(px(30.))
                                 .on_click(cx.listener(move |this, _, _, cx| {
-                                    this.distribution.as_mut().unwrap().values[category]
-                                        .remove(index);
+                                    let w = this.distribution.as_mut().unwrap();
+                                    w.values[category].remove(index);
+                                    if category == 0 {
+                                        metadata::prune_characters(&mut w.values);
+                                    }
                                     cx.notify();
                                 })),
                         );
@@ -631,62 +677,7 @@ impl Gallery {
                 }
                 _ => {
                     if remaining > 1 {
-                        let scope = div()
-                            .mb(px(18.))
-                            .p_3()
-                            .border_1()
-                            .border_color(rgb(LINE))
-                            .rounded_lg()
-                            .flex()
-                            .flex_col()
-                            .gap_3()
-                            .child(note("Применить эти сведения к").text_size(px(11.)));
-                        let mut choices = div().flex().gap(px(18.));
-                        for (i, label) in [
-                            "Текущий файл".to_string(),
-                            format!("Все оставшиеся файлы ({remaining})"),
-                        ]
-                        .into_iter()
-                        .enumerate()
-                        {
-                            let active = w.all == (i == 1);
-                            choices = choices.child(
-                                motion::button(("wizard-scope", i))
-                                    .cursor_pointer()
-                                    .flex()
-                                    .items_center()
-                                    .gap(px(7.))
-                                    .text_size(px(12.))
-                                    .child(
-                                        div()
-                                            .size(px(13.))
-                                            .rounded_full()
-                                            .border_1()
-                                            .border_color(rgb(if active {
-                                                super::ACCENT
-                                            } else {
-                                                MUTED
-                                            }))
-                                            .flex()
-                                            .items_center()
-                                            .justify_center()
-                                            .when(active, |d| {
-                                                d.child(
-                                                    div()
-                                                        .size(px(7.))
-                                                        .rounded_full()
-                                                        .bg(rgb(super::ACCENT)),
-                                                )
-                                            }),
-                                    )
-                                    .child(label)
-                                    .on_click(cx.listener(move |this, _, _, cx| {
-                                        this.distribution.as_mut().unwrap().all = i == 1;
-                                        cx.notify();
-                                    })),
-                            );
-                        }
-                        body = body.child(scope.child(choices));
+                        body = body.child(self.wizard_scope(window, cx));
                     }
                     body = body.child(
                         div()
@@ -715,9 +706,10 @@ impl Gallery {
                             .child(
                                 div()
                                     .flex_1()
+                                    .min_w_0()
                                     .child(
                                         heading(&if w.all {
-                                            format!("{remaining} файлов · Общие сведения")
+                                            format!("{remaining} files · Shared details")
                                         } else {
                                             entry.details.filename.clone()
                                         })
@@ -725,8 +717,10 @@ impl Gallery {
                                         .line_height(px(16.25))
                                         .mb(px(6.)),
                                     )
-                                    .child(note(
-                                        &entry
+                                    .child(note(&if w.all {
+                                        "Одинаковые метаданные и название видео будут применены ко всем перечисленным файлам.".into()
+                                    } else {
+                                        entry
                                             .details
                                             .resolution
                                             .map(|(x, y)| {
@@ -736,8 +730,8 @@ impl Gallery {
                                                         / 1048576.
                                                 )
                                             })
-                                            .unwrap_or("—".into()),
-                                    )),
+                                            .unwrap_or("—".into())
+                                    })),
                             ),
                     );
                     let mut summary = div()
@@ -750,11 +744,18 @@ impl Gallery {
                         .bg(rgb(SURFACE));
                     for (label, value) in [
                         ("Произведения", w.values[0].join(", ")),
-                        ("Автор", w.artist.read(cx).value().to_string()),
+                        ("Автор", w.artist.read(cx).value().trim().to_string()),
                         ("Персонажи", w.values[2].join(", ")),
                         ("Теги", w.values[1].join(", ")),
-                        ("Название видео", w.title.read(cx).value().to_string()),
+                        (
+                            "Название видео",
+                            w.title.read(cx).value().trim().to_string(),
+                        ),
                     ] {
+                        if label == "Название видео" && !entry.video {
+                            continue;
+                        }
+
                         summary = summary.child(row(
                             label,
                             if value.is_empty() {
@@ -767,6 +768,11 @@ impl Gallery {
                     body = body.child(summary);
                     body = body.child(
                         button("wizard-save-preset", "")
+                            .with_focus(
+                                &w.save_preset_focus
+                                    .clone()
+                                    .tab_stop(!w.artist.read(cx).value().trim().is_empty()),
+                            )
                             .w(px(170.))
                             .mt(px(14.))
                             .child(shell::icon("plus").size(px(15.)))
@@ -776,19 +782,16 @@ impl Gallery {
                                     .cursor_default()
                                     .hover_colors(None, None, None)
                             })
-                            .on_click(cx.listener(|this, _, _, cx| {
+                            .on_click(cx.listener(|this, _, window, cx| {
                                 let w = this.distribution.as_mut().unwrap();
                                 if w.artist.read(cx).value().trim().is_empty() {
                                     return;
                                 }
-                                w.presets = true;
-                                cx.notify();
+                                this.open_preset_manager(true, window, cx);
                             })),
                     );
                     if w.all {
-                        for &i in &w.queue[w.position..] {
-                            body = body.child(note(&self.entries[i].details.filename));
-                        }
+                        body = body.child(self.wizard_batch_files(cx));
                     }
                 }
             }
@@ -798,7 +801,13 @@ impl Gallery {
         }
         body = body.child(
             div()
-                .mt(px(if w.step == 0 { 12. } else { 18. }))
+                .mt(px(if w.step == 0 && compact {
+                    8.
+                } else if w.step == 0 {
+                    12.
+                } else {
+                    18.
+                }))
                 .mb(px(if w.step == 0 { 0. } else { 15. }))
                 .flex_shrink_0()
                 .child(
@@ -810,14 +819,16 @@ impl Gallery {
         let mut steps = div()
             .flex()
             .px_4()
-            .pt(px(20.))
-            .pb(px(19.))
+            .pt(px(if compact { 12. } else { 20. }))
+            .pb(px(if compact { 12. } else { 19. }))
             .flex_shrink_0()
             .border_b_1()
             .border_color(rgb(LINE));
         for (i, label) in STEPS.iter().enumerate() {
             steps = steps.child(
                 motion::button(("wizard-step", i))
+                    .keyboard_focus(!w.done)
+                    .focus_ring(rgb(SURFACE))
                     .cursor_pointer()
                     .relative()
                     .flex()
@@ -905,20 +916,23 @@ impl Gallery {
                     })),
             );
         }
+        let all_label = format!("Распределить все ({remaining})");
         footer = footer
             .child(div().flex_1())
-            .child(
-                button(
-                    "wizard-cancel",
-                    if w.done {
-                        "Закрыть"
-                    } else {
-                        "Отмена"
-                    },
+            .when(!w.done || remaining > w.completed, |d| {
+                d.child(
+                    button(
+                        "wizard-cancel",
+                        if w.done {
+                            "Закрыть"
+                        } else {
+                            "Отмена"
+                        },
+                    )
+                    .px(px(18.))
+                    .on_click(cx.listener(|this, _, _, cx| this.close_distribution(cx))),
                 )
-                .px(px(18.))
-                .on_click(cx.listener(|this, _, _, cx| this.close_distribution(cx))),
-            )
+            })
             .child(
                 button(
                     "wizard-next",
@@ -930,7 +944,7 @@ impl Gallery {
                         }
                     } else if w.step == 5 {
                         if w.all {
-                            "Распределить все"
+                            &all_label
                         } else {
                             "Распределить файл"
                         }
@@ -938,11 +952,14 @@ impl Gallery {
                         "Далее"
                     },
                 )
+                .with_focus(&w.next_focus)
                 .px(px(18.))
-                .child(if w.step == 5 && !w.done {
-                    shell::icon("check").size(px(16.))
-                } else {
-                    shell::icon("arrow").size(px(16.))
+                .when(!w.done || remaining > w.completed, |d| {
+                    d.child(if w.step == 5 && !w.done {
+                        shell::icon("check").size(px(16.))
+                    } else {
+                        shell::icon("arrow").size(px(16.))
+                    })
                 })
                 .bg(motion::Surface::gradient(
                     120.,
@@ -969,10 +986,14 @@ impl Gallery {
             .items_center()
             .justify_center()
             .occlude()
+            .when_some(w.backdrop.clone(), |d, backdrop| {
+                d.child(img(backdrop).absolute().inset_0().size_full().object_fit(gpui::ObjectFit::Fill))
+            })
             .child(
                 div()
                     .w(px(width))
                     .h(px(height))
+                    .track_focus(&w.focus)
                     .relative()
                     .flex()
                     .flex_col()
@@ -1035,19 +1056,9 @@ impl Gallery {
                                         }),
                                     ))),
                             )
+                            .when(!w.done, |header| header.child(self.preset_control(window, cx)))
                             .child(
-                                button("wizard-presets", "")
-                                    .child(shell::icon("copy").size(px(15.)))
-                                    .child("Пресеты")
-                                    .child(shell::icon("down").size(px(14.)))
-                                    .on_click(cx.listener(|this, _, _, cx| {
-                                        let w = this.distribution.as_mut().unwrap();
-                                        w.presets = !w.presets;
-                                        cx.notify();
-                                    })),
-                            )
-                            .child(
-                                motion::button("wizard-close").cursor_pointer().rounded(px(5.)).hover_colors(Some(gpui::rgba(0xa786ff1a).into()), Some(rgb(TEXT).into()), None)
+                                motion::button("wizard-close").with_focus(&w.close_focus).focus_ring(rgb(SURFACE)).cursor_pointer().rounded(px(5.)).hover_colors(Some(gpui::rgba(0xa786ff1a).into()), Some(rgb(TEXT).into()), None)
                                     .size(px(28.))
                                     .flex()
                                     .items_center()
@@ -1059,18 +1070,21 @@ impl Gallery {
                                     ),
                             ),
                     )
-                    .when(w.presets, |d| {
-                        d.child(
-                            div()
-                                .p_4()
-                                .child(note("Управление пресетами пока недоступно.")),
-                        )
-                    })
                     .child(steps)
-                    .child(body)
+                    .child(if !w.done && (1..=3).contains(&w.step) {
+                        body.flex_1().min_h_0()
+                    } else {
+                        div()
+                            .id("wizard-body-scroll")
+                            .flex_1()
+                            .min_h_0()
+                            .overflow_y_scroll()
+                            .track_scroll(&w.scroll)
+                            .child(body.flex_shrink_0())
+                    })
                     .when(remaining > 1 && !w.done, |d| {
                         d.child(
-                            motion::button("wizard-retain").cursor_pointer()
+                            motion::button("wizard-retain").keyboard_focus(true).focus_ring(rgb(SURFACE)).cursor_pointer()
                             .mx(px(22.)).py_3().border_t_1().border_color(rgb(LINE)).flex().items_center().justify_between().gap_4().flex_shrink_0()
                             .child(div().flex_1().text_size(px(13.)).line_height(px(16.)).child("Сохранять введённые сведения между файлами")
                                 .child(div().mt_1().text_size(px(11.)).text_color(rgb(MUTED)).child("Произведения, автор, персонажи, теги и название видео")))
@@ -1084,6 +1098,9 @@ impl Gallery {
                     })
                     .child(footer),
             )
+            .when(w.preset_state.editor.is_some(), |d| {
+                d.child(self.preset_manager(window, cx))
+            })
     }
 }
 
@@ -1123,6 +1140,8 @@ fn row(label: &str, value: String) -> Div {
 
 fn button(id: impl Into<gpui::ElementId>, title: &str) -> motion::MotionDiv {
     motion::button(id)
+        .keyboard_focus(true)
+        .focus_ring(rgb(SURFACE))
         .cursor_pointer()
         .hover_colors(Some(rgb(0x242034).into()), None, Some(rgb(0x6d568f).into()))
         .flex()
@@ -1182,35 +1201,35 @@ fn input_surface(
         })
 }
 
-fn technical(label: &str, value: String) -> Div {
+fn technical(compact: bool, label: &str, value: String) -> Div {
     div()
         .flex_1()
         .min_w_0()
         .flex()
         .flex_col()
-        .gap(px(5.))
+        .gap(px(if compact { 3. } else { 5. }))
         .child(
             div()
-                .text_size(px(11.))
-                .line_height(px(14.))
+                .text_size(px(if compact { 10. } else { 11. }))
+                .line_height(px(if compact { 13. } else { 15. }))
                 .text_color(rgb(MUTED))
                 .child(label.to_owned()),
         )
         .child(
             div()
-                .px(px(9.))
-                .py(px(7.5))
+                .px(px(if compact { 8. } else { 9. }))
+                .py(px(if compact { 5. } else { 7. }))
                 .bg(rgb(SURFACE))
                 .border_1()
                 .border_color(rgb(LINE))
                 .rounded(px(5.))
-                .text_size(px(12.))
-                .line_height(px(15.))
+                .text_size(px(if compact { 11. } else { 12. }))
+                .line_height(px(if compact { 14. } else { 16. }))
                 .child(value),
         )
 }
 
-fn technical_inline(label: &str, value: String) -> Div {
+fn technical_inline(compact: bool, label: &str, value: String) -> Div {
     div()
         .flex()
         .items_center()
@@ -1218,8 +1237,9 @@ fn technical_inline(label: &str, value: String) -> Div {
         .child(
             div()
                 .w(px(80.))
-                .text_size(px(11.))
-                .line_height(px(14.))
+                .text_size(px(if compact { 10. } else { 11. }))
+                .line_height(px(if compact { 13. } else { 15. }))
+                .mb(px(5.))
                 .text_color(rgb(MUTED))
                 .child(label.to_owned()),
         )
@@ -1227,14 +1247,14 @@ fn technical_inline(label: &str, value: String) -> Div {
             div()
                 .flex_1()
                 .min_w_0()
-                .px(px(9.))
-                .py(px(7.5))
+                .px(px(if compact { 8. } else { 9. }))
+                .py(px(if compact { 5. } else { 7. }))
                 .bg(rgb(SURFACE))
                 .border_1()
                 .border_color(rgb(LINE))
                 .rounded(px(5.))
-                .text_size(px(12.))
-                .line_height(px(15.))
+                .text_size(px(if compact { 11. } else { 12. }))
+                .line_height(px(if compact { 14. } else { 16. }))
                 .child(value),
         )
 }
@@ -1267,14 +1287,22 @@ impl Gallery {
                             .details
                             .character_copyrights
                             .iter()
-                            .filter(|(_, c)| w.values[0].contains(c))
+                            .filter(|(_, c)| {
+                                w.values[0]
+                                    .iter()
+                                    .any(|value| value.to_lowercase() == c.to_lowercase())
+                            })
                             .map(|(n, c)| format!("{n} ({c})"))
                             .collect(),
                     }
                 }
             })
             .filter(|v: &String| {
-                v.to_lowercase().contains(&query) && (artist || !w.values[category].contains(v))
+                v.to_lowercase().contains(&query)
+                    && (artist
+                        || !w.values[category]
+                            .iter()
+                            .any(|selected| selected.to_lowercase() == v.to_lowercase()))
             })
             .collect();
         values.sort();

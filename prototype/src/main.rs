@@ -1,5 +1,6 @@
 mod catalog;
 mod dialogs;
+mod logging;
 mod previews;
 mod taxonomy;
 mod ui;
@@ -19,12 +20,7 @@ use gpui::{App, AppContext, Application, Bounds, WindowBounds, WindowOptions, px
 use gpui_component::{Root, Theme, ThemeMode};
 
 fn main() {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "warn,nexa_gpui_prototype=info".into()),
-        )
-        .init();
+    logging::init();
 
     let mut arguments = std::env::args_os().skip(1);
     let preview_paths: Vec<PathBuf> = match arguments.next() {

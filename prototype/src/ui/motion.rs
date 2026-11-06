@@ -153,6 +153,8 @@ pub(super) struct MotionDiv {
     hover_text: Option<Hsla>,
     hover_border: Option<Hsla>,
     keyboard_focus: bool,
+    focus_ring_background: Option<Rgba>,
+    focus_handle: Option<gpui::FocusHandle>,
 }
 
 pub(super) fn button(id: impl Into<ElementId>) -> MotionDiv {
@@ -165,10 +167,23 @@ pub(super) fn button(id: impl Into<ElementId>) -> MotionDiv {
         hover_text: None,
         hover_border: None,
         keyboard_focus: false,
+        focus_ring_background: None,
+        focus_handle: None,
     }
 }
 
 impl MotionDiv {
+    pub(super) fn with_focus(mut self, handle: &gpui::FocusHandle) -> Self {
+        self.keyboard_focus = true;
+        self.focus_handle = Some(handle.clone());
+        self
+    }
+
+    pub(super) fn focus_ring(mut self, background: Rgba) -> Self {
+        self.focus_ring_background = Some(background);
+        self
+    }
+
     pub(super) fn keyboard_focus(mut self, enabled: bool) -> Self {
         self.keyboard_focus = enabled;
         self
@@ -216,19 +231,48 @@ impl StatefulInteractiveElement for MotionDiv {}
 impl RenderOnce for MotionDiv {
     fn render(mut self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         if self.keyboard_focus {
-            let focus = window.use_keyed_state(self.id.clone(), cx, |_, cx| {
-                cx.focus_handle().tab_stop(true)
+            let focus = self.focus_handle.clone().unwrap_or_else(|| {
+                window
+                    .use_keyed_state(self.id.clone(), cx, |_, cx| {
+                        cx.focus_handle().tab_stop(true)
+                    })
+                    .read(cx)
+                    .clone()
             });
-            self.element = self.element.track_focus(focus.read(cx)).focus(|style| {
-                style
-                    .border_color(gpui::rgb(super::ACCENT))
-                    .shadow(vec![gpui::BoxShadow {
-                        color: gpui::rgba(0xa786ff80).into(),
-                        offset: gpui::point(gpui::px(0.0), gpui::px(0.0)),
-                        blur_radius: gpui::px(0.0),
-                        spread_radius: gpui::px(2.0),
-                    }])
+            let ring_background = self.focus_ring_background;
+            self.element = self.element.track_focus(&focus).focus(move |style| {
+                let mut shadows = vec![gpui::BoxShadow {
+                    color: gpui::rgba(0xa786ff80).into(),
+                    offset: gpui::point(gpui::px(0.0), gpui::px(0.0)),
+                    blur_radius: gpui::px(0.0),
+                    spread_radius: gpui::px(if ring_background.is_some() { 5.0 } else { 2.0 }),
+                }];
+                if let Some(background) = ring_background {
+                    shadows[0].color = gpui::rgb(super::ACCENT).into();
+                    shadows.push(gpui::BoxShadow {
+                        color: background.into(),
+                        offset: gpui::point(gpui::px(0.), gpui::px(0.)),
+                        blur_radius: gpui::px(0.),
+                        spread_radius: gpui::px(3.),
+                    });
+                    style.shadow(shadows)
+                } else {
+                    style.border_color(gpui::rgb(super::ACCENT)).shadow(shadows)
+                }
             });
+            if ring_background.is_some() && focus.is_focused(window) {
+                self.element = self.element.relative().child(
+                    div()
+                        .absolute()
+                        .top(gpui::px(-5.))
+                        .right(gpui::px(-5.))
+                        .bottom(gpui::px(-5.))
+                        .left(gpui::px(-5.))
+                        .rounded(gpui::px(11.))
+                        .border_2()
+                        .border_color(gpui::rgb(super::ACCENT)),
+                );
+            }
         }
 
         let motion = window.use_keyed_state(self.id.clone(), cx, |_, _| Transition::new(0.0, 140));
