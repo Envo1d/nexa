@@ -517,7 +517,7 @@ impl Render for Gallery {
         div()
             .key_context("NexaGallery")
             .on_action(cx.listener(|this, _: &NextFocus, window, cx| {
-                if this.file_operation.is_some() {
+                if this.file_operation.is_some() && !this.viewer {
                     this.file_operation_tab(false, window, cx);
                 } else if this.tag_editor.is_some() {
                     this.file_tags_tab(false, window, cx);
@@ -526,7 +526,7 @@ impl Render for Gallery {
                 }
             }))
             .on_action(cx.listener(|this, _: &PreviousFocus, window, cx| {
-                if this.file_operation.is_some() {
+                if this.file_operation.is_some() && !this.viewer {
                     this.file_operation_tab(true, window, cx);
                 } else if this.tag_editor.is_some() {
                     this.file_tags_tab(true, window, cx);
@@ -552,7 +552,7 @@ impl Render for Gallery {
                 search.update(cx, |state, cx| state.focus(window, cx));
             }))
             .on_action(cx.listener(|this, _: &CloseDetails, window, cx| {
-                if this.file_operation.is_some() {
+                if this.file_operation.is_some() && !this.viewer {
                     this.close_file_operation(window, cx);
                     return;
                 }
@@ -720,7 +720,7 @@ impl Render for Gallery {
                         ),
                 )
             })
-            .when(self.file_operation.is_some(), |view| {
+            .when(self.file_operation.is_some() && !self.viewer, |view| {
                 view.child(self.file_operation_dialog(window, cx))
             })
             .when(self.tag_editor.is_some(), |view| {

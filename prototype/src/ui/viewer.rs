@@ -337,6 +337,7 @@ impl Gallery {
         self.viewer = false;
         self.restore_duplicate_viewer();
         self.restore_health_preview();
+        self.restore_replacement_preview(window, cx);
         (self.visible, self.type_counts) = crate::catalog::browse_with_counts(
             &self.entries,
             &self.collection_query(cx),
@@ -349,7 +350,11 @@ impl Gallery {
                 sort: self.sort,
             },
         );
-        self.focus.focus(window);
+        if let Some(draft) = self.file_operation.as_ref() {
+            draft.focus.focus(window);
+        } else {
+            self.focus.focus(window);
+        }
         tracing::info!(operation = "media_viewer", "Media viewer closed");
         cx.notify();
     }

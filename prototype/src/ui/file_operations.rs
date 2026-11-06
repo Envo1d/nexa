@@ -31,8 +31,14 @@ pub(super) struct Draft {
     target: Option<usize>,
     acknowledged: bool,
     query: Entity<InputState>,
+    applied_query: String,
+    suggestions_open: bool,
+    suggestion_active: Option<usize>,
+    catalog: crate::taxonomy::Catalog,
+    backdrop: Option<std::sync::Arc<gpui::RenderImage>>,
+    preview_return: Option<(Vec<Entry>, Vec<usize>, Option<usize>)>,
     _subscription: gpui::Subscription,
-    focus: FocusHandle,
+    pub(super) focus: FocusHandle,
     return_focus: Option<FocusHandle>,
     dragging: Option<usize>,
     candidate_limit: usize,
@@ -99,11 +105,64 @@ impl Gallery {
             let query = cx.new(|cx| {
                 InputState::new(window, cx).placeholder("Метаданные через точку с запятой")
             });
-            let subscription = cx
-                .subscribe(&query, |_, _, _: &gpui_component::input::InputEvent, cx| {
-                    cx.notify()
-                });
+            let subscription = cx.subscribe_in(
+                &query,
+                window,
+                |this: &mut Self, query, event: &gpui_component::input::InputEvent, window, cx| {
+                    if matches!(
+                        event,
+                        gpui_component::input::InputEvent::Change
+                            | gpui_component::input::InputEvent::Focus
+                    ) && let Some(draft) = this.file_operation.as_mut()
+                    {
+                        draft.suggestions_open =
+                            query.read(cx).value().as_ref() != draft.applied_query;
+                        draft.suggestion_active = None;
+                    }
+                    let options = this
+                        .file_operation
+                        .as_ref()
+                        .map(|d| {
+                            super::search_suggestions::matches(
+                                &query.read(cx).value(),
+                                &d.catalog.records,
+                            )
+                        })
+                        .unwrap_or_default();
+                    if matches!(event, gpui_component::input::InputEvent::PressEnter { .. })
+                        && let Some(draft) = this.file_operation.as_mut()
+                    {
+                        draft.applied_query = if draft.suggestions_open {
+                            draft
+                                .suggestion_active
+                                .and_then(|i| options.get(i))
+                                .map(|r| {
+                                    super::search_suggestions::choose(
+                                        &query.read(cx).value(),
+                                        &r.name,
+                                    )
+                                })
+                        } else {
+                            None
+                        }
+                        .unwrap_or_else(|| query.read(cx).value().to_string());
+                        draft.suggestions_open = false;
+                        draft.target = None;
+                        draft.acknowledged = false;
+                        draft.candidate_limit = 100;
+                        let value = draft.applied_query.clone();
+                        query.update(cx, |input, cx| input.set_value(value, window, cx));
+                    }
+
+                    cx.notify();
+                },
+            );
             let focus = cx.focus_handle();
+            let mut catalog = crate::taxonomy::Catalog::default();
+            catalog.refresh(self.inactive_workspace.entries.iter());
+            catalog
+                .records
+                .extend(self.taxonomy.catalog.records.iter().cloned());
             self.file_operation = Some(Draft {
                 action,
                 paths: indices
@@ -116,6 +175,12 @@ impl Gallery {
                 target: None,
                 acknowledged: false,
                 query,
+                applied_query: String::new(),
+                suggestions_open: false,
+                suggestion_active: None,
+                catalog,
+                backdrop: super::modal_backdrop::capture(window.scale_factor()),
+                preview_return: None,
                 _subscription: subscription,
                 focus: focus.clone(),
                 return_focus: window.focused(cx),
@@ -215,6 +280,44 @@ impl Gallery {
             });
         })
         .detach();
+        cx.notify();
+    }
+
+    fn preview_replacement(&mut self, main: bool, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(draft) = self.file_operation.as_ref() else {
+            return;
+        };
+        let entry = if main {
+            let Some(index) = draft.target else { return };
+            self.inactive_workspace.entries[index].clone()
+        } else {
+            self.entries[draft.indices[0]].clone()
+        };
+        let saved = (
+            std::mem::replace(&mut self.entries, vec![entry]),
+            std::mem::replace(&mut self.visible, vec![0]),
+            self.selected.replace(0),
+        );
+        self.file_operation.as_mut().unwrap().preview_return = Some(saved);
+        self.open_viewer(window, cx);
+    }
+
+    pub(super) fn restore_replacement_preview(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(draft) = self.file_operation.as_mut() else {
+            return;
+        };
+        let Some((entries, visible, selected)) = draft.preview_return.take() else {
+            return;
+        };
+        self.entries = entries;
+        self.visible = visible;
+        self.selected = selected;
+        self.tag_counts = crate::catalog::tag_counts(&self.entries);
+        draft.focus.focus(window);
         cx.notify();
     }
 

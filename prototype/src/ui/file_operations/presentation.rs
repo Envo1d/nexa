@@ -7,6 +7,13 @@ use crate::ui::{ACCENT, LINE, MUTED, SURFACE, TEXT, motion, shell::icon};
 fn operation_button(id: impl Into<gpui::ElementId>, label: &str) -> motion::MotionDiv {
     super::super::button(id, label)
         .keyboard_focus(true)
+        .flex_shrink_0()
+        .flex()
+        .items_center()
+        .justify_center()
+        .py(px(0.))
+        .gap(px(8.))
+        .line_height(px(13.75))
         .h(px(34.))
         .px(px(18.))
         .rounded(px(6.))
@@ -26,7 +33,7 @@ impl Gallery {
         let title = match draft.action {
             Action::Delete if draft.indices.len() == 1 => "Удалить файл?".into(),
             Action::Delete => format!("Удалить {} файлов?", draft.indices.len()),
-            Action::Replace => "Заменить файл в Main Library".into(),
+            Action::Replace => "Заменить в библиотеке".into(),
             _ => "Изменить порядок файлов".into(),
         };
         let width = (f32::from(window.viewport_size().width) - 48.).min(if delete {
@@ -42,12 +49,16 @@ impl Gallery {
             .overflow_y_scroll()
             .flex()
             .flex_col()
-            .gap(px(if delete { 8. } else { 14. }));
+            .gap(px(if delete { 0. } else { 14. }))
+            .when(!delete, |body| body.px(px(18.)))
+            .when(replace, |body| body.pb(px(16.)));
         if delete {
             body = body.child(
                 div()
                     .text_color(rgb(MUTED))
-                    .child("Файлы будут удалены из Nexa в текущей сессии."),
+                    .mt(px(8.))
+                    .mb(px(16.))
+                    .child("Файл будет удалён из Nexa в текущей сессии."),
             );
             let mut files = div()
                 .id("delete-files")
@@ -63,51 +74,162 @@ impl Gallery {
             if draft.indices.len() > 5 {
                 body = body.child(format!("И ещё {} файл(ов).", draft.indices.len() - 5));
             }
-            body = body.child(div().p_3().border_1().border_color(rgb(0x824254)).rounded(px(8.)).text_color(rgb(0xf2a0b1)).child("Изолированный прототип: оригиналы на диске сохраняются. Корзина и удаление из рабочего каталога ещё не подключены."));
+            body = body.child(div().mt(px(16.)).p_3().line_height(px(20.4)).bg(rgba(0x38212833)).border_1().border_color(rgb(0x824254)).rounded(px(8.)).text_color(rgb(0xf2a0b1)).child("Изолированный прототип: оригиналы на диске сохраняются. Корзина и удаление из рабочего каталога ещё не подключены."));
         } else if replace {
             body = body.child(version_panel(
-                "Новая версия · Incoming",
+                "Новая версия · Входящие",
                 &self.entries[draft.indices[0]],
                 self.show_previews,
+                false,
+                cx,
             ));
             if let Some(target) = draft.target {
                 let main = &self.inactive_workspace.entries[target];
-                body = body.child(version_panel("Текущая версия · Main", main, self.show_previews))
-                    .child(operation_button("replacement-another", "Выбрать другой файл").on_click(cx.listener(|this, _, _, cx| {
+                body = body
+                    .child(version_panel("Текущая версия · Библиотека", main, self.show_previews, true, cx))
+                    .child(operation_button("replacement-another", "Выбрать другой файл").w_full().on_click(cx.listener(|this, _, _, cx| {
                         let d = this.file_operation.as_mut().unwrap();
                         d.target = None;
                         d.acknowledged = false;
                         cx.notify();
                     })))
-                    .child("Main сохраняет автора, копирайты, персонажей, теги, избранное, название видео и порядок. Новая версия заменяет содержимое, формат и технические сведения.")
-                    .child(div().text_color(rgb(MUTED)).child("Замена действует только в сессии. Оригиналы и аннотации на диске не изменяются."))
-                    .child(operation_button("replacement-ack", if draft.acknowledged { "☑ Заменить выбранной версией Incoming" } else { "☐ Заменить выбранной версией Incoming" }).on_click(cx.listener(|this, _, _, cx| {
-                        let d = this.file_operation.as_mut().unwrap();
-                        d.acknowledged = !d.acknowledged;
-                        cx.notify();
-                    })));
-            } else {
+                    .child("Библиотека сохраняет автора, произведения, персонажей, теги, избранное, название видео и порядок файлов. Новое содержимое, формат и технические сведения заменяют текущую версию.");
+
+                let source = &self.entries[draft.indices[0]];
+                let has_annotations = source.favorite
+                    || !source.tags.is_empty()
+                    || source.details.artist.is_some()
+                    || !source.details.copyrights.is_empty()
+                    || !source.details.character_copyrights.is_empty();
+                if has_annotations {
+                    body = body.child(div().text_color(rgb(0xefbc79)).child("Существующие аннотации файла из входящих будут отброшены. Аннотации библиотеки имеют приоритет."));
+                }
+
                 body = body
-                    .child("Выберите файл в Main Library")
-                    .child(Input::new(&draft.query));
-                let query = draft.query.read(cx).value();
-                let candidates =
-                    crate::catalog::matching(&self.inactive_workspace.entries, &query, false);
+                    .child(div().text_color(rgb(MUTED)).child("Синхронизация с диском выключена. Новая версия остаётся на своём месте и становится файлом библиотеки."))
+                    .child(div().text_color(rgb(0xefbc79)).child("После подтверждения старая версия заменяется в текущей сессии. В изолированном прототипе оригиналы на диске сохраняются; безвозвратное удаление и очистка резервных копий не подключены."))
+                    .child(motion::button("replacement-ack")
+                        .keyboard_focus(true).cursor_pointer().flex().items_center().gap(px(10.))
+                        .line_height(px(19.2)).py(px(4.))
+                        .child(div().size(px(13.)).flex_shrink_0().border_1().border_color(rgb(MUTED)).rounded(px(2.))
+                            .bg(rgb(if draft.acknowledged { ACCENT } else { 0x393939 }))
+                            .flex().items_center().justify_center()
+                            .when(draft.acknowledged, |d| d.child(icon("check").size(px(11.)).text_color(rgb(0xffffff)))))
+                        .child("Заменить этот файл библиотеки выбранной версией из входящих.")
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            let d = this.file_operation.as_mut().unwrap();
+                            d.acknowledged = !d.acknowledged;
+                            cx.notify();
+                        })));
+            } else {
+                body = body.child(
+                    div()
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .child("Выберите файл для замены в библиотеке"),
+                );
+                let mut search = div().relative().child(Input::new(&draft.query).h(px(38.)));
+                if draft.suggestions_open {
+                    let options = super::super::search_suggestions::matches(
+                        &draft.query.read(cx).value(),
+                        &draft.catalog.records,
+                    );
+                    let mut suggestions = div()
+                        .id("replacement-suggestions")
+                        .max_h(px(240.))
+                        .overflow_y_scroll()
+                        .p(px(6.))
+                        .rounded(px(8.))
+                        .border_1()
+                        .border_color(rgb(LINE))
+                        .bg(rgb(0x1a1927));
+                    for (i, record) in options.iter().enumerate() {
+                        let name = record.name.clone();
+                        let label = if record.copyright.is_empty() {
+                            name.clone()
+                        } else {
+                            format!("{} ({})", name, record.copyright)
+                        };
+                        suggestions = suggestions.child(
+                            operation_button(("replacement-option", i), "")
+                                .justify_between()
+                                .px(px(8.))
+                                .h(px(30.))
+                                .border_0()
+                                .child(div().flex_1().child(label))
+                                .child(
+                                    div()
+                                        .text_size(px(9.))
+                                        .text_color(rgb(MUTED))
+                                        .child(record.category.singular()),
+                                )
+                                .w_full()
+                                .when(draft.suggestion_active == Some(i), |d| d.bg(rgb(0x372f56)))
+                                .on_mouse_down(gpui::MouseButton::Left, |_, window, _| {
+                                    window.prevent_default()
+                                })
+                                .on_click(cx.listener(move |this, _, window, cx| {
+                                    let d = this.file_operation.as_mut().unwrap();
+                                    let value = super::super::search_suggestions::choose(
+                                        &d.query.read(cx).value(),
+                                        &name,
+                                    );
+                                    d.query.update(cx, |input, cx| {
+                                        input.set_value(value.clone(), window, cx)
+                                    });
+                                    d.applied_query = value;
+                                    d.suggestions_open = false;
+                                    d.candidate_limit = 100;
+                                    d.acknowledged = false;
+                                    cx.notify();
+                                })),
+                        );
+                    }
+                    if !options.is_empty() {
+                        search = search.child(
+                            gpui::deferred(
+                                div()
+                                    .absolute()
+                                    .top(px(42.))
+                                    .left_0()
+                                    .right_0()
+                                    .occlude()
+                                    .child(suggestions),
+                            )
+                            .with_priority(30),
+                        );
+                    }
+                }
+                body = body.child(search).child(div().text_color(rgb(MUTED)).child("Введите имена авторов, персонажей, названия произведений или теги через точку с запятой. Должны совпасть все значения. Нажмите Enter или выберите подсказку для поиска по всей библиотеке."));
+                let query = &draft.applied_query;
+                let source_video = self.entries[draft.indices[0]].video;
+                let candidates: Vec<_> =
+                    crate::catalog::matching(&self.inactive_workspace.entries, query, false)
+                        .into_iter()
+                        .filter(|&i| self.inactive_workspace.entries[i].video == source_video)
+                        .collect();
+                let mut candidate_list = div().flex().flex_col().gap(px(6.));
                 for &index in candidates.iter().take(draft.candidate_limit) {
                     let entry = &self.inactive_workspace.entries[index];
-                    body = body.child(
+                    candidate_list = candidate_list.child(
                         operation_button(("replacement-candidate", index), "")
+                            .justify_start()
+                            .hover_colors(
+                                Some(rgb(0x221d32).into()),
+                                Some(rgb(ACCENT).into()),
+                                None,
+                            )
                             .w_full()
                             .h_auto()
                             .p(px(10.))
                             .rounded(px(8.))
-                            .child(replacement_file(entry, self.show_previews))
+                            .child(replacement_file(entry, self.show_previews).w_full())
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 this.file_operation.as_mut().unwrap().target = Some(index);
                                 cx.notify();
                             })),
                     );
                 }
+                body = body.child(candidate_list);
                 if candidates.is_empty() {
                     body = body.child("Совпадений в Main нет.");
                 }
@@ -127,11 +249,24 @@ impl Gallery {
             if draft.order.len() < 2 {
                 body = body.child("У файла нет совпадающих файлов для изменения порядка.");
             }
+            let mut list = div()
+                .id("file-order-list")
+                .min_h_0()
+                .overflow_y_scroll()
+                .p(px(4.))
+                .border_1()
+                .border_color(rgb(LINE))
+                .rounded(px(8.))
+                .flex()
+                .flex_col()
+                .gap(px(4.));
             for (position, &index) in draft.order.iter().enumerate() {
                 let total = draft.order.len();
-                body = body.child(
+                list = list.child(
                     div()
                         .id(("order-row", position))
+                        .p(px(10.))
+                        .rounded(px(6.))
                         .cursor_pointer()
                         .on_mouse_down(
                             gpui::MouseButton::Left,
@@ -158,12 +293,30 @@ impl Gallery {
                                 .text_color(rgb(ACCENT))
                                 .child((position + 1).to_string()),
                         )
-                        .child(div().flex_1().child(self.operation_file_row(index)))
+                        .child(
+                            div()
+                                .w(px(112.))
+                                .h(px(64.))
+                                .rounded(px(6.))
+                                .overflow_hidden()
+                                .flex_shrink_0()
+                                .relative()
+                                .child(self.picture_fitted(index, true))
+                                .child(file_type_badge(&self.entries[index])),
+                        )
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .child(self.entries[index].details.filename.clone()),
+                        )
                         .child(order_arrow(position, total, false, cx))
                         .child(order_arrow(position, total, true, cx)),
                 );
             }
+            body = body.child(list);
         }
+
         let enabled = delete
             || if replace {
                 draft.target.is_some() && draft.acknowledged
@@ -171,7 +324,11 @@ impl Gallery {
                 draft.indices != draft.order
             };
         let save_label = if delete {
-            "Удалить файлы"
+            if draft.indices.len() == 1 {
+                "Удалить файл"
+            } else {
+                "Удалить файлы"
+            }
         } else if replace {
             "Заменить файл"
         } else {
@@ -185,15 +342,56 @@ impl Gallery {
             .max_h(px(f32::from(window.viewport_size().height) - 48.))
             .flex()
             .flex_col()
-            .p(px(18.))
-            .gap(px(16.))
+            .when(delete, |panel| panel.px(px(20.)).pt(px(6.)).pb(px(20.)))
             .rounded(px(12.))
             .border_1()
             .border_color(rgb(LINE))
             .bg(rgb(SURFACE))
+            .when(delete, |panel| {
+                panel.bg(gpui::linear_gradient(
+                    130.,
+                    gpui::linear_color_stop(rgb(0x1a1827), 0.),
+                    gpui::linear_color_stop(rgb(SURFACE), 1.),
+                ))
+            })
+            .shadow(vec![gpui::BoxShadow {
+                color: rgba(0x00000066).into(),
+                offset: gpui::point(px(0.), px(24.)),
+                blur_radius: px(80.),
+                spread_radius: px(0.),
+            }])
             .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
+                if matches!(event.keystroke.key.as_str(), "up" | "down") {
+                    let d = this.file_operation.as_ref().unwrap();
+                    if d.suggestions_open {
+                        let count = super::super::search_suggestions::matches(
+                            &d.query.read(cx).value(),
+                            &d.catalog.records,
+                        )
+                        .len();
+                        let active = super::super::search_suggestions::next_index(
+                            d.suggestion_active,
+                            count,
+                            event.keystroke.key == "down",
+                        );
+                        this.file_operation.as_mut().unwrap().suggestion_active = active;
+                        cx.stop_propagation();
+                        cx.notify();
+                        return;
+                    }
+                }
                 if event.keystroke.key == "escape" {
+                    if this
+                        .file_operation
+                        .as_ref()
+                        .is_some_and(|d| d.suggestions_open)
+                    {
+                        this.file_operation.as_mut().unwrap().suggestions_open = false;
+                        cx.stop_propagation();
+                        cx.notify();
+                        return;
+                    }
                     this.close_file_operation(window, cx);
                     cx.stop_propagation();
                 }
@@ -203,9 +401,36 @@ impl Gallery {
                     .flex()
                     .items_center()
                     .gap_3()
-                    .child(div().flex_1().text_size(px(16.)).child(title))
+                    .flex_shrink_0()
+                    .p(px(if delete { 10. } else { 16. }))
+                    .when(!delete, |h| h.py(px(9.)))
+                    .when(delete, |header| {
+                        header.px(px(0.)).child(
+                            div()
+                                .size(px(40.))
+                                .flex_shrink_0()
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .border_1()
+                                .border_color(rgb(0x824254))
+                                .rounded(px(10.))
+                                .bg(rgba(0x38212854))
+                                .text_color(rgb(0xf292a7))
+                                .child(icon("trash").size(px(22.))),
+                        )
+                    })
+                    .child(
+                        div()
+                            .flex_1()
+                            .text_size(px(13.))
+                            .font_weight(gpui::FontWeight::BOLD)
+                            .child(title),
+                    )
                     .child(
                         operation_button("operation-close", "")
+                            .w(px(30.))
+                            .px(px(0.))
                             .child(icon("close").size(px(18.)))
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.close_file_operation(window, cx)
@@ -218,14 +443,29 @@ impl Gallery {
                     .flex()
                     .justify_end()
                     .gap(px(10.))
-                    .border_t_1()
-                    .border_color(rgb(LINE))
-                    .pt(px(16.))
+                    .flex_shrink_0()
+                    .when(delete, |footer| footer.pt(px(23.)))
+                    .when(!delete, |footer| footer.py(px(16.)).px(px(18.)))
+                    .when(replace, |footer| {
+                        footer.border_t_1().border_color(rgb(LINE))
+                    })
+                    .when(!delete && !replace, |footer| {
+                        footer.child(div().flex_1().text_color(rgb(MUTED)).child(format!(
+                            "{} файлов{}",
+                            draft.order.len(),
+                            if draft.indices != draft.order {
+                                " · Порядок изменён"
+                            } else {
+                                ""
+                            },
+                        )))
+                    })
                     .child(operation_button("operation-cancel", "Отмена").on_click(
                         cx.listener(|this, _, window, cx| this.close_file_operation(window, cx)),
                     ))
                     .child(
                         operation_button("operation-save", save_label)
+                            .min_w(px(128.))
                             .bg(motion::Surface::gradient(
                                 120.,
                                 rgb(if delete { 0xa53d5a } else { 0x7b43d9 }),
@@ -263,6 +503,15 @@ impl Gallery {
                 gpui::MouseButton::Left,
                 cx.listener(|this, _, window, cx| this.close_file_operation(window, cx)),
             )
+            .when_some(draft.backdrop.clone(), |d, image| {
+                d.child(
+                    gpui::img(image)
+                        .absolute()
+                        .inset_0()
+                        .size_full()
+                        .object_fit(gpui::ObjectFit::Fill),
+                )
+            })
             .child(panel)
     }
 
@@ -281,7 +530,9 @@ impl Gallery {
                     .w(px(96.))
                     .h(px(64.))
                     .flex_shrink_0()
-                    .child(self.picture_fitted(index, true)),
+                    .relative()
+                    .child(self.picture_fitted(index, true))
+                    .child(file_type_badge(&self.entries[index])),
             )
             .child(
                 div()
@@ -321,7 +572,13 @@ fn order_arrow(
     }))
 }
 
-fn version_panel(title: &str, entry: &crate::catalog::Entry, previews: bool) -> Div {
+fn version_panel(
+    title: &str,
+    entry: &crate::catalog::Entry,
+    previews: bool,
+    main: bool,
+    cx: &mut Context<Gallery>,
+) -> Div {
     div()
         .p(px(14.))
         .border_1()
@@ -334,9 +591,26 @@ fn version_panel(title: &str, entry: &crate::catalog::Entry, previews: bool) -> 
             div()
                 .text_color(rgb(ACCENT))
                 .text_size(px(13.))
+                .font_weight(gpui::FontWeight::BOLD)
                 .child(title.to_owned()),
         )
-        .child(replacement_file(entry, previews))
+        .child(
+            replacement_file(entry, previews).child(
+                operation_button(
+                    if main {
+                        "preview-main-version"
+                    } else {
+                        "preview-new-version"
+                    },
+                    "",
+                )
+                .child(icon("arrow").size(px(14.)))
+                .child("Открыть файл")
+                .on_click(cx.listener(move |this, _, window, cx| {
+                    this.preview_replacement(main, window, cx)
+                })),
+            ),
+        )
 }
 
 fn replacement_file(entry: &crate::catalog::Entry, previews: bool) -> Div {
@@ -348,7 +622,7 @@ fn replacement_file(entry: &crate::catalog::Entry, previews: bool) -> Div {
     let size = entry
         .details
         .size
-        .map(|bytes| format!("{:.1} MB", bytes as f64 / 1024. / 1024.))
+        .map(|bytes| format!("{:.2} MB", bytes as f64 / 1024. / 1024.))
         .unwrap_or_else(|| "Размер недоступен".into());
     let mut description = div()
         .flex_1()
@@ -359,6 +633,7 @@ fn replacement_file(entry: &crate::catalog::Entry, previews: bool) -> Div {
         .child(
             div()
                 .font_weight(gpui::FontWeight::BOLD)
+                .text_size(px(13.))
                 .child(entry.details.filename.clone()),
         );
     if let Some(artist) = &entry.details.artist {
@@ -393,6 +668,7 @@ fn replacement_file(entry: &crate::catalog::Entry, previews: bool) -> Div {
                 .flex_shrink_0()
                 .rounded(px(6.))
                 .overflow_hidden()
+                .relative()
                 .bg(rgb(0x10101a))
                 .when(previews, |d| {
                     d.child(
@@ -400,7 +676,23 @@ fn replacement_file(entry: &crate::catalog::Entry, previews: bool) -> Div {
                             .size_full()
                             .object_fit(gpui::ObjectFit::Contain),
                     )
-                }),
+                })
+                .child(file_type_badge(entry)),
         )
         .child(description)
+}
+
+fn file_type_badge(entry: &crate::catalog::Entry) -> Div {
+    div()
+        .absolute()
+        .top(px(5.))
+        .left(px(5.))
+        .px(px(4.))
+        .py(px(2.))
+        .rounded(px(4.))
+        .bg(rgba(0x080910cc))
+        .text_color(rgb(0xffffff))
+        .text_size(px(9.))
+        .line_height(px(14.))
+        .child(entry.extension.to_uppercase())
 }
