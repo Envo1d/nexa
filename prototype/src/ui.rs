@@ -15,6 +15,7 @@ mod duplicates;
 mod filters;
 mod health;
 mod layout;
+mod modal_backdrop;
 mod motion;
 mod selection;
 mod settings;
@@ -27,7 +28,7 @@ mod viewer;
 
 pub(crate) use assets::Assets;
 
-gpui::actions!(nexa, [FocusSearch, CloseDetails]);
+gpui::actions!(nexa, [FocusSearch, CloseDetails, NextFocus, PreviousFocus]);
 
 pub(super) fn init(cx: &mut App) {
     tracing::debug!(
@@ -40,6 +41,8 @@ pub(super) fn init(cx: &mut App) {
     cx.bind_keys([
         gpui::KeyBinding::new("ctrl-f", FocusSearch, Some("NexaGallery")),
         gpui::KeyBinding::new("escape", CloseDetails, Some("NexaGallery")),
+        gpui::KeyBinding::new("tab", NextFocus, Some("NexaGallery")),
+        gpui::KeyBinding::new("shift-tab", PreviousFocus, Some("NexaGallery")),
     ]);
 }
 
@@ -467,8 +470,18 @@ impl Render for Gallery {
 
         div()
             .key_context("NexaGallery")
+            .on_action(cx.listener(|this, _: &NextFocus, window, cx| {
+                this.distribution_tab(false, window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &PreviousFocus, window, cx| {
+                this.distribution_tab(true, window, cx);
+            }))
             .on_action(cx.listener(|this, _: &FocusSearch, window, cx| {
-                if this.health_open || this.settings_open || this.duplicates_open {
+                if this.health_open
+                    || this.settings_open
+                    || this.duplicates_open
+                    || this.distribution.is_some()
+                {
                     return;
                 }
                 let search = if this.taxonomy_open {
@@ -480,7 +493,7 @@ impl Render for Gallery {
             }))
             .on_action(cx.listener(|this, _: &CloseDetails, window, cx| {
                 if this.distribution.is_some() {
-                    this.close_distribution(cx);
+                    this.distribution_escape(window, cx);
                     return;
                 }
                 if this.duplicates_open {

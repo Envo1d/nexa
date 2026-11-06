@@ -28,7 +28,7 @@ alhazen-gpui = { version = "=0.7.1", default-features = false, features = [
 resvg = { version = "=0.45.1", default-features = false }
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.62.2", features = ["Win32_Graphics_Gdi", "Win32_UI_Shell", "Win32_System_Com", "Win32_UI_WindowsAndMessaging", "Win32_System_LibraryLoader", "Win32_System_SystemServices", "Win32_UI_Input_KeyboardAndMouse"] }
+windows = { version = "0.62.2", features = ["Win32_Graphics_Gdi", "Win32_UI_Shell", "Win32_System_Com", "Win32_UI_WindowsAndMessaging", "Win32_System_LibraryLoader", "Win32_System_SystemServices", "Win32_UI_Input_KeyboardAndMouse", "Graphics_Capture", "Graphics_DirectX_Direct3D11", "Win32_System_WinRT", "Win32_System_WinRT_Graphics_Capture", "Win32_System_WinRT_Direct3D11", "Win32_Graphics_Direct3D", "Win32_Graphics_Direct3D11", "Win32_Graphics_Dxgi", "Win32_Graphics_Dxgi_Common"] }
 
 
 
