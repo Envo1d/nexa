@@ -1,4 +1,4 @@
-use gpui::{Context, Div, IntoElement, Stateful, Window, div, prelude::*, px, rgb, uniform_list};
+use gpui::{Context, Div, IntoElement, Stateful, Window, div, prelude::*, px, uniform_list};
 
 use gpui_component::{
     IconName, Sizable,
@@ -7,6 +7,7 @@ use gpui_component::{
 };
 
 use super::{ACCENT, Gallery, LINE, MUTED, shell::icon};
+use crate::appearance::rgb;
 
 impl Gallery {
     pub(super) fn collection(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -84,11 +85,13 @@ impl Gallery {
                         .text_color(rgb(MUTED))
                         .child(icon("search").size(px(32.0)))
                         .child(if self.stage {
-                            "Входящие файлы не найдены"
+                            crate::i18n::text("Входящие файлы не найдены")
                         } else {
-                            "Файлы не найдены"
+                            crate::i18n::text("Файлы не найдены")
                         })
-                        .child("Попробуйте изменить поиск или сбросить фильтры."),
+                        .child(crate::i18n::text(
+                            "Попробуйте изменить поиск или сбросить фильтры.",
+                        )),
                 )
             })
             .child(
@@ -159,7 +162,7 @@ impl Gallery {
                         .h(rectangle.size.height)
                         .border_1()
                         .border_color(rgb(ACCENT))
-                        .bg(gpui::rgba(0xa786ff2e)),
+                        .bg(crate::appearance::rgba(0xa786ff2e)),
                 )
             })
             .child(gpui_component::scroll::Scrollbar::vertical(&self.scroll))
@@ -183,7 +186,7 @@ impl Gallery {
         let metadata = if characters {
             entry.characters.clone()
         } else if entry.tags.is_empty() {
-            "Без тегов".into()
+            crate::i18n::text("Без тегов").into()
         } else {
             entry.tags.join(", ")
         };
@@ -198,7 +201,7 @@ impl Gallery {
             entry
                 .date_label
                 .clone()
-                .unwrap_or_else(|| "Дата недоступна".into())
+                .unwrap_or_else(|| crate::i18n::text("Дата недоступна").into())
         } else {
             super::layout::compact_date(entry.date_label.as_deref())
         };
@@ -226,8 +229,8 @@ impl Gallery {
                     .h(gpui::relative(0.35))
                     .bg(gpui::linear_gradient(
                         180.0,
-                        gpui::linear_color_stop(gpui::rgba(0x0a0a1200), 0.0),
-                        gpui::linear_color_stop(gpui::rgba(0x0a0a1226), 1.0),
+                        gpui::linear_color_stop(crate::appearance::rgba(0x0a0a1200), 0.0),
+                        gpui::linear_color_stop(crate::appearance::rgba(0x0a0a1226), 1.0),
                     )),
             )
             .child(
@@ -238,7 +241,8 @@ impl Gallery {
                     .px(px(5.0))
                     .py(px(3.0))
                     .rounded(px(4.0))
-                    .bg(gpui::rgba(0x0a0a12c2))
+                    .bg(crate::appearance::rgba(0x0a0a12c2))
+                    .text_color(rgb(0xffffff))
                     .text_size(px(if list { 8.0 } else { 10.0 }))
                     .line_height(px(if list { 10.0 } else { 12.5 }))
                     .child(entry.extension.clone()),
@@ -252,7 +256,8 @@ impl Gallery {
                         .px(px(5.0))
                         .py(px(3.0))
                         .rounded(px(4.0))
-                        .bg(gpui::rgba(0x0a0a12c2))
+                        .bg(crate::appearance::rgba(0x0a0a12c2))
+                        .text_color(rgb(0xffffff))
                         .text_size(px(if list { 8.0 } else { 10.0 }))
                         .line_height(px(if list { 10.0 } else { 12.5 }))
                         .child(duration),
@@ -334,7 +339,7 @@ impl Gallery {
                         .details
                         .size
                         .map(super::details::format_size)
-                        .unwrap_or_else(|| "Недоступно".into()),
+                        .unwrap_or_else(|| crate::i18n::text("Недоступно").into()),
                 )
             })
             .when(!self.stage, |view| {
@@ -424,9 +429,14 @@ impl Gallery {
                         .px(px(5.0))
                         .py(px(5.0))
                         .border_0()
-                        .bg(gpui::rgba(0x0a0a1273))
-                        .text_color(rgb(if entry.favorite { ACCENT } else { 0xffffff }))
-                        .hover(|view| view.bg(gpui::rgba(0x0a0a1273)))
+                        .bg(crate::appearance::rgba(0x0a0a1273))
+                        .text_color(rgb(0xffffff))
+                        .text_color(if entry.favorite {
+                            crate::appearance::media_accent()
+                        } else {
+                            rgb(0xffffff)
+                        })
+                        .hover(|view| view.bg(crate::appearance::rgba(0x0a0a1273)))
                         .on_click(cx.listener(move |this, _, _, cx| {
                             cx.stop_propagation();
                             this.entries[index].favorite = !this.entries[index].favorite;
@@ -471,8 +481,8 @@ impl Gallery {
                 let open_source = source.clone();
                 let details_source = source.clone();
 
-                menu.item(
-                    PopupMenuItem::new("Открыть").on_click(move |_, window, cx| {
+                menu.item(PopupMenuItem::new(crate::i18n::text("Открыть")).on_click(
+                    move |_, window, cx| {
                         let _ = open.update(cx, |this, cx| {
                             if this.stage == stage
                                 && this
@@ -488,26 +498,28 @@ impl Gallery {
                                 );
                             }
                         });
-                    }),
-                )
+                    },
+                ))
                 .item(
-                    PopupMenuItem::new("Информация о файле").on_click(move |_, _, cx| {
-                        let _ = details.update(cx, |this, cx| {
-                            if this.stage == stage
-                                && this
-                                    .entries
-                                    .get(index)
-                                    .is_some_and(|entry| entry.path == details_source)
-                            {
-                                this.select_card(index, gpui::Modifiers::default());
-                                this.details_open = true;
-                                cx.notify();
-                            }
-                        });
-                    }),
+                    PopupMenuItem::new(crate::i18n::text("Информация о файле")).on_click(
+                        move |_, _, cx| {
+                            let _ = details.update(cx, |this, cx| {
+                                if this.stage == stage
+                                    && this
+                                        .entries
+                                        .get(index)
+                                        .is_some_and(|entry| entry.path == details_source)
+                                {
+                                    this.select_card(index, gpui::Modifiers::default());
+                                    this.details_open = true;
+                                    cx.notify();
+                                }
+                            });
+                        },
+                    ),
                 )
                 .item(super::file_operations::menu_action(
-                    "Показать в Проводнике",
+                    crate::i18n::text("Показать в Проводнике"),
                     super::file_operations::Action::Reveal,
                     index,
                     stage,
@@ -516,7 +528,7 @@ impl Gallery {
                 ))
                 .when(!stage, |menu| {
                     menu.item(super::file_operations::menu_action(
-                        "Изменить порядок файлов",
+                        crate::i18n::text("Изменить порядок файлов"),
                         super::file_operations::Action::Order,
                         index,
                         stage,
@@ -527,45 +539,49 @@ impl Gallery {
                 .when(!stage, |menu| {
                     let edit = gallery.clone();
                     let source = source.clone();
-                    menu.item(PopupMenuItem::new("Редактировать метаданные").on_click(
-                        move |_, window, cx| {
-                            let _ = edit.update(cx, |this, cx| {
-                                let target_matches = !this.stage
-                                    && this
-                                        .entries
-                                        .get(index)
-                                        .is_some_and(|entry| entry.path == source);
-                                if target_matches {
-                                    this.edit_file_metadata(index, window, cx);
-                                }
-                            });
-                        },
-                    ))
+                    menu.item(
+                        PopupMenuItem::new(crate::i18n::text("Редактировать метаданные")).on_click(
+                            move |_, window, cx| {
+                                let _ = edit.update(cx, |this, cx| {
+                                    let target_matches = !this.stage
+                                        && this
+                                            .entries
+                                            .get(index)
+                                            .is_some_and(|entry| entry.path == source);
+                                    if target_matches {
+                                        this.edit_file_metadata(index, window, cx);
+                                    }
+                                });
+                            },
+                        ),
+                    )
                 })
                 .when(stage, |menu| {
                     let distribute = gallery.clone();
                     let source = source.clone();
                     menu.item(
-                        PopupMenuItem::new("Распределить").on_click(move |_, window, cx| {
-                            let _ = distribute.update(cx, |this, cx| {
-                                if this.stage
-                                    && this
-                                        .entries
-                                        .get(index)
-                                        .is_some_and(|entry| entry.path == source)
-                                {
-                                    if !this.stage_selection.contains(&index) {
-                                        this.select_card(index, gpui::Modifiers::default());
+                        PopupMenuItem::new(crate::i18n::text("Распределить")).on_click(
+                            move |_, window, cx| {
+                                let _ = distribute.update(cx, |this, cx| {
+                                    if this.stage
+                                        && this
+                                            .entries
+                                            .get(index)
+                                            .is_some_and(|entry| entry.path == source)
+                                    {
+                                        if !this.stage_selection.contains(&index) {
+                                            this.select_card(index, gpui::Modifiers::default());
+                                        }
+                                        this.open_distribution(window, cx);
                                     }
-                                    this.open_distribution(window, cx);
-                                }
-                            });
-                        }),
+                                });
+                            },
+                        ),
                     )
                 })
                 .when(stage && selected_count == 1, |menu| {
                     menu.item(super::file_operations::menu_action(
-                        "Заменить в Main Library…",
+                        crate::i18n::text("Заменить в Main Library…"),
                         super::file_operations::Action::Replace,
                         index,
                         stage,
@@ -575,7 +591,7 @@ impl Gallery {
                 })
                 .when(!stage && video, |menu| {
                     menu.item(super::file_operations::menu_action(
-                        "Копировать имя файла",
+                        crate::i18n::text("Копировать имя файла"),
                         super::file_operations::Action::CopyName,
                         index,
                         stage,
@@ -585,9 +601,13 @@ impl Gallery {
                 })
                 .item(super::file_operations::menu_action(
                     &if selected_count > 1 {
-                        format!("Удалить {selected_count} файлов")
+                        if crate::i18n::english() {
+                            format!("Delete {selected_count} files")
+                        } else {
+                            format!("Удалить {selected_count} файлов")
+                        }
                     } else {
-                        "Удалить файл".into()
+                        crate::i18n::text("Удалить файл").into()
                     },
                     super::file_operations::Action::Delete,
                     index,

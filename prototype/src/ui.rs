@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use gpui::{
     App, Context, Div, Entity, FocusHandle, ObjectFit, PathPromptOptions, Render, RenderImage,
-    Subscription, UniformListScrollHandle, Window, div, img, prelude::*, px, rgb,
+    Subscription, UniformListScrollHandle, Window, div, img, prelude::*, px,
 };
 use gpui_component::input::{InputEvent, InputState};
 
@@ -49,6 +49,7 @@ pub(super) fn init(cx: &mut App) {
     ]);
 }
 
+use crate::appearance::rgb;
 use crate::catalog::{self, Entry};
 
 const BACKGROUND: u32 = 0x080910;
@@ -122,8 +123,10 @@ pub(super) struct Gallery {
 
 impl Gallery {
     pub(super) fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let search = cx
-            .new(|cx| InputState::new(window, cx).placeholder("Метаданные через точку с запятой"));
+        let search = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder(crate::i18n::text("Метаданные через точку с запятой"))
+        });
         let focus = cx.focus_handle();
         focus.focus(window);
         let subscription =
@@ -379,7 +382,10 @@ impl Gallery {
                     this.status =
                         "No supported media selected. The current library is unchanged.".into();
                     this.notice = Some(
-                        "Поддерживаемые файлы не выбраны. Текущая библиотека сохранена.".into(),
+                        crate::i18n::text(
+                            "Поддерживаемые файлы не выбраны. Текущая библиотека сохранена.",
+                        )
+                        .into(),
                     );
                 } else {
                     this.player = None;

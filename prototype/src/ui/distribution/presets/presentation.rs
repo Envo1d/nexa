@@ -1,5 +1,6 @@
 use super::matching_presets;
-use gpui::{Context, Div, Entity, Focusable, Window, div, prelude::*, px, rgb};
+use crate::appearance::rgb;
+use gpui::{Context, Div, Entity, Focusable, Window, div, prelude::*, px};
 use gpui_component::input::{Input, InputState};
 
 use super::super::super::motion;
@@ -37,7 +38,7 @@ impl Gallery {
                         d.child(focus_outline(6.))
                     })
                     .child(shell::icon("copy").size(px(15.)))
-                    .child("Пресеты")
+                    .child(crate::i18n::text("Пресеты"))
                     .child(shell::icon("down").size(px(14.)))
                     .on_click(cx.listener(|this, _, window, cx| {
                         let w = this.distribution.as_mut().unwrap();
@@ -87,7 +88,7 @@ impl Gallery {
                     .items_start()
                     .gap(px(4.))
                     .border_color(gpui::transparent_black())
-                    .bg(gpui::rgba(0))
+                    .bg(crate::appearance::rgba(0))
                     .child(
                         div()
                             .font_weight(gpui::FontWeight::BOLD)
@@ -107,9 +108,9 @@ impl Gallery {
         if matches.is_empty() {
             list = list.child(
                 note(if state.entries.is_empty() {
-                    "Пресетов пока нет."
+                    crate::i18n::text("Пресетов пока нет.")
                 } else {
-                    "Подходящих пресетов нет."
+                    crate::i18n::text("Подходящих пресетов нет.")
                 })
                 .mt(px(5.))
                 .line_height(px(18.)),
@@ -126,7 +127,7 @@ impl Gallery {
             .child(
                 button("preset-save-as", "")
                     .child(shell::icon("plus").size(px(14.)))
-                    .child("Сохранить как пресет…")
+                    .child(crate::i18n::text("Сохранить как пресет…"))
                     .when(!can_save, disabled_button)
                     .on_click(cx.listener(|this, _, window, cx| {
                         let artist = &this.distribution.as_ref().unwrap().artist;
@@ -139,7 +140,7 @@ impl Gallery {
                 button("preset-manage", "")
                     .with_focus(&state.manage_focus)
                     .child(shell::icon("settings").size(px(14.)))
-                    .child("Управление пресетами…")
+                    .child(crate::i18n::text("Управление пресетами…"))
                     .on_click(cx.listener(|this, _, window, cx| {
                         this.open_preset_manager(false, window, cx);
                     })),
@@ -148,9 +149,9 @@ impl Gallery {
         let width = 360_f32.min(f32::from(viewport.width) - 64.);
         let height = 560_f32.min(f32::from(viewport.height) - 150.);
 
-        let help = note(
+        let help = note(crate::i18n::text(
             "Пресеты заменяют копирайты, автора, персонажей и теги. Названия видео сохраняются.",
-        )
+        ))
         .truncate()
         .mt(px(5.))
         .line_height(px(18.));
@@ -179,9 +180,14 @@ impl Gallery {
                     .text_size(px(13.))
                     .line_height(px(16.25))
                     .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .child("Выберите пресет метаданных"),
+                    .child(crate::i18n::text("Выберите пресет метаданных")),
             )
-            .child(plain_input(&state.search, "Поиск пресетов", window, cx))
+            .child(plain_input(
+                &state.search,
+                crate::i18n::text("Поиск пресетов"),
+                window,
+                cx,
+            ))
             .child(list.child(super::scrolling::scrollbar(
                 &state.picker_scroll,
                 cx.entity_id(),
@@ -222,15 +228,28 @@ impl Gallery {
                 .flex()
                 .justify_between()
                 .child(
-                    note(["Произведения", "Теги", "Персонажи", "Автор"][field])
-                        .line_height(px(16.)),
+                    note(
+                        [
+                            crate::i18n::text("Произведения"),
+                            crate::i18n::text("Теги"),
+                            crate::i18n::text("Персонажи"),
+                            crate::i18n::text("Автор"),
+                        ][field],
+                    )
+                    .line_height(px(16.)),
                 )
                 .when(
                     field < 3 && !e.metadata.values[field.min(2)].is_empty(),
                     |d| {
                         d.child(
-                            note(&format!("{} выбрано", e.metadata.values[field].len()))
-                                .text_size(px(10.)),
+                            note(
+                                &(if crate::i18n::english() {
+                                    format!("{} selected", e.metadata.values[field].len())
+                                } else {
+                                    format!("{} выбрано", e.metadata.values[field].len())
+                                }),
+                            )
+                            .text_size(px(10.)),
                         )
                     },
                 ),
@@ -334,11 +353,11 @@ impl Gallery {
                     )
                     .when(state.read(cx).value().is_empty(), |d| {
                         let placeholder = match field {
-                            0 => "Добавить: произведения…",
-                            1 => "Добавить: теги…",
-                            2 if disabled => "Сначала выберите произведение",
-                            2 => "Добавить: персонажи…",
-                            _ => "Введите: автор…",
+                            0 => crate::i18n::text("Добавить: произведения…"),
+                            1 => crate::i18n::text("Добавить: теги…"),
+                            2 if disabled => crate::i18n::text("Сначала выберите произведение"),
+                            2 => crate::i18n::text("Добавить: персонажи…"),
+                            _ => crate::i18n::text("Введите: автор…"),
                         };
                         d.child(placeholder_label(placeholder).left_0().top(px(8.)))
                     }),
@@ -412,7 +431,7 @@ impl Gallery {
                         .text_size(px(12.))
                         .line_height(px(18.))
                         .text_color(rgb(MUTED))
-                        .child("К какому произведению относится ")
+                        .child(crate::i18n::text("К какому произведению относится "))
                         .child(
                             div()
                                 .font_weight(gpui::FontWeight::BOLD)
@@ -436,7 +455,7 @@ impl Gallery {
                             .h(px(35.))
                             .border_0()
                             .rounded(px(5.))
-                            .bg(gpui::rgba(0))
+                            .bg(crate::appearance::rgba(0))
                             .text_size(px(12.))
                             .line_height(px(15.))
                             .font_weight(gpui::FontWeight::NORMAL)
@@ -449,13 +468,13 @@ impl Gallery {
                     );
                 }
                 popup = popup.child(
-                    button("preset-assignment-cancel", "Отмена")
+                    button("preset-assignment-cancel", crate::i18n::text("Отмена"))
                         .keyboard_focus(false)
                         .track_focus(&e.assignment_focus[e.metadata.values[0].len()])
                         .justify_start()
                         .h(px(33.75))
                         .border_0()
-                        .bg(gpui::rgba(0))
+                        .bg(crate::appearance::rgba(0))
                         .text_color(rgb(crate::ui::ACCENT))
                         .on_mouse_down(gpui::MouseButton::Left, |_, window, _| {
                             window.prevent_default()
@@ -494,9 +513,9 @@ impl Gallery {
                 if options.is_empty() {
                     popup = popup.child(
                         note(if field == 3 {
-                            "Подходящих значений нет."
+                            crate::i18n::text("Подходящих значений нет.")
                         } else {
-                            "Нажмите Enter, чтобы добавить значение."
+                            crate::i18n::text("Нажмите Enter, чтобы добавить значение.")
                         })
                         .px(px(12.))
                         .py(px(10.))
@@ -541,7 +560,7 @@ impl Gallery {
                     .items_start()
                     .gap(px(4.))
                     .rounded(px(7.))
-                    .bg(gpui::rgba(0))
+                    .bg(crate::appearance::rgba(0))
                     .border_color(gpui::transparent_black())
                     .when(e.selected == Some(id), |d| {
                         d.bg(rgb(0x2c263e)).border_color(rgb(0x6d5aa4))
@@ -564,9 +583,9 @@ impl Gallery {
         if matches.is_empty() {
             list = list.child(
                 note(if state.entries.is_empty() {
-                    "Пресетов пока нет."
+                    crate::i18n::text("Пресетов пока нет.")
                 } else {
-                    "Подходящих пресетов нет."
+                    crate::i18n::text("Подходящих пресетов нет.")
                 })
                 .line_height(px(18.)),
             );
@@ -586,12 +605,17 @@ impl Gallery {
             .child(
                 button("preset-new", "")
                     .child(shell::icon("plus").size(px(15.)))
-                    .child("Создать из текущих данных")
+                    .child(crate::i18n::text("Создать из текущих данных"))
                     .on_click(cx.listener(|this, _, window, cx| {
                         this.fill_preset_editor(None, false, window, cx)
                     })),
             )
-            .child(plain_input(&state.search, "Поиск пресетов", window, cx))
+            .child(plain_input(
+                &state.search,
+                crate::i18n::text("Поиск пресетов"),
+                window,
+                cx,
+            ))
             .child(list.child(super::scrolling::scrollbar(
                 &e.library_scroll,
                 cx.entity_id(),
@@ -611,9 +635,9 @@ impl Gallery {
             .gap_4()
             .child(
                 note(if e.selected.is_some() {
-                    "Редактирование пресета"
+                    crate::i18n::text("Редактирование пресета")
                 } else {
-                    "Новый пресет"
+                    crate::i18n::text("Новый пресет")
                 })
                 .line_height(px(18.)),
             )
@@ -622,17 +646,24 @@ impl Gallery {
                     .flex()
                     .flex_col()
                     .gap(px(7.))
-                    .child(note("Название пресета").line_height(px(16.)))
+                    .child(note(crate::i18n::text("Название пресета")).line_height(px(16.)))
                     .child(plain_input(&e.name, "", window, cx)),
             )
             .child(self.preset_field(3, window, cx))
             .child(self.preset_field(0, window, cx))
             .child(self.preset_field(2, window, cx))
             .child(self.preset_field(1, window, cx))
-            .child(note("Сохранение пресета не меняет текущую форму и файлы.").line_height(px(18.)))
             .child(
-                note("В деморежиме пресеты доступны только пока открыто это окно.")
-                    .line_height(px(18.)),
+                note(crate::i18n::text(
+                    "Сохранение пресета не меняет текущую форму и файлы.",
+                ))
+                .line_height(px(18.)),
+            )
+            .child(
+                note(crate::i18n::text(
+                    "В деморежиме пресеты доступны только пока открыто это окно.",
+                ))
+                .line_height(px(18.)),
             );
         if let Some(notice) = &state.notice {
             editor = editor.child(note(notice).line_height(px(18.)));
@@ -661,35 +692,41 @@ impl Gallery {
             footer = footer
                 .child(
                     div().w_full().child(
-                        note("Удалить выбранный пресет? Данные формы и файлы сохранятся.")
-                            .line_height(px(18.)),
+                        note(crate::i18n::text(
+                            "Удалить выбранный пресет? Данные формы и файлы сохранятся.",
+                        ))
+                        .line_height(px(18.)),
                     ),
                 )
                 .child(
-                    button("preset-delete-confirm", "Подтвердить удаление").on_click(cx.listener(
-                        |this, _, window, cx| {
-                            let state = &mut this.distribution.as_mut().unwrap().preset_state;
-                            let selected = state.editor.as_ref().unwrap().selected;
-                            state.entries.retain(|p| Some(p.id) != selected);
-                            state.error = None;
-                            state.notice =
-                                Some("Пресет метаданных удалён. Данные формы сохранены.".into());
-                            tracing::info!(operation = "metadata_presets", "Demo preset deleted");
-                            this.fill_preset_editor(None, false, window, cx);
-                            this.distribution
-                                .as_ref()
-                                .unwrap()
-                                .preset_state
-                                .editor
-                                .as_ref()
-                                .unwrap()
-                                .focus
-                                .focus(window);
-                        },
-                    )),
+                    button(
+                        "preset-delete-confirm",
+                        crate::i18n::text("Подтвердить удаление"),
+                    )
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        let state = &mut this.distribution.as_mut().unwrap().preset_state;
+                        let selected = state.editor.as_ref().unwrap().selected;
+                        state.entries.retain(|p| Some(p.id) != selected);
+                        state.error = None;
+                        state.notice = Some(
+                            crate::i18n::text("Пресет метаданных удалён. Данные формы сохранены.")
+                                .into(),
+                        );
+                        tracing::info!(operation = "metadata_presets", "Demo preset deleted");
+                        this.fill_preset_editor(None, false, window, cx);
+                        this.distribution
+                            .as_ref()
+                            .unwrap()
+                            .preset_state
+                            .editor
+                            .as_ref()
+                            .unwrap()
+                            .focus
+                            .focus(window);
+                    })),
                 )
                 .child(
-                    button("preset-delete-cancel", "Отмена")
+                    button("preset-delete-cancel", crate::i18n::text("Отмена"))
                         .with_focus(&e.cancel_focus)
                         .on_click(cx.listener(|this, _, window, cx| {
                             this.distribution
@@ -720,7 +757,7 @@ impl Gallery {
                 .child(
                     button("preset-delete", "")
                         .child(shell::icon("trash").size(px(15.)))
-                        .child("Удалить пресет")
+                        .child(crate::i18n::text("Удалить пресет"))
                         .when(!selected, disabled_button)
                         .on_click(cx.listener(|this, _, window, cx| {
                             let e = this
@@ -741,7 +778,7 @@ impl Gallery {
                 .child(
                     button("preset-duplicate", "")
                         .child(shell::icon("copy").size(px(15.)))
-                        .child("Дублировать пресет")
+                        .child(crate::i18n::text("Дублировать пресет"))
                         .when(!selected, disabled_button)
                         .on_click(cx.listener(|this, _, window, cx| {
                             if this
@@ -761,7 +798,7 @@ impl Gallery {
                 )
                 .child(div().flex_1())
                 .child(
-                    button("preset-cancel", "Отмена")
+                    button("preset-cancel", crate::i18n::text("Отмена"))
                         .keyboard_focus(false)
                         .track_focus(&e.cancel_focus)
                         .relative()
@@ -779,9 +816,9 @@ impl Gallery {
                     button(
                         "preset-save",
                         if selected {
-                            "Обновить выбранный пресет"
+                            crate::i18n::text("Обновить выбранный пресет")
                         } else {
-                            "Сохранить новый пресет"
+                            crate::i18n::text("Сохранить новый пресет")
                         },
                     )
                     .bg(motion::Surface::gradient(
@@ -789,7 +826,7 @@ impl Gallery {
                         rgb(0x7b43d9),
                         rgb(0x6839ce),
                     ))
-                    .border_color(gpui::rgba(0))
+                    .border_color(crate::appearance::rgba(0))
                     .hover_colors(Some(rgb(0x8853e1).into()), None, None)
                     .when(!can_save, disabled_button)
                     .keyboard_focus(false)
@@ -831,11 +868,13 @@ impl Gallery {
                             .line_height(px(24.))
                             .font_weight(gpui::FontWeight::SEMIBOLD)
                             .mb(px(6.))
-                            .child("Управление пресетами метаданных"),
+                            .child(crate::i18n::text("Управление пресетами метаданных")),
                     )
                     .child(
-                        note("Редактируйте наборы метаданных независимо от текущего файла.")
-                            .line_height(px(18.)),
+                        note(crate::i18n::text(
+                            "Редактируйте наборы метаданных независимо от текущего файла.",
+                        ))
+                        .line_height(px(18.)),
                     ),
             )
             .child(
@@ -850,10 +889,10 @@ impl Gallery {
                     .size(px(28.))
                     .p_0()
                     .border_0()
-                    .bg(gpui::rgba(0))
+                    .bg(crate::appearance::rgba(0))
                     .text_color(rgb(MUTED))
                     .hover_colors(
-                        Some(gpui::rgba(0xa786ff1a).into()),
+                        Some(crate::appearance::rgba(0xa786ff1a).into()),
                         Some(rgb(TEXT).into()),
                         None,
                     )
@@ -972,7 +1011,7 @@ impl Gallery {
         div()
             .absolute()
             .inset_0()
-            .bg(gpui::rgba(0x05040cab))
+            .bg(crate::appearance::rgba(0x05040cab))
             .flex()
             .items_center()
             .justify_center()
@@ -1051,7 +1090,7 @@ fn placeholder_label(text: &str) -> Div {
 
 fn reference_shadow() -> Vec<gpui::BoxShadow> {
     vec![gpui::BoxShadow {
-        color: gpui::rgba(0x00000080).into(),
+        color: crate::appearance::rgba(0x00000080).into(),
         offset: gpui::point(px(0.), px(20.)),
         blur_radius: px(70.),
         spread_radius: px(0.),

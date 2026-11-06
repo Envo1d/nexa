@@ -1,9 +1,10 @@
 use std::path::PathBuf;
 
-use gpui::{Context, Div, FontWeight, Window, div, img, prelude::*, px, rgb, rgba};
+use gpui::{Context, Div, FontWeight, Window, div, img, prelude::*, px};
 
 use super::super::super::{ACCENT, Gallery, LINE, TEXT, motion, shell::icon};
 use super::super::presentation::{action, small};
+use crate::appearance::{rgb, rgba};
 
 impl Gallery {
     pub(in crate::ui) fn settings_update_dialog(
@@ -38,7 +39,7 @@ impl Gallery {
                         div()
                             .text_size(px(16.))
                             .font_weight(FontWeight::SEMIBOLD)
-                            .child("Установить обновление?"),
+                            .child(crate::i18n::text("Установить обновление?")),
                     ),
             )
             .child(action("update-confirm-close", "", Some("close")).on_click(
@@ -64,7 +65,7 @@ impl Gallery {
                     .flex()
                     .flex_col()
                     .gap(px(5.))
-                    .child(small("Новая версия · демонстрация"))
+                    .child(small(crate::i18n::text("Новая версия · демонстрация")))
                     .child(
                         div()
                             .text_size(px(16.))
@@ -83,7 +84,9 @@ impl Gallery {
             .text_size(px(11.))
             .line_height(px(17.6))
             .child(icon("info").size(px(18.)).flex_shrink_0())
-            .child("Сохраните незавершённые изменения перед продолжением.");
+            .child(crate::i18n::text(
+                "Сохраните незавершённые изменения перед продолжением.",
+            ));
         let footer = div()
             .flex()
             .justify_end()
@@ -103,7 +106,7 @@ impl Gallery {
                     .px(px(18.))
                     .bg(rgb(0x7b43d9))
                     .text_color(rgb(0xffffff))
-                    .child("Установить обновление")
+                    .child(crate::i18n::text("Установить обновление"))
                     .on_click(
                         cx.listener(|this, _, window, cx| {
                             this.settings_install_preview(window, cx)
@@ -131,18 +134,12 @@ impl Gallery {
             .child(heading)
             .child(release)
             .child(
-                small(concat!(
-                    "Nexa загрузит и проверит обновление, затем закроется для установки. ",
-                    "После завершения приложение откроется автоматически."
-                ))
+                small(crate::i18n::text("Nexa загрузит и проверит обновление, затем закроется для установки. После завершения приложение откроется автоматически."))
                 .line_height(px(20.4)),
             )
             .child(warning)
             .child(
-                small(concat!(
-                    "Предпросмотр GPUI: загрузка, установка и перезапуск имитируются. ",
-                    "Файлы приложения не изменяются."
-                ))
+                small(crate::i18n::text("Предпросмотр GPUI: загрузка, установка и перезапуск имитируются. Файлы приложения не изменяются."))
                 .mt(px(12.)),
             )
             .child(footer)
@@ -194,7 +191,11 @@ impl Gallery {
             .child(
                 div()
                     .font_weight(FontWeight::SEMIBOLD)
-                    .child(format!("В копии: {count} файлов")),
+                    .child(if crate::i18n::english() {
+                        format!("Backup contains {count} files")
+                    } else {
+                        format!("В копии: {count} файлов")
+                    }),
             )
             .child(small(stamp).my(px(12.)))
             .child(small(preview.path.display().to_string()).my(px(12.)));
@@ -221,7 +222,9 @@ impl Gallery {
                         d.bg(rgb(ACCENT)).child(icon("check").size(px(12.)))
                     }),
             )
-            .child("Я понимаю, что текущие записи сеанса будут заменены.")
+            .child(crate::i18n::text(
+                "Я понимаю, что текущие записи сеанса будут заменены.",
+            ))
             .on_click(cx.listener(|this, _, _, cx| {
                 if !this.dialog_open {
                     this.settings.workflow.confirmed = !this.settings.workflow.confirmed;
@@ -253,11 +256,7 @@ impl Gallery {
                     .on_click(cx.listener(|this, _, _, cx| this.settings_restore(cx))),
             );
 
-        panel.child(small(concat!(
-            "Восстановление заменяет записи Библиотеки и Входящих только в текущем сеансе GPUI. ",
-            "Настройки, словарь и исходные файлы не восстанавливаются. ",
-            "Перед заменой создаётся защитная копия."
-        )).my(px(12.)))
+        panel.child(small(crate::i18n::text("Восстановление заменяет записи Библиотеки и Входящих только в текущем сеансе GPUI. Настройки, словарь и исходные файлы не восстанавливаются. Перед заменой создаётся защитная копия.")).my(px(12.)))
             .child(confirmation)
             .child(footer)
     }

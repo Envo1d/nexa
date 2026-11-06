@@ -67,7 +67,7 @@ impl Gallery {
                 files: false,
                 directories: true,
                 multiple: false,
-                prompt: Some("Выбрать папку".into()),
+                prompt: Some(crate::i18n::text("Выбрать папку").into()),
             },
             "settings_directory",
         );
@@ -124,7 +124,7 @@ impl Gallery {
                     cx.background_executor()
                         .spawn(async move {
                             backup::write(&path, &snapshot, portable).map(|_| {
-                                "Копия сеанса GPUI сохранена. Производственный каталог не затронут."
+                                crate::i18n::text("Копия сеанса GPUI сохранена. Производственный каталог не затронут.")
                                     .to_owned()
                             })
                         })
@@ -161,7 +161,7 @@ impl Gallery {
                 files: true,
                 directories: false,
                 multiple: false,
-                prompt: Some("Выбрать JSON-копию сеанса GPUI".into()),
+                prompt: Some(crate::i18n::text("Выбрать JSON-копию сеанса GPUI").into()),
             },
             "session_backup_inspect",
         );
@@ -234,10 +234,17 @@ impl Gallery {
                         this.refilter(cx);
                         this.settings.workflow.confirmed = false;
                         this.settings_result(
-                            Ok(format!(
-                                "Каталог сеанса восстановлен. Защитная копия: {}",
-                                path.display()
-                            )),
+                            Ok(if crate::i18n::english() {
+                                format!(
+                                    "Session catalog restored. Safety backup: {}",
+                                    path.display()
+                                )
+                            } else {
+                                format!(
+                                    "Каталог сеанса восстановлен. Защитная копия: {}",
+                                    path.display()
+                                )
+                            }),
                             "session_backup_restore",
                         );
                     }
@@ -260,7 +267,11 @@ impl Gallery {
             }
             Err(error) => {
                 tracing::error!(operation, reason = %error, "Settings operation failed");
-                format!("Ошибка: {error}")
+                if crate::i18n::english() {
+                    format!("Error: {error}")
+                } else {
+                    format!("Ошибка: {error}")
+                }
             }
         });
     }

@@ -1,10 +1,11 @@
 use gpui::{
     BoxShadow, Context, Div, Entity, Focusable, Subscription, UniformListScrollHandle, Window, div,
-    point, prelude::*, px, rgb, rgba, uniform_list,
+    point, prelude::*, px, uniform_list,
 };
 use gpui_component::input::{Input, InputEvent, InputState};
 
 use super::{ACCENT, Gallery, LINE, MUTED, SURFACE, TEXT, button, shell::icon};
+use crate::appearance::{rgb, rgba};
 use crate::taxonomy::{Catalog, Category};
 
 mod select;
@@ -30,8 +31,9 @@ pub(super) struct Editor {
 
 impl Editor {
     pub(super) fn new(window: &mut Window, cx: &mut Context<Gallery>) -> Self {
-        let search = cx.new(|cx| InputState::new(window, cx).placeholder("Поиск имён…"));
-        let name = cx.new(|cx| InputState::new(window, cx).placeholder("Имя"));
+        let search =
+            cx.new(|cx| InputState::new(window, cx).placeholder(crate::i18n::text("Поиск имён…")));
+        let name = cx.new(|cx| InputState::new(window, cx).placeholder(crate::i18n::text("Имя")));
         let search_subscription = cx.subscribe_in(&search, window, |this, _, event, window, cx| {
             if matches!(event, InputEvent::Change) {
                 this.taxonomy
@@ -120,6 +122,16 @@ fn field(input: &Entity<InputState>, cx: &Context<Gallery>) -> gpui::Stateful<Di
     field_surface("dictionary-name-field", input, cx).child(field_input(input))
 }
 impl Gallery {
+    pub(super) fn refresh_taxonomy_locale(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.taxonomy.search.update(cx, |state, cx| {
+            state.set_placeholder(crate::i18n::text("Поиск имён…"), window, cx);
+        });
+        self.taxonomy.name.update(cx, |state, cx| {
+            state.set_placeholder(crate::i18n::text("Имя"), window, cx);
+        });
+        self.taxonomy.error = None;
+    }
+
     pub(super) fn open_taxonomy(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.loading || self.dialog_open {
             return;
@@ -217,11 +229,15 @@ impl Gallery {
                 self.refilter(cx);
                 self.reset_taxonomy(window, cx);
                 self.notice = Some(if queued > 0 {
-                    format!("Запись удалена. Файлов во Входящих: +{queued}.")
+                    if crate::i18n::english() {
+                        format!("Entry deleted. Files added to Incoming: {queued}.")
+                    } else {
+                        format!("Запись удалена. Файлов во Входящих: +{queued}.")
+                    }
                 } else if replacement.is_some() {
-                    "Запись обновлена.".into()
+                    crate::i18n::text("Запись обновлена.").into()
                 } else {
-                    "Запись удалена.".into()
+                    crate::i18n::text("Запись удалена.").into()
                 });
                 tracing::info!(queued, "Dictionary change completed");
             }
@@ -261,12 +277,12 @@ impl Gallery {
                     .bg(if category == editor.category {
                         rgb(0x242034)
                     } else {
-                        gpui::rgba(0)
+                        crate::appearance::rgba(0)
                     })
                     .border_color(if category == editor.category {
                         rgb(LINE)
                     } else {
-                        gpui::rgba(0)
+                        crate::appearance::rgba(0)
                     })
                     .text_color(rgb(if category == editor.category {
                         TEXT
@@ -306,9 +322,9 @@ impl Gallery {
             .border_color(rgb(LINE))
             .bg(rgb(SURFACE));
         for (index, (value, label)) in [
-            (None, "Все связи"),
-            (Some(0), "0 связей"),
-            (Some(1), "1 связь"),
+            (None, crate::i18n::text("Все связи")),
+            (Some(0), crate::i18n::text("0 связей")),
+            (Some(1), crate::i18n::text("1 связь")),
         ]
         .into_iter()
         .enumerate()
@@ -323,13 +339,13 @@ impl Gallery {
                     .py(px(7.0))
                     .rounded(px(6.0))
                     .border_1()
-                    .border_color(gpui::rgba(0))
+                    .border_color(crate::appearance::rgba(0))
                     .text_size(px(12.0))
                     .line_height(px(15.0))
                     .bg(if editor.links == value {
                         rgb(0x242034)
                     } else {
-                        gpui::rgba(0)
+                        crate::appearance::rgba(0)
                     })
                     .text_color(rgb(if editor.links == value {
                         0xd0b4fa
@@ -375,7 +391,7 @@ impl Gallery {
                     div()
                         .p_4()
                         .text_color(rgb(MUTED))
-                        .child("Нет подходящих записей."),
+                        .child(crate::i18n::text("Нет подходящих записей.")),
                 )
             })
             .when(!visible.is_empty(), |view| view.child(list));
@@ -410,7 +426,7 @@ impl Gallery {
             .bg(if editor.selected == Some(id) {
                 rgb(0x30263e)
             } else {
-                gpui::rgba(0)
+                crate::appearance::rgba(0)
             })
             .when(editor.selected == Some(id), |view| {
                 view.child(
@@ -526,10 +542,10 @@ impl Gallery {
                 });
             detail = detail.child(heading);
             if editor.deleting {
-                detail = detail.child(div().font_weight(gpui::FontWeight::SEMIBOLD).child(format!("Удалить «{}»?", record.name)))
+                detail = detail.child(div().font_weight(gpui::FontWeight::SEMIBOLD).child(if crate::i18n::english() { format!("Delete “{}”?", record.name) } else { format!("Удалить «{}»?", record.name) }))
                     .child(div().text_color(rgb(MUTED)).child(if matches!(category, Category::Copyright | Category::Artist) {
-                        "Связанные файлы будут перемещены во Входящие для повторного распределения. При удалении произведения удаляются и его персонажи. Файлы на диске не изменяются."
-                    } else { "Запись будет удалена из метаданных всех связанных файлов. Файлы на диске не изменяются." }));
+                        crate::i18n::text("Связанные файлы будут перемещены во Входящие для повторного распределения. При удалении произведения удаляются и его персонажи. Файлы на диске не изменяются.")
+                    } else { crate::i18n::text("Запись будет удалена из метаданных всех связанных файлов. Файлы на диске не изменяются.") }));
             } else {
                 detail = detail.child(
                     div()
@@ -540,7 +556,7 @@ impl Gallery {
                             div()
                                 .text_size(px(12.0))
                                 .text_color(rgb(MUTED))
-                                .child("Имя"),
+                                .child(crate::i18n::text("Имя")),
                         )
                         .child(field(&editor.name, cx)),
                 );
@@ -554,15 +570,15 @@ impl Gallery {
                                 div()
                                     .text_size(px(12.0))
                                     .text_color(rgb(MUTED))
-                                    .child("Произведение"),
+                                    .child(crate::i18n::text("Произведение")),
                             )
                             .child(self.copyright_select(cx)),
                     );
                 }
                 detail = detail.child(div().text_size(px(12.0)).text_color(rgb(MUTED)).child(if category == Category::Character {
-                    "Смена произведения обновляет все связанные файлы. Предыдущее произведение удаляется, если его больше не использует ни один персонаж файла."
-                } else { "Изменения применяются ко всем связанным файлам." }))
-                    .when(dirty, |view| view.child(div().text_size(px(11.0)).text_color(rgb(ACCENT)).child("Несохранённые изменения")));
+                    crate::i18n::text("Смена произведения обновляет все связанные файлы. Предыдущее произведение удаляется, если его больше не использует ни один персонаж файла.")
+                } else { crate::i18n::text("Изменения применяются ко всем связанным файлам.") }))
+                    .when(dirty, |view| view.child(div().text_size(px(11.0)).text_color(rgb(ACCENT)).child(crate::i18n::text("Несохранённые изменения"))));
             }
             let can_save =
                 editor.deleting || (dirty && !editor.name.read(cx).value().trim().is_empty());
@@ -574,7 +590,7 @@ impl Gallery {
                         .justify_end()
                         .gap_2()
                         .child(
-                            button("dictionary-cancel", "Отмена")
+                            button("dictionary-cancel", crate::i18n::text("Отмена"))
                                 .text_size(px(11.0))
                                 .when(!dirty && !editor.deleting, |v| v.opacity(0.45))
                                 .on_click(cx.listener(|this, _, window, cx| {
@@ -585,9 +601,9 @@ impl Gallery {
                             button(
                                 "dictionary-save",
                                 if editor.deleting {
-                                    "Удалить запись"
+                                    crate::i18n::text("Удалить запись")
                                 } else {
-                                    "Сохранить изменения"
+                                    crate::i18n::text("Сохранить изменения")
                                 },
                             )
                             .text_size(px(11.0))
@@ -608,7 +624,11 @@ impl Gallery {
                         .border_color(rgb(LINE))
                         .pt_3()
                         .text_color(rgb(MUTED))
-                        .child(format!("Связанных файлов: {}", record.count)),
+                        .child(if crate::i18n::english() {
+                            format!("Linked files: {}", record.count)
+                        } else {
+                            format!("Связанных файлов: {}", record.count)
+                        }),
                 )
                 .when(!editor.deleting, |view| {
                     view.child(
@@ -619,7 +639,7 @@ impl Gallery {
                             .w(px(130.0))
                             .text_size(px(11.0))
                             .child(icon("trash").size(px(15.0)))
-                            .child("Удалить запись")
+                            .child(crate::i18n::text("Удалить запись"))
                             .text_color(rgb(0xf292a7))
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.reset_taxonomy(window, cx);
@@ -635,13 +655,13 @@ impl Gallery {
                     .iter()
                     .filter(|r| r.category == Category::Character && r.copyright == record.name)
                     .collect();
-                detail = detail.child(
-                    div()
-                        .border_t_1()
-                        .border_color(rgb(LINE))
-                        .pt_3()
-                        .child(format!("Персонажи · {}", related.len())),
-                );
+                detail = detail.child(div().border_t_1().border_color(rgb(LINE)).pt_3().child(
+                    if crate::i18n::english() {
+                        format!("Characters · {}", related.len())
+                    } else {
+                        format!("Персонажи · {}", related.len())
+                    },
+                ));
                 for character in related {
                     let id = character.id;
                     detail = detail.child(
@@ -675,11 +695,9 @@ impl Gallery {
                 }
             }
         } else {
-            detail = detail.child(
-                div()
-                    .text_color(rgb(MUTED))
-                    .child("Выберите запись, чтобы изменить её данные."),
-            );
+            detail = detail.child(div().text_color(rgb(MUTED)).child(crate::i18n::text(
+                "Выберите запись, чтобы изменить её данные.",
+            )));
         }
 
         detail
@@ -720,20 +738,18 @@ impl Gallery {
                             .line_height(px(15.0))
                             .text_color(rgb(MUTED))
                             .mb_1()
-                            .child("Метаданные коллекции"),
+                            .child(crate::i18n::text("Метаданные коллекции")),
                     )
                     .child(
                         div()
                             .text_size(px(24.0))
                             .line_height(px(30.0))
                             .font_weight(gpui::FontWeight::BOLD)
-                            .child("Справочники"),
+                            .child(crate::i18n::text("Справочники")),
                     )
-                    .child(
-                        div()
-                            .text_color(rgb(MUTED))
-                            .child("Выберите запись слева, чтобы изменить её данные."),
-                    ),
+                    .child(div().text_color(rgb(MUTED)).child(crate::i18n::text(
+                        "Выберите запись слева, чтобы изменить её данные.",
+                    ))),
             )
             .child(categories.flex_shrink_0())
             .child(
@@ -796,7 +812,7 @@ impl Gallery {
                                         .bg(if editor.repeated {
                                             rgb(0x242034)
                                         } else {
-                                            gpui::rgba(0)
+                                            crate::appearance::rgba(0)
                                         })
                                         .when(!editor.repeated, |view| {
                                             view.hover_colors(
@@ -830,7 +846,9 @@ impl Gallery {
                                                         )
                                                 }),
                                         )
-                                        .child("Одинаковые имена в разных произведениях")
+                                        .child(crate::i18n::text(
+                                            "Одинаковые имена в разных произведениях",
+                                        ))
                                         .child(
                                             div()
                                                 .text_color(rgb(MUTED))
@@ -853,7 +871,7 @@ impl Gallery {
                     .text_color(rgb(MUTED))
                     .child(format!("{} · {} / {total}", category.label(), visible))
                     .when(category == Category::Character, |view| {
-                        view.child("Имена уточняются произведением.")
+                        view.child(crate::i18n::text("Имена уточняются произведением."))
                     }),
             )
             .when_some(editor.error.clone(), |view, error| {
@@ -892,8 +910,8 @@ impl Gallery {
                                     .bg(rgb(0x10101a))
                                     .border_b_1()
                                     .border_color(rgb(LINE))
-                                    .child("Имя")
-                                    .child("Связанные файлы"),
+                                    .child(crate::i18n::text("Имя"))
+                                    .child(crate::i18n::text("Связанные файлы")),
                             )
                             .child(rows),
                     )
@@ -903,7 +921,9 @@ impl Gallery {
                 div()
                     .text_size(px(11.0))
                     .text_color(rgb(MUTED))
-                    .child("Демобиблиотека · Изменения действуют до конца сеанса."),
+                    .child(crate::i18n::text(
+                        "Демобиблиотека · Изменения действуют до конца сеанса.",
+                    )),
             )
     }
 }

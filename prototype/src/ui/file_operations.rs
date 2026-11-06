@@ -81,7 +81,7 @@ impl Gallery {
         }
         let indices = selection(index, self.stage, &self.stage_selection, self.entries.len());
         if indices.is_empty() || indices.len() > 500 {
-            self.notice = Some("Выберите от 1 до 500 файлов.".into());
+            self.notice = Some(crate::i18n::text("Выберите от 1 до 500 файлов.").into());
             cx.notify();
             return;
         }
@@ -89,7 +89,7 @@ impl Gallery {
             cx.write_to_clipboard(ClipboardItem::new_string(
                 self.entries[index].details.filename.clone(),
             ));
-            self.notice = Some("Имя файла скопировано.".into());
+            self.notice = Some(crate::i18n::text("Имя файла скопировано.").into());
             cx.notify();
             return;
         }
@@ -103,7 +103,8 @@ impl Gallery {
                 indices
             };
             let query = cx.new(|cx| {
-                InputState::new(window, cx).placeholder("Метаданные через точку с запятой")
+                InputState::new(window, cx)
+                    .placeholder(crate::i18n::text("Метаданные через точку с запятой"))
             });
             let subscription = cx.subscribe_in(
                 &query,
@@ -197,7 +198,7 @@ impl Gallery {
             return;
         }
         if action == Action::Share && indices.len() != 1 {
-            self.notice = Some("Для отправки выберите один файл.".into());
+            self.notice = Some(crate::i18n::text("Для отправки выберите один файл.").into());
             cx.notify();
             return;
         }
@@ -226,7 +227,7 @@ impl Gallery {
                 .spawn(async move {
                     if action == Action::Share {
                         if !paths[0].is_absolute() || !paths[0].is_file() {
-                            return Err("Файл недоступен на диске.".to_owned());
+                            return Err(crate::i18n::text("Файл недоступен на диске.").to_owned());
                         }
                         native::prepare(&paths[0]).map(Some)
                     } else {
@@ -234,7 +235,9 @@ impl Gallery {
                         let mut failures = Vec::new();
                         for path in paths {
                             if !path.is_absolute() || !path.is_file() {
-                                failures.push("Файл недоступен на диске.".to_owned());
+                                failures.push(
+                                    crate::i18n::text("Файл недоступен на диске.").to_owned(),
+                                );
                                 continue;
                             }
                             match native::open(&path, action == Action::Reveal) {
@@ -245,11 +248,19 @@ impl Gallery {
                         if failures.is_empty() {
                             Ok(None)
                         } else {
-                            Err(format!(
-                                "{succeeded} выполнено; {} не удалось. {}",
-                                failures.len(),
-                                failures[0]
-                            ))
+                            Err(if crate::i18n::english() {
+                                format!(
+                                    "{succeeded} completed; {} failed. {}",
+                                    failures.len(),
+                                    failures[0]
+                                )
+                            } else {
+                                format!(
+                                    "{succeeded} выполнено; {} не удалось. {}",
+                                    failures.len(),
+                                    failures[0]
+                                )
+                            })
                         }
                     }
                 })
@@ -258,12 +269,14 @@ impl Gallery {
                 Ok(Some(file)) => window_handle
                     .update(cx, |_, window, _| {
                         if native::owner(window).ok() != Some(owner) {
-                            return Err("Окно отправки больше недоступно.".into());
+                            return Err(
+                                crate::i18n::text("Окно отправки больше недоступно.").into()
+                            );
                         }
                         native::show(owner, file)
                             .map_err(|_| "Windows sharing is unavailable".to_owned())
                     })
-                    .unwrap_or_else(|_| Err("Окно закрыто.".into())),
+                    .unwrap_or_else(|_| Err(crate::i18n::text("Окно закрыто.").into())),
                 Ok(None) => Ok(()),
                 Err(error) => Err(error),
             };
@@ -344,7 +357,9 @@ impl Gallery {
                 .zip(&draft.paths)
                 .all(|(&i, path)| self.entries.get(i).is_some_and(|entry| &entry.path == path));
         if !unchanged {
-            self.notice = Some("Список файлов изменился. Откройте действие заново.".into());
+            self.notice = Some(
+                crate::i18n::text("Список файлов изменился. Откройте действие заново.").into(),
+            );
             self.close_file_operation(window, cx);
             return;
         }
@@ -370,10 +385,17 @@ impl Gallery {
                 self.selected = None;
                 self.stage_selection.clear();
                 self.details_open = false;
-                self.notice = Some(format!(
-                    "{} файл(ов) удалено из сессии. Оригиналы на диске сохранены.",
-                    removed.len()
-                ));
+                self.notice = Some(if crate::i18n::english() {
+                    format!(
+                        "{} file(s) removed from this session. Originals remain on disk.",
+                        removed.len()
+                    )
+                } else {
+                    format!(
+                        "{} файл(ов) удалено из сессии. Оригиналы на диске сохранены.",
+                        removed.len()
+                    )
+                });
             }
             Action::Replace => {
                 let Some(target) = draft.target.filter(|_| draft.acknowledged) else {
@@ -404,8 +426,12 @@ impl Gallery {
                 self.selected = None;
                 self.stage_selection.clear();
                 self.details_open = false;
-                self.notice =
-                    Some("Версия Main заменена в сессии. Оригиналы на диске сохранены.".into());
+                self.notice = Some(
+                    crate::i18n::text(
+                        "Версия Main заменена в сессии. Оригиналы на диске сохранены.",
+                    )
+                    .into(),
+                );
             }
             Action::Order => {
                 if draft.indices == draft.order {
@@ -414,8 +440,12 @@ impl Gallery {
                 for (position, &index) in draft.order.iter().enumerate() {
                     self.entries[index].details.order_position = Some(position);
                 }
-                self.notice =
-                    Some("Порядок сохранён в сессии. Файлы на диске не переименованы.".into());
+                self.notice = Some(
+                    crate::i18n::text(
+                        "Порядок сохранён в сессии. Файлы на диске не переименованы.",
+                    )
+                    .into(),
+                );
             }
             _ => return,
         }

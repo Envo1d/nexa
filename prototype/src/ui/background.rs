@@ -10,14 +10,16 @@ use super::{ACCENT, SHELL};
 /// only stretches this cached smooth gradient rather than regenerating pixels.
 pub(super) fn shell_image() -> Arc<RenderImage> {
     const EDGE: u32 = 256;
+    let shell = crate::appearance::color(SHELL);
+    let accent = crate::appearance::color(ACCENT);
 
     let image = RgbaImage::from_fn(EDGE, EDGE, |x, y| {
         let x = x as f32 / (EDGE - 1) as f32;
         let y = y as f32 / (EDGE - 1) as f32;
-        let amount = glow_amount(x, y) * 0.13;
+        let amount = glow_amount(x, y) * crate::appearance::shell_glow_strength();
         let channel = |shift: u32| {
-            let base = ((SHELL >> shift) & 0xff) as f32;
-            let accent = ((ACCENT >> shift) & 0xff) as f32;
+            let base = ((shell >> shift) & 0xff) as f32;
+            let accent = ((accent >> shift) & 0xff) as f32;
 
             (base + (accent - base) * amount).round() as u8
         };

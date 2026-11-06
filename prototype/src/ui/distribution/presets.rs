@@ -151,16 +151,20 @@ fn validate_name(
     artist: &str,
 ) -> Result<(), &'static str> {
     if name.trim().is_empty() || artist.trim().is_empty() {
-        return Err("Введите название пресета и автора.");
+        return Err(crate::i18n::text("Введите название пресета и автора."));
     }
     if name.chars().count() > 256 || name.chars().any(char::is_control) {
-        return Err("Используйте непустое имя длиной до 256 символов без управляющих символов.");
+        return Err(crate::i18n::text(
+            "Используйте непустое имя длиной до 256 символов без управляющих символов.",
+        ));
     }
     if entries
         .iter()
         .any(|p| Some(p.id) != selected && p.name.to_lowercase() == name.trim().to_lowercase())
     {
-        return Err("Пресет с таким названием уже существует.");
+        return Err(crate::i18n::text(
+            "Пресет с таким названием уже существует.",
+        ));
     }
     Ok(())
 }
@@ -521,7 +525,11 @@ impl Gallery {
         let name = e.name.read(cx).value().trim().to_string();
         let artist = e.artist.read(cx).value().to_string();
         if let Err(error) = state.validate(e.selected, &name, &artist) {
-            state.error = Some(format!("Не удалось сохранить пресет: Error: {error}"));
+            state.error = Some(if crate::i18n::english() {
+                format!("Could not save preset: Error: {error}")
+            } else {
+                format!("Не удалось сохранить пресет: Error: {error}")
+            });
             tracing::warn!(
                 operation = "metadata_presets",
                 reason = error,
@@ -542,7 +550,7 @@ impl Gallery {
         state.entries.retain(|p| p.id != id);
         state.entries.push(Preset { id, name, metadata });
         state.entries.sort_by_key(|a| a.name.to_lowercase());
-        state.notice = Some("Пресет метаданных сохранён.".into());
+        state.notice = Some(crate::i18n::text("Пресет метаданных сохранён.").into());
         tracing::info!(
             operation = "metadata_presets",
             updated = selected.is_some(),
@@ -567,8 +575,10 @@ impl Gallery {
         w.artist_focused = false;
         w.error = None;
         w.presets = false;
-        w.preset_state.notice =
-            Some("Пресет применён к форме. Проверьте данные перед распределением.".into());
+        w.preset_state.notice = Some(
+            crate::i18n::text("Пресет применён к форме. Проверьте данные перед распределением.")
+                .into(),
+        );
         w.preset_state.error = None;
         w.preset_state.trigger_focus.focus(window);
         tracing::info!(

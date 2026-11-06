@@ -1,11 +1,12 @@
 use std::time::{Duration, Instant};
 
-use gpui::{Context, Div, MouseButton, Point, Window, div, prelude::*, px, rgb};
+use gpui::{Context, Div, MouseButton, Point, Window, div, prelude::*, px};
 
 use super::{
     Gallery,
     presentation::{label_button, video_icon_button as icon_button},
 };
+use crate::appearance::rgb;
 use crate::ui::{ACCENT, MUTED};
 
 impl Gallery {
@@ -314,18 +315,18 @@ impl Gallery {
             .and_then(|player| player.read(cx).player())
             .map(|player| player.stats());
         let rows = vec![
-            ("FPS файла", "—".to_owned()),
-            ("Кадров композитору / с", "—".into()),
-            ("Вызовов кадров / с", "—".into()),
+            (crate::i18n::text("FPS файла"), "—".to_owned()),
+            (crate::i18n::text("Кадров композитору / с"), "—".into()),
+            (crate::i18n::text("Вызовов кадров / с"), "—".into()),
             (
-                "Пропущено / всего кадров",
+                crate::i18n::text("Пропущено / всего кадров"),
                 stats
                     .as_ref()
                     .map(|stats| format!("{} / —", stats.frames_dropped))
                     .unwrap_or_else(|| "— / —".into()),
             ),
-            ("Буфер впереди", "— s".into()),
-            ("Декодирование кадра", "— ms".into()),
+            (crate::i18n::text("Буфер впереди"), "— s".into()),
+            (crate::i18n::text("Декодирование кадра"), "— ms".into()),
         ];
         let measurements = rows.into_iter().map(|(label, value)| {
             div()
@@ -336,7 +337,7 @@ impl Gallery {
                 .child(value)
         });
         let note = div().mt(px(10.0)).line_height(px(18.0)).text_color(rgb(MUTED))
-            .child("Данные движка alhazen. Недоступные измерения отмечены знаком —. Частота физического отображения монитором не измеряется.");
+            .child(crate::i18n::text("Данные движка alhazen. Недоступные измерения отмечены знаком —. Частота физического отображения монитором не измеряется."));
 
         div()
             .absolute()
@@ -346,8 +347,9 @@ impl Gallery {
             .p(px(12.0))
             .rounded(px(8.0))
             .border_1()
-            .border_color(gpui::rgba(0xffffff30))
-            .bg(gpui::rgba(0x0a0a12c2))
+            .border_color(crate::appearance::rgba(0xffffff30))
+            .bg(crate::appearance::rgba(0x0a0a12c2))
+            .text_color(rgb(0xffffff))
             .text_size(px(12.0))
             .children(measurements)
             .child(note)

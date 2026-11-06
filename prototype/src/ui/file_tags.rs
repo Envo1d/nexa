@@ -31,7 +31,9 @@ fn add_tag(draft: &mut Vec<String>, value: &str) -> Result<(), &'static str> {
         return Ok(());
     }
     if value.chars().count() > 24 || value.chars().any(char::is_control) || draft.len() >= 100 {
-        return Err("Можно добавить до 100 тегов длиной до 24 символов, без управляющих символов.");
+        return Err(crate::i18n::text(
+            "Можно добавить до 100 тегов длиной до 24 символов, без управляющих символов.",
+        ));
     }
 
     draft.push(value);
@@ -49,7 +51,8 @@ impl Gallery {
             return;
         }
 
-        let query = cx.new(|cx| InputState::new(window, cx).placeholder("Добавить тег…"));
+        let query = cx
+            .new(|cx| InputState::new(window, cx).placeholder(crate::i18n::text("Добавить тег…")));
         let subscription = cx.subscribe_in(&query, window, |this, _, event, window, cx| {
             match event {
                 InputEvent::PressEnter { .. } => this.add_file_tag(None, window, cx),

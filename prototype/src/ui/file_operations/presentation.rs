@@ -1,7 +1,8 @@
-use gpui::{Context, Div, Window, div, prelude::*, px, rgb, rgba};
+use gpui::{Context, Div, Window, div, prelude::*, px};
 use gpui_component::input::Input;
 
 use super::{Action, Gallery};
+use crate::appearance::{rgb, rgba};
 use crate::ui::{ACCENT, LINE, MUTED, SURFACE, TEXT, motion, shell::icon};
 
 fn operation_button(id: impl Into<gpui::ElementId>, label: &str) -> motion::MotionDiv {
@@ -31,10 +32,16 @@ impl Gallery {
         let delete = draft.action == Action::Delete;
         let replace = draft.action == Action::Replace;
         let title = match draft.action {
-            Action::Delete if draft.indices.len() == 1 => "Удалить файл?".into(),
-            Action::Delete => format!("Удалить {} файлов?", draft.indices.len()),
-            Action::Replace => "Заменить в библиотеке".into(),
-            _ => "Изменить порядок файлов".into(),
+            Action::Delete if draft.indices.len() == 1 => crate::i18n::text("Удалить файл?").into(),
+            Action::Delete => {
+                if crate::i18n::english() {
+                    format!("Delete {} files?", draft.indices.len())
+                } else {
+                    format!("Удалить {} файлов?", draft.indices.len())
+                }
+            }
+            Action::Replace => crate::i18n::text("Заменить в библиотеке").into(),
+            _ => crate::i18n::text("Изменить порядок файлов").into(),
         };
         let width = (f32::from(window.viewport_size().width) - 48.).min(if delete {
             500.
@@ -53,13 +60,9 @@ impl Gallery {
             .when(!delete, |body| body.px(px(18.)))
             .when(replace, |body| body.pb(px(16.)));
         if delete {
-            body = body.child(
-                div()
-                    .text_color(rgb(MUTED))
-                    .mt(px(8.))
-                    .mb(px(16.))
-                    .child("Файл будет удалён из Nexa в текущей сессии."),
-            );
+            body = body.child(div().text_color(rgb(MUTED)).mt(px(8.)).mb(px(16.)).child(
+                crate::i18n::text("Файл будет удалён из Nexa в текущей сессии."),
+            ));
             let mut files = div()
                 .id("delete-files")
                 .max_h(px(260.))
@@ -72,12 +75,16 @@ impl Gallery {
             }
             body = body.child(files);
             if draft.indices.len() > 5 {
-                body = body.child(format!("И ещё {} файл(ов).", draft.indices.len() - 5));
+                body = body.child(if crate::i18n::english() {
+                    format!("And {} more file(s).", draft.indices.len() - 5)
+                } else {
+                    format!("И ещё {} файл(ов).", draft.indices.len() - 5)
+                });
             }
-            body = body.child(div().mt(px(16.)).p_3().line_height(px(20.4)).bg(rgba(0x38212833)).border_1().border_color(rgb(0x824254)).rounded(px(8.)).text_color(rgb(0xf2a0b1)).child("Изолированный прототип: оригиналы на диске сохраняются. Корзина и удаление из рабочего каталога ещё не подключены."));
+            body = body.child(div().mt(px(16.)).p_3().line_height(px(20.4)).bg(rgba(0x38212833)).border_1().border_color(rgb(0x824254)).rounded(px(8.)).text_color(rgb(0xf2a0b1)).child(crate::i18n::text("Изолированный прототип: оригиналы на диске сохраняются. Корзина и удаление из рабочего каталога ещё не подключены.")));
         } else if replace {
             body = body.child(version_panel(
-                "Новая версия · Входящие",
+                crate::i18n::text("Новая версия · Входящие"),
                 &self.entries[draft.indices[0]],
                 self.show_previews,
                 false,
@@ -86,14 +93,14 @@ impl Gallery {
             if let Some(target) = draft.target {
                 let main = &self.inactive_workspace.entries[target];
                 body = body
-                    .child(version_panel("Текущая версия · Библиотека", main, self.show_previews, true, cx))
-                    .child(operation_button("replacement-another", "Выбрать другой файл").w_full().on_click(cx.listener(|this, _, _, cx| {
+                    .child(version_panel(crate::i18n::text("Текущая версия · Библиотека"), main, self.show_previews, true, cx))
+                    .child(operation_button("replacement-another", crate::i18n::text("Выбрать другой файл")).w_full().on_click(cx.listener(|this, _, _, cx| {
                         let d = this.file_operation.as_mut().unwrap();
                         d.target = None;
                         d.acknowledged = false;
                         cx.notify();
                     })))
-                    .child("Библиотека сохраняет автора, произведения, персонажей, теги, избранное, название видео и порядок файлов. Новое содержимое, формат и технические сведения заменяют текущую версию.");
+                    .child(crate::i18n::text("Библиотека сохраняет автора, произведения, персонажей, теги, избранное, название видео и порядок файлов. Новое содержимое, формат и технические сведения заменяют текущую версию."));
 
                 let source = &self.entries[draft.indices[0]];
                 let has_annotations = source.favorite
@@ -102,12 +109,12 @@ impl Gallery {
                     || !source.details.copyrights.is_empty()
                     || !source.details.character_copyrights.is_empty();
                 if has_annotations {
-                    body = body.child(div().text_color(rgb(0xefbc79)).child("Существующие аннотации файла из входящих будут отброшены. Аннотации библиотеки имеют приоритет."));
+                    body = body.child(div().text_color(rgb(0xefbc79)).child(crate::i18n::text("Существующие аннотации файла из входящих будут отброшены. Аннотации библиотеки имеют приоритет.")));
                 }
 
                 body = body
-                    .child(div().text_color(rgb(MUTED)).child("Синхронизация с диском выключена. Новая версия остаётся на своём месте и становится файлом библиотеки."))
-                    .child(div().text_color(rgb(0xefbc79)).child("После подтверждения старая версия заменяется в текущей сессии. В изолированном прототипе оригиналы на диске сохраняются; безвозвратное удаление и очистка резервных копий не подключены."))
+                    .child(div().text_color(rgb(MUTED)).child(crate::i18n::text("Синхронизация с диском выключена. Новая версия остаётся на своём месте и становится файлом библиотеки.")))
+                    .child(div().text_color(rgb(0xefbc79)).child(crate::i18n::text("После подтверждения старая версия заменяется в текущей сессии. В изолированном прототипе оригиналы на диске сохраняются; безвозвратное удаление и очистка резервных копий не подключены.")))
                     .child(motion::button("replacement-ack")
                         .keyboard_focus(true).cursor_pointer().flex().items_center().gap(px(10.))
                         .line_height(px(19.2)).py(px(4.))
@@ -115,7 +122,7 @@ impl Gallery {
                             .bg(rgb(if draft.acknowledged { ACCENT } else { 0x393939 }))
                             .flex().items_center().justify_center()
                             .when(draft.acknowledged, |d| d.child(icon("check").size(px(11.)).text_color(rgb(0xffffff)))))
-                        .child("Заменить этот файл библиотеки выбранной версией из входящих.")
+                        .child(crate::i18n::text("Заменить этот файл библиотеки выбранной версией из входящих."))
                         .on_click(cx.listener(|this, _, _, cx| {
                             let d = this.file_operation.as_mut().unwrap();
                             d.acknowledged = !d.acknowledged;
@@ -125,7 +132,7 @@ impl Gallery {
                 body = body.child(
                     div()
                         .font_weight(gpui::FontWeight::SEMIBOLD)
-                        .child("Выберите файл для замены в библиотеке"),
+                        .child(crate::i18n::text("Выберите файл для замены в библиотеке")),
                 );
                 let mut search = div().relative().child(Input::new(&draft.query).h(px(38.)));
                 if draft.suggestions_open {
@@ -199,7 +206,7 @@ impl Gallery {
                         );
                     }
                 }
-                body = body.child(search).child(div().text_color(rgb(MUTED)).child("Введите имена авторов, персонажей, названия произведений или теги через точку с запятой. Должны совпасть все значения. Нажмите Enter или выберите подсказку для поиска по всей библиотеке."));
+                body = body.child(search).child(div().text_color(rgb(MUTED)).child(crate::i18n::text("Введите имена авторов, персонажей, названия произведений или теги через точку с запятой. Должны совпасть все значения. Нажмите Enter или выберите подсказку для поиска по всей библиотеке.")));
                 let query = &draft.applied_query;
                 let source_video = self.entries[draft.indices[0]].video;
                 let candidates: Vec<_> =
@@ -231,23 +238,27 @@ impl Gallery {
                 }
                 body = body.child(candidate_list);
                 if candidates.is_empty() {
-                    body = body.child("Совпадений в Main нет.");
+                    body = body.child(crate::i18n::text("Совпадений в Main нет."));
                 }
                 if candidates.len() > draft.candidate_limit {
                     body = body.child(
-                        operation_button("replacement-more", "Загрузить ещё файлы").on_click(
-                            cx.listener(|this, _, _, cx| {
-                                this.file_operation.as_mut().unwrap().candidate_limit += 100;
-                                cx.notify();
-                            }),
-                        ),
+                        operation_button(
+                            "replacement-more",
+                            crate::i18n::text("Загрузить ещё файлы"),
+                        )
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.file_operation.as_mut().unwrap().candidate_limit += 100;
+                            cx.notify();
+                        })),
                     );
                 }
             }
         } else {
-            body = body.child(div().text_color(rgb(MUTED)).child("Переместите файлы стрелками, чтобы изменить их индексы. Изменения применяются только после сохранения; файлы на диске не переименовываются."));
+            body = body.child(div().text_color(rgb(MUTED)).child(crate::i18n::text("Переместите файлы стрелками, чтобы изменить их индексы. Изменения применяются только после сохранения; файлы на диске не переименовываются.")));
             if draft.order.len() < 2 {
-                body = body.child("У файла нет совпадающих файлов для изменения порядка.");
+                body = body.child(crate::i18n::text(
+                    "У файла нет совпадающих файлов для изменения порядка.",
+                ));
             }
             let mut list = div()
                 .id("file-order-list")
@@ -325,14 +336,14 @@ impl Gallery {
             };
         let save_label = if delete {
             if draft.indices.len() == 1 {
-                "Удалить файл"
+                crate::i18n::text("Удалить файл")
             } else {
-                "Удалить файлы"
+                crate::i18n::text("Удалить файлы")
             }
         } else if replace {
-            "Заменить файл"
+            crate::i18n::text("Заменить файл")
         } else {
-            "Сохранить порядок"
+            crate::i18n::text("Сохранить порядок")
         };
         let panel = div()
             .id("file-operation-panel")
@@ -450,19 +461,37 @@ impl Gallery {
                         footer.border_t_1().border_color(rgb(LINE))
                     })
                     .when(!delete && !replace, |footer| {
-                        footer.child(div().flex_1().text_color(rgb(MUTED)).child(format!(
-                            "{} файлов{}",
-                            draft.order.len(),
-                            if draft.indices != draft.order {
-                                " · Порядок изменён"
+                        footer.child(div().flex_1().text_color(rgb(MUTED)).child(
+                            if crate::i18n::english() {
+                                format!(
+                                    "{} files{}",
+                                    draft.order.len(),
+                                    if draft.indices != draft.order {
+                                        crate::i18n::text(" · Порядок изменён")
+                                    } else {
+                                        ""
+                                    },
+                                )
                             } else {
-                                ""
+                                format!(
+                                    "{} файлов{}",
+                                    draft.order.len(),
+                                    if draft.indices != draft.order {
+                                        crate::i18n::text(" · Порядок изменён")
+                                    } else {
+                                        ""
+                                    },
+                                )
                             },
-                        )))
+                        ))
                     })
-                    .child(operation_button("operation-cancel", "Отмена").on_click(
-                        cx.listener(|this, _, window, cx| this.close_file_operation(window, cx)),
-                    ))
+                    .child(
+                        operation_button("operation-cancel", crate::i18n::text("Отмена")).on_click(
+                            cx.listener(|this, _, window, cx| {
+                                this.close_file_operation(window, cx)
+                            }),
+                        ),
+                    )
                     .child(
                         operation_button("operation-save", save_label)
                             .min_w(px(128.))
@@ -605,7 +634,7 @@ fn version_panel(
                     "",
                 )
                 .child(icon("arrow").size(px(14.)))
-                .child("Открыть файл")
+                .child(crate::i18n::text("Открыть файл"))
                 .on_click(cx.listener(move |this, _, window, cx| {
                     this.preview_replacement(main, window, cx)
                 })),
@@ -618,12 +647,12 @@ fn replacement_file(entry: &crate::catalog::Entry, previews: bool) -> Div {
         .details
         .resolution
         .map(|(w, h)| format!("{w} × {h}"))
-        .unwrap_or_else(|| "Разрешение недоступно".into());
+        .unwrap_or_else(|| crate::i18n::text("Разрешение недоступно").into());
     let size = entry
         .details
         .size
         .map(|bytes| format!("{:.2} MB", bytes as f64 / 1024. / 1024.))
-        .unwrap_or_else(|| "Размер недоступен".into());
+        .unwrap_or_else(|| crate::i18n::text("Размер недоступен").into());
     let mut description = div()
         .flex_1()
         .min_w_0()
@@ -648,7 +677,7 @@ fn replacement_file(entry: &crate::catalog::Entry, previews: bool) -> Div {
                 entry
                     .duration
                     .as_deref()
-                    .unwrap_or("Длительность недоступна")
+                    .unwrap_or(crate::i18n::text("Длительность недоступна"))
             )
         } else {
             String::new()

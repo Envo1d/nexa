@@ -2,8 +2,10 @@ use std::time::{Duration, Instant};
 
 use gpui::{
     AnyElement, App, Background, Div, ElementId, Hsla, Interactivity, IntoElement, ParentElement,
-    RenderOnce, Rgba, Stateful, StyleRefinement, Styled, Window, div, prelude::*, rgba,
+    RenderOnce, Rgba, Stateful, StyleRefinement, Styled, Window, div, prelude::*,
 };
+
+use crate::appearance::rgba;
 
 pub(super) fn enabled() -> bool {
     static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
@@ -257,13 +259,13 @@ impl RenderOnce for MotionDiv {
             let ring_background = self.focus_ring_background;
             self.element = self.element.track_focus(&focus).focus(move |style| {
                 let mut shadows = vec![gpui::BoxShadow {
-                    color: gpui::rgba(0xa786ff80).into(),
+                    color: crate::appearance::rgba(0xa786ff80).into(),
                     offset: gpui::point(gpui::px(0.0), gpui::px(0.0)),
                     blur_radius: gpui::px(0.0),
                     spread_radius: gpui::px(if ring_background.is_some() { 5.0 } else { 2.0 }),
                 }];
                 if let Some(background) = ring_background {
-                    shadows[0].color = gpui::rgb(super::ACCENT).into();
+                    shadows[0].color = crate::appearance::rgb(super::ACCENT).into();
                     shadows.push(gpui::BoxShadow {
                         color: background.into(),
                         offset: gpui::point(gpui::px(0.), gpui::px(0.)),
@@ -272,7 +274,9 @@ impl RenderOnce for MotionDiv {
                     });
                     style.shadow(shadows)
                 } else {
-                    style.border_color(gpui::rgb(super::ACCENT)).shadow(shadows)
+                    style
+                        .border_color(crate::appearance::rgb(super::ACCENT))
+                        .shadow(shadows)
                 }
             });
             if ring_background.is_some() && focus.is_focused(window) {
@@ -285,7 +289,7 @@ impl RenderOnce for MotionDiv {
                         .left(gpui::px(-5.))
                         .rounded(gpui::px(11.))
                         .border_2()
-                        .border_color(gpui::rgb(super::ACCENT)),
+                        .border_color(crate::appearance::rgb(super::ACCENT)),
                 );
             }
         }

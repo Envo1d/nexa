@@ -1,7 +1,8 @@
-use gpui::{Context, Div, Entity, Focusable, Window, div, img, prelude::*, px, rgb};
+use gpui::{Context, Div, Entity, Focusable, Window, div, img, prelude::*, px};
 use gpui_component::input::{Input, InputEvent, InputState};
 
 use super::{Gallery, LINE, MUTED, SHELL, SURFACE, TEXT, motion, shell};
+use crate::appearance::rgb;
 
 mod batch;
 mod metadata;
@@ -112,7 +113,9 @@ impl Gallery {
                 ))
             })
             .collect();
-        let query = cx.new(|cx| InputState::new(window, cx).placeholder("Добавить значение…"));
+        let query = cx.new(|cx| {
+            InputState::new(window, cx).placeholder(crate::i18n::text("Добавить значение…"))
+        });
         let subscription = cx.subscribe_in(&query, window, |this, input, event, window, cx| {
             if matches!(event, InputEvent::PressEnter { .. }) {
                 let active = this.distribution.as_ref().and_then(|w| w.active);
@@ -130,7 +133,9 @@ impl Gallery {
             }
             cx.notify();
         });
-        let artist = cx.new(|cx| InputState::new(window, cx).placeholder("Введите: автор…"));
+        let artist = cx.new(|cx| {
+            InputState::new(window, cx).placeholder(crate::i18n::text("Введите: автор…"))
+        });
         let artist_subscription = cx.subscribe_in(&artist, window, |this, _, event, _, cx| {
             if let Some(w) = &mut this.distribution {
                 match event {
@@ -163,7 +168,9 @@ impl Gallery {
             focused: false,
             artist_focused: false,
             active: None,
-            title: cx.new(|cx| InputState::new(window, cx).placeholder("Введите название видео")),
+            title: cx.new(|cx| {
+                InputState::new(window, cx).placeholder(crate::i18n::text("Введите название видео"))
+            }),
             scroll: gpui::ScrollHandle::new(),
             background: wizard_background(),
             backdrop: super::modal_backdrop::capture(window.scale_factor()),
@@ -221,11 +228,13 @@ impl Gallery {
         w.query.update(cx, |s, cx| {
             s.set_placeholder(
                 match step {
-                    1 => "Добавить: произведения…",
-                    2 => "Добавить: теги…",
-                    3 if w.values[0].is_empty() => "Сначала выберите произведение",
-                    3 => "Добавить: персонажи…",
-                    _ => "Добавить значение…",
+                    1 => crate::i18n::text("Добавить: произведения…"),
+                    2 => crate::i18n::text("Добавить: теги…"),
+                    3 if w.values[0].is_empty() => {
+                        crate::i18n::text("Сначала выберите произведение")
+                    }
+                    3 => crate::i18n::text("Добавить: персонажи…"),
+                    _ => crate::i18n::text("Добавить значение…"),
                 },
                 window,
                 cx,
@@ -290,7 +299,7 @@ impl Gallery {
                 reason = "required_fields",
                 "Metadata confirmation rejected"
             );
-            w.error = Some("Укажите художника и название для видео.".into());
+            w.error = Some(crate::i18n::text("Укажите художника и название для видео.").into());
             w.scroll.scroll_to_bottom();
             cx.notify();
             return;
@@ -415,34 +424,38 @@ impl Gallery {
                 .border_color(rgb(LINE))
                 .bg(rgb(SURFACE))
                 .child(row(
-                    "Действие",
+                    crate::i18n::text("Действие"),
                     if w.editing {
-                        "Метаданные обновлены"
+                        crate::i18n::text("Метаданные обновлены")
                     } else {
-                        "Распределение завершено"
+                        crate::i18n::text("Распределение завершено")
                     }
                     .into(),
                 ))
-                .child(row("Файлы", w.completed.to_string()))
+                .child(row(crate::i18n::text("Файлы"), w.completed.to_string()))
                 .child(row(
-                    "Очередь",
-                    format!("{} осталось", remaining - w.completed),
+                    crate::i18n::text("Очередь"),
+                    if crate::i18n::english() {
+                        format!("{} remaining", remaining - w.completed)
+                    } else {
+                        format!("{} осталось", remaining - w.completed)
+                    },
                 ));
             if remaining > w.completed {
                 summary = summary
                     .child(row(
-                        "Следующий файл",
+                        crate::i18n::text("Следующий файл"),
                         self.entries[w.queue[w.position + w.completed]]
                             .details
                             .filename
                             .clone(),
                     ))
                     .child(row(
-                        "Введённые сведения",
+                        crate::i18n::text("Введённые сведения"),
                         if w.retain {
-                            "Сохранить для следующего файла"
+                            crate::i18n::text("Сохранить для следующего файла")
                         } else {
-                            "Очистить для следующего файла"
+                            crate::i18n::text("Очистить для следующего файла")
                         }
                         .into(),
                     ));
@@ -483,42 +496,50 @@ impl Gallery {
                             ),
                     )
                     .child(
-                        heading("Готово!")
+                        heading(crate::i18n::text("Готово!"))
                             .text_size(px(22.))
                             .line_height(px(27.))
                             .mb_2(),
                     )
                     .child(note(&if w.completed == 1 {
                         if w.editing {
-                            "Метаданные файла обновлены на время демосеанса."
+                            crate::i18n::text("Метаданные файла обновлены на время демосеанса.")
                         } else {
-                            "Файл распределён на время демосеанса."
+                            crate::i18n::text("Файл распределён на время демосеанса.")
                         }
                         .into()
                     } else {
-                        format!("Файлы ({}) распределены на время демосеанса.", w.completed)
+                        if crate::i18n::english() {
+                            format!("Files ({}) distributed for this demo session.", w.completed)
+                        } else {
+                            format!("Файлы ({}) распределены на время демосеанса.", w.completed)
+                        }
                     }))
                     .child(summary),
             );
         } else {
             let descriptions = [
-                "Проверьте исходный файл перед добавлением сведений в библиотеку.",
-                "Выберите произведения, к которым относятся персонажи.",
-                "Добавьте теги, чтобы проще находить этот файл в библиотеке.",
-                "Добавьте персонажей и укажите для каждого выбранное произведение.",
-                "Укажите автора и название, используемое в именах видеофайлов.",
-                "Проверьте сведения перед подтверждением.",
+                crate::i18n::text(
+                    "Проверьте исходный файл перед добавлением сведений в библиотеку.",
+                ),
+                crate::i18n::text("Выберите произведения, к которым относятся персонажи."),
+                crate::i18n::text("Добавьте теги, чтобы проще находить этот файл в библиотеке."),
+                crate::i18n::text(
+                    "Добавьте персонажей и укажите для каждого выбранное произведение.",
+                ),
+                crate::i18n::text("Укажите автора и название, используемое в именах видеофайлов."),
+                crate::i18n::text("Проверьте сведения перед подтверждением."),
             ];
             body = body
                 .child(
                     heading(if w.step == 0 {
-                        "Информация о файле"
+                        crate::i18n::text("Информация о файле")
                     } else {
                         match w.step {
-                            4 => "Дополнительные сведения",
-                            5 if w.editing => "Подтвердить изменения метаданных",
-                            5 => "Подтвердить распределение",
-                            _ => STEPS[w.step],
+                            4 => crate::i18n::text("Дополнительные сведения"),
+                            5 if w.editing => crate::i18n::text("Подтвердить изменения метаданных"),
+                            5 => crate::i18n::text("Подтвердить распределение"),
+                            _ => crate::i18n::text(STEPS[w.step]),
                         }
                     })
                     .when(compact && w.step == 0, |d| d.mb(px(10.))),
@@ -530,7 +551,9 @@ impl Gallery {
                             .mb(px(if w.step == 0 { 12. } else { 22. }))
                             .child(
                                 note(if w.editing && w.step == 0 {
-                                    "Проверьте файл перед изменением сведений в библиотеке."
+                                    crate::i18n::text(
+                                        "Проверьте файл перед изменением сведений в библиотеке.",
+                                    )
                                 } else {
                                     descriptions[w.step]
                                 })
@@ -574,7 +597,8 @@ impl Gallery {
                                         .px(px(6.))
                                         .py(px(4.))
                                         .rounded(px(4.))
-                                        .bg(gpui::rgba(0x0a0a12c2))
+                                        .bg(crate::appearance::rgba(0x0a0a12c2))
+                                        .text_color(rgb(0xffffff))
                                         .text_size(px(10.))
                                         .line_height(px(12.))
                                         .child(entry.extension.clone()),
@@ -588,7 +612,8 @@ impl Gallery {
                                             .px(px(6.))
                                             .py(px(4.))
                                             .rounded(px(4.))
-                                            .bg(gpui::rgba(0x0a0a12c2))
+                                            .bg(crate::appearance::rgba(0x0a0a12c2))
+                                            .text_color(rgb(0xffffff))
                                             .text_size(px(10.))
                                             .line_height(px(12.))
                                             .child(duration),
@@ -599,7 +624,7 @@ impl Gallery {
                             button("wizard-open", "")
                                 .w_auto()
                                 .child(shell::icon("arrow").size(px(14.)))
-                                .child("Открыть файл")
+                                .child(crate::i18n::text("Открыть файл"))
                                 .on_click(cx.listener(|this, _, window, cx| {
                                     let index = this.distribution.as_ref().unwrap().queue
                                         [this.distribution.as_ref().unwrap().position];
@@ -619,15 +644,15 @@ impl Gallery {
                         .gap(px(if compact { 6. } else { 8. }))
                         .child(technical_inline(
                             compact,
-                            "Имя файла",
+                            crate::i18n::text("Имя файла"),
                             entry.details.filename.clone(),
                         ))
                         .child(technical_inline(
                             compact,
                             if w.editing {
-                                "Путь в библиотеке"
+                                crate::i18n::text("Путь в библиотеке")
                             } else {
-                                "Путь во входящих"
+                                crate::i18n::text("Путь во входящих")
                             },
                             entry.details.relative_path.clone(),
                         ))
@@ -637,20 +662,20 @@ impl Gallery {
                                 .gap(px(if compact { 6. } else { 8. }))
                                 .child(technical(
                                     compact,
-                                    "Тип файла",
+                                    crate::i18n::text("Тип файла"),
                                     format!(
                                         "{} ({})",
                                         if entry.video {
-                                            "Видео"
+                                            crate::i18n::text("Видео")
                                         } else {
-                                            "Изображение"
+                                            crate::i18n::text("Изображение")
                                         },
                                         entry.extension
                                     ),
                                 ))
                                 .child(technical(
                                     compact,
-                                    "Изменён",
+                                    crate::i18n::text("Изменён"),
                                     entry.date_label.clone().unwrap_or("—".into()),
                                 )),
                         )
@@ -660,16 +685,22 @@ impl Gallery {
                                 .gap(px(if compact { 6. } else { 8. }))
                                 .child(technical(
                                     compact,
-                                    "Размер",
+                                    crate::i18n::text("Размер"),
                                     entry
                                         .details
                                         .size
-                                        .map(|v| format!("{:.2} МБ", v as f64 / 1048576.))
+                                        .map(|v| {
+                                            if crate::i18n::english() {
+                                                format!("{:.2} MB", v as f64 / 1048576.)
+                                            } else {
+                                                format!("{:.2} МБ", v as f64 / 1048576.)
+                                            }
+                                        })
                                         .unwrap_or("—".into()),
                                 ))
                                 .child(technical(
                                     compact,
-                                    "Разрешение",
+                                    crate::i18n::text("Разрешение"),
                                     entry
                                         .details
                                         .resolution
@@ -684,7 +715,7 @@ impl Gallery {
                                     .gap(px(if compact { 6. } else { 8. }))
                                     .child(technical(
                                         compact,
-                                        "Длительность",
+                                        crate::i18n::text("Длительность"),
                                         entry
                                             .duration
                                             .as_ref()
@@ -719,10 +750,19 @@ impl Gallery {
                         .content_start()
                         .gap(px(6.));
                     if w.values[category].is_empty() {
-                        selected = selected.child(note(&format!(
-                            "Пока не выбрано: {}.",
-                            STEPS[w.step].to_lowercase()
-                        )));
+                        selected = selected.child(note(
+                            &(if crate::i18n::english() {
+                                format!(
+                                    "Not selected yet: {}.",
+                                    crate::i18n::text(STEPS[w.step]).to_lowercase()
+                                )
+                            } else {
+                                format!(
+                                    "Пока не выбрано: {}.",
+                                    crate::i18n::text(STEPS[w.step]).to_lowercase()
+                                )
+                            }),
+                        ));
                     }
                     for (index, value) in w.values[category].iter().enumerate() {
                         selected = selected.child(
@@ -750,11 +790,17 @@ impl Gallery {
                             div()
                                 .flex()
                                 .justify_between()
-                                .child(note(STEPS[w.step]))
+                                .child(note(crate::i18n::text(STEPS[w.step])))
                                 .when(!w.values[category].is_empty(), |d| {
                                     d.child(
-                                        note(&format!("{} выбрано", w.values[category].len()))
-                                            .text_size(px(10.)),
+                                        note(
+                                            &(if crate::i18n::english() {
+                                                format!("{} selected", w.values[category].len())
+                                            } else {
+                                                format!("{} выбрано", w.values[category].len())
+                                            }),
+                                        )
+                                        .text_size(px(10.)),
                                     )
                                 }),
                         )
@@ -765,7 +811,7 @@ impl Gallery {
                 }
                 4 => {
                     body = body
-                        .child(note("Автор"))
+                        .child(note(crate::i18n::text("Автор")))
                         .child(div().h_2())
                         .child(self.wizard_input(true, cx))
                         .child(div().h_6());
@@ -774,10 +820,13 @@ impl Gallery {
                             .iter()
                             .any(|&i| self.wizard_entry(w.health_target, i).video)
                     {
-                        body = body.child(note("Название видео")).child(div().h_2()).child(
-                            input_surface("wizard-title-input", &w.title, false, cx)
-                                .child(input(&w.title).flex_1()),
-                        );
+                        body = body
+                            .child(note(crate::i18n::text("Название видео")))
+                            .child(div().h_2())
+                            .child(
+                                input_surface("wizard-title-input", &w.title, false, cx)
+                                    .child(input(&w.title).flex_1()),
+                            );
                     }
                 }
                 _ => {
@@ -823,17 +872,19 @@ impl Gallery {
                                         .mb(px(6.)),
                                     )
                                     .child(note(&if w.all {
-                                        "Одинаковые метаданные и название видео будут применены ко всем перечисленным файлам.".into()
+                                        crate::i18n::text("Одинаковые метаданные и название видео будут применены ко всем перечисленным файлам.").into()
                                     } else {
                                         entry
                                             .details
                                             .resolution
                                             .map(|(x, y)| {
-                                                format!(
-                                                    "{:.2} МБ · {x} × {y}",
+                                                if crate::i18n::english() { format!("{:.2} MB · {x} × {y}",
                                                     entry.details.size.unwrap_or(0) as f64
                                                         / 1048576.
-                                                )
+                                                ) } else { format!("{:.2} МБ · {x} × {y}",
+                                                    entry.details.size.unwrap_or(0) as f64
+                                                        / 1048576.
+                                                ) }
                                             })
                                             .unwrap_or("—".into())
                                     })),
@@ -848,16 +899,20 @@ impl Gallery {
                         .border_color(rgb(LINE))
                         .bg(rgb(SURFACE));
                     for (label, value) in [
-                        ("Произведения", w.values[0].join(", ")),
-                        ("Автор", w.artist.read(cx).value().trim().to_string()),
-                        ("Персонажи", w.values[2].join(", ")),
-                        ("Теги", w.values[1].join(", ")),
+                        (crate::i18n::text("Произведения"), w.values[0].join(", ")),
                         (
-                            "Название видео",
+                            crate::i18n::text("Автор"),
+                            w.artist.read(cx).value().trim().to_string(),
+                        ),
+                        (crate::i18n::text("Персонажи"), w.values[2].join(", ")),
+                        (crate::i18n::text("Теги"), w.values[1].join(", ")),
+                        (
+                            crate::i18n::text("Название видео"),
                             w.title.read(cx).value().trim().to_string(),
                         ),
                     ] {
-                        if label == "Название видео" && !entry.video {
+                        if label == crate::i18n::text("Название видео") && !entry.video
+                        {
                             continue;
                         }
 
@@ -882,7 +937,7 @@ impl Gallery {
                                 .w(px(170.))
                                 .mt(px(14.))
                                 .child(shell::icon("plus").size(px(15.)))
-                                .child("Сохранить как пресет…")
+                                .child(crate::i18n::text("Сохранить как пресет…"))
                                 .when(w.artist.read(cx).value().trim().is_empty(), |d| {
                                     d.opacity(0.35)
                                         .cursor_default()
@@ -918,9 +973,11 @@ impl Gallery {
                 .mb(px(if w.step == 0 { 0. } else { 15. }))
                 .flex_shrink_0()
                 .child(
-                    note("Демосеанс · Изменения не сохраняются на диск.")
-                        .text_size(px(11.))
-                        .line_height(px(18.7)),
+                    note(crate::i18n::text(
+                        "Демосеанс · Изменения не сохраняются на диск.",
+                    ))
+                    .text_size(px(11.))
+                    .line_height(px(18.7)),
                 ),
         );
         let mut steps = div()
@@ -991,7 +1048,7 @@ impl Gallery {
                             .when(i == w.step && !w.done, |d| {
                                 d.font_weight(gpui::FontWeight::SEMIBOLD)
                             })
-                            .child(*label),
+                            .child(crate::i18n::text(label)),
                     )
                     .on_click(cx.listener(move |this, _, window, cx| {
                         if !this.distribution.as_ref().unwrap().done {
@@ -1016,14 +1073,18 @@ impl Gallery {
                             .path("icons/arrow-left.svg")
                             .size(px(15.)),
                     )
-                    .child("Назад")
+                    .child(crate::i18n::text("Назад"))
                     .on_click(cx.listener(|this, _, window, cx| {
                         let step = this.distribution.as_ref().unwrap().step;
                         this.wizard_step(step - 1, window, cx);
                     })),
             );
         }
-        let all_label = format!("Распределить все ({remaining})");
+        let all_label = if crate::i18n::english() {
+            format!("Distribute all ({remaining})")
+        } else {
+            format!("Распределить все ({remaining})")
+        };
         footer = footer
             .child(div().flex_1())
             .when(!w.done || remaining > w.completed, |d| {
@@ -1031,9 +1092,9 @@ impl Gallery {
                     button(
                         "wizard-cancel",
                         if w.done {
-                            "Закрыть"
+                            crate::i18n::text("Закрыть")
                         } else {
-                            "Отмена"
+                            crate::i18n::text("Отмена")
                         },
                     )
                     .px(px(18.))
@@ -1045,22 +1106,22 @@ impl Gallery {
                     "wizard-next",
                     if w.done {
                         if remaining > w.completed {
-                            "Следующий файл"
+                            crate::i18n::text("Следующий файл")
                         } else {
-                            "Готово"
+                            crate::i18n::text("Готово")
                         }
                     } else if w.step == 5 {
                         if w.all {
                             &all_label
                         } else {
                             if w.editing {
-                                "Сохранить изменения"
+                                crate::i18n::text("Сохранить изменения")
                             } else {
-                                "Распределить файл"
+                                crate::i18n::text("Распределить файл")
                             }
                         }
                     } else {
-                        "Далее"
+                        crate::i18n::text("Далее")
                     },
                 )
                 .with_focus(&w.next_focus)
@@ -1077,7 +1138,11 @@ impl Gallery {
                     rgb(0x7b43d9),
                     rgb(0x6839ce),
                 ))
-                .hover_colors(Some(rgb(0x8853e1).into()), None, Some(gpui::rgba(0).into()))
+                .hover_colors(
+                    Some(rgb(0x8853e1).into()),
+                    None,
+                    Some(crate::appearance::rgba(0).into()),
+                )
                 .on_click(cx.listener(|this, _, window, cx| {
                     let w = this.distribution.as_ref().unwrap();
                     if w.done {
@@ -1092,7 +1157,7 @@ impl Gallery {
         div()
             .absolute()
             .inset_0()
-            .bg(gpui::rgba(0x05040cab))
+            .bg(crate::appearance::rgba(0x05040cab))
             .flex()
             .items_center()
             .justify_center()
@@ -1150,28 +1215,31 @@ impl Gallery {
                                 div()
                                     .flex_1()
                                     .child(
-                                        heading(if w.editing { "Редактировать метаданные" } else { "Распределить в библиотеку" })
+                                        heading(if w.editing { crate::i18n::text("Редактировать метаданные") } else { crate::i18n::text("Распределить в библиотеку") })
                                             .text_size(px(14.))
                                             .line_height(px(17.)),
                                     )
                                     .child(div().mt(px(5.)).child(note(
                                         &(if w.done {
-                                            format!("Завершено файлов: {} · Осталось: {}", w.completed, remaining - w.completed)
+                                            if crate::i18n::english() { format!("Files completed: {} · Remaining: {}", w.completed, remaining - w.completed) } else { format!("Завершено файлов: {} · Осталось: {}", w.completed, remaining - w.completed) }
                                         } else if w.queue.len() == 1 {
                                             entry.details.filename.clone()
                                         } else {
-                                            format!(
-                                                "Файл {} из {} · {}",
+                                            if crate::i18n::english() { format!("File {} of {} · {}",
                                                 w.position + 1,
                                                 w.queue.len(),
                                                 entry.details.filename
-                                            )
+                                            ) } else { format!("Файл {} из {} · {}",
+                                                w.position + 1,
+                                                w.queue.len(),
+                                                entry.details.filename
+                                            ) }
                                         }),
                                     ))),
                             )
                             .when(!w.done && !w.editing, |header| header.child(self.preset_control(window, cx)))
                             .child(
-                                motion::button("wizard-close").with_focus(&w.close_focus).focus_ring(rgb(SURFACE)).cursor_pointer().rounded(px(5.)).hover_colors(Some(gpui::rgba(0xa786ff1a).into()), Some(rgb(TEXT).into()), None)
+                                motion::button("wizard-close").with_focus(&w.close_focus).focus_ring(rgb(SURFACE)).cursor_pointer().rounded(px(5.)).hover_colors(Some(crate::appearance::rgba(0xa786ff1a).into()), Some(rgb(TEXT).into()), None)
                                     .size(px(28.))
                                     .flex()
                                     .items_center()
@@ -1199,8 +1267,8 @@ impl Gallery {
                         d.child(
                             motion::button("wizard-retain").keyboard_focus(true).focus_ring(rgb(SURFACE)).cursor_pointer()
                             .mx(px(22.)).py_3().border_t_1().border_color(rgb(LINE)).flex().items_center().justify_between().gap_4().flex_shrink_0()
-                            .child(div().flex_1().text_size(px(13.)).line_height(px(16.)).child("Сохранять введённые сведения между файлами")
-                                .child(div().mt_1().text_size(px(11.)).text_color(rgb(MUTED)).child("Произведения, автор, персонажи, теги и название видео")))
+                            .child(div().flex_1().text_size(px(13.)).line_height(px(16.)).child(crate::i18n::text("Сохранять введённые сведения между файлами"))
+                                .child(div().mt_1().text_size(px(11.)).text_color(rgb(MUTED)).child(crate::i18n::text("Произведения, автор, персонажи, теги и название видео"))))
                             .child(super::filters::Switch { active: w.retain })
                             .on_click(cx.listener(|this, _, _, cx| {
                                 let w = this.distribution.as_mut().unwrap();
@@ -1236,7 +1304,10 @@ fn row(label: &str, value: String) -> Div {
     div()
         .w_full()
         .py(px(9.))
-        .when(label != "Название видео", |d| d.border_b_1())
+        .when(
+            label != crate::i18n::text("Название видео"),
+            |d| d.border_b_1(),
+        )
         .border_color(rgb(LINE))
         .flex()
         .gap(px(16.))
@@ -1519,7 +1590,13 @@ impl Gallery {
                 .border_color(rgb(LINE))
                 .bg(rgb(0x1a1827))
                 .occlude()
-                .child(note(&format!("К какому произведению относится {name}?")));
+                .child(note(
+                    &(if crate::i18n::english() {
+                        format!("Which copyright does {name} belong to?")
+                    } else {
+                        format!("К какому произведению относится {name}?")
+                    }),
+                ));
             for (i, copyright) in w.values[0].iter().enumerate() {
                 let value = format!("{name} ({copyright})");
                 popup = popup.child(
@@ -1533,12 +1610,14 @@ impl Gallery {
                         })),
                 );
             }
-            popup = popup.child(button("wizard-assignment-cancel", "Отмена").on_click(
-                cx.listener(|this, _, _, cx| {
-                    this.distribution.as_mut().unwrap().assignment = None;
-                    cx.notify();
-                }),
-            ));
+            popup = popup.child(
+                button("wizard-assignment-cancel", crate::i18n::text("Отмена")).on_click(
+                    cx.listener(|this, _, _, cx| {
+                        this.distribution.as_mut().unwrap().assignment = None;
+                        cx.notify();
+                    }),
+                ),
+            );
             field = field.child(popup);
         } else if focused && !options.is_empty() && !disabled {
             let mut popup = div()

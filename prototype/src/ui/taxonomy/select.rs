@@ -1,10 +1,11 @@
 use gpui::{
     App, BoxShadow, Context, Focusable, IntoElement, RenderOnce, WeakEntity, Window, div, point,
-    prelude::*, px, rgb, rgba,
+    prelude::*, px,
 };
 use gpui_component::{Selectable, popover::Popover};
 
 use super::super::{ACCENT, Gallery, LINE, MUTED, TEXT, motion, shell::icon};
+use crate::appearance::{rgb, rgba};
 use crate::taxonomy::Category;
 
 impl Gallery {

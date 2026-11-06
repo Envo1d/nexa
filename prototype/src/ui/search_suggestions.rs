@@ -1,10 +1,9 @@
 use std::collections::BTreeMap;
 
-use gpui::{
-    BoxShadow, Context, KeyDownEvent, MouseButton, Window, div, point, prelude::*, px, rgb, rgba,
-};
+use gpui::{BoxShadow, Context, KeyDownEvent, MouseButton, Window, div, point, prelude::*, px};
 
 use super::{Gallery, MUTED, TEXT, motion};
+use crate::appearance::{rgb, rgba};
 use crate::{
     naming,
     taxonomy::{Catalog, Category, Record},

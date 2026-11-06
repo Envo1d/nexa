@@ -1,5 +1,7 @@
+mod appearance;
 mod catalog;
 mod dialogs;
+mod i18n;
 mod logging;
 mod previews;
 mod taxonomy;
@@ -17,7 +19,7 @@ mod windows_com;
 use std::path::PathBuf;
 
 use gpui::{App, AppContext, Application, Bounds, WindowBounds, WindowOptions, px, size};
-use gpui_component::{Root, Theme, ThemeMode};
+use gpui_component::Root;
 
 fn main() {
     logging::init();
@@ -44,19 +46,8 @@ fn main() {
         .run(move |cx: &mut App| {
             gpui_component::init(cx);
             ui::init(cx);
-            Theme::change(ThemeMode::Dark, None, cx);
-            let theme = Theme::global_mut(cx);
-            theme.font_family = "Segoe UI".into();
-            theme.background = gpui::rgb(0x1a1827).into();
-            theme.foreground = gpui::rgb(0xeeedf6).into();
-            theme.border = gpui::rgb(0x252434).into();
-            theme.input = gpui::rgb(0x252434).into();
-            theme.ring = gpui::rgb(0xa786ff).into();
-            theme.muted_foreground = gpui::rgb(0xa39bb5).into();
-            theme.popover = gpui::rgb(0x1a1827).into();
-            theme.primary = gpui::rgb(0x7b43d9).into();
-            theme.scrollbar_thumb = gpui::rgb(0x4d4a5c).into();
-            theme.scrollbar_thumb_hover = gpui::rgb(0x4d4a5c).into();
+            appearance::apply(0, cx);
+            i18n::apply(0);
             cx.on_window_closed(|cx| {
                 if cx.windows().is_empty() {
                     cx.quit();

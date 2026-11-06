@@ -19,10 +19,10 @@ pub(super) enum SortMode {
 impl SortMode {
     pub fn label(self) -> &'static str {
         match self {
-            Self::Newest => "Сначала новые",
-            Self::Oldest => "Сначала старые",
-            Self::NameAscending => "По имени А → Я",
-            Self::NameDescending => "По имени Я → А",
+            Self::Newest => crate::i18n::text("Сначала новые"),
+            Self::Oldest => crate::i18n::text("Сначала старые"),
+            Self::NameAscending => crate::i18n::text("По имени А → Я"),
+            Self::NameDescending => crate::i18n::text("По имени Я → А"),
         }
     }
 }

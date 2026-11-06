@@ -44,6 +44,7 @@ pub(super) struct Settings {
     fields: [Entity<InputState>; 3],
     language: usize,
     theme: usize,
+    saved_appearance: [usize; 2],
     select_open: [bool; 2],
     select_active: [usize; 2],
     select_focus: [gpui::FocusHandle; 2],
@@ -78,6 +79,7 @@ impl Settings {
             fields,
             language: 0,
             theme: 0,
+            saved_appearance: [0, 0],
             select_open: [false; 2],
             select_active: [0; 2],
             select_focus: std::array::from_fn(|_| cx.focus_handle()),
@@ -110,6 +112,32 @@ fn section_at_offset(offset: f32, maximum: f32, positions: &[f32; 9]) -> usize {
 }
 
 impl Gallery {
+    fn apply_interface_preferences(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.settings.saved_appearance = [self.settings.language, self.settings.theme];
+        let locale = crate::i18n::apply(self.settings.language);
+        crate::appearance::apply(self.settings.theme, cx);
+        self.shell_background = super::background::shell_image();
+        self.notice = None;
+        self.search.update(cx, |state, cx| {
+            state.set_placeholder(
+                crate::i18n::text("Метаданные через точку с запятой"),
+                window,
+                cx,
+            );
+        });
+        self.refresh_taxonomy_locale(window, cx);
+        self.refresh_viewer_locale(window, cx);
+        self.refresh_health_locale();
+        self.refresh_duplicates_locale();
+        tracing::info!(
+            operation = "interface_preferences",
+            locale,
+            theme = self.settings.theme,
+            storage = "demo_session",
+            "Saved language and theme applied to all windows"
+        );
+    }
+
     pub(super) fn open_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.loading || self.dialog_open {
             return;
@@ -117,6 +145,7 @@ impl Gallery {
 
         self.switch_workspace(false, window, cx);
         self.settings_open = true;
+        [self.settings.language, self.settings.theme] = self.settings.saved_appearance;
         self.player = None;
         self.viewer = false;
         self.marquee = None;

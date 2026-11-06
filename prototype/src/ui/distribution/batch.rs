@@ -1,6 +1,7 @@
-use gpui::{Context, Div, Window, div, prelude::*, px, rgb};
+use gpui::{Context, Div, Window, div, prelude::*, px};
 
 use super::{Gallery, LINE, MUTED, TEXT, motion, presets::scrolling};
+use crate::appearance::rgb;
 
 impl Gallery {
     pub(super) fn wizard_scope(&self, window: &Window, cx: &mut Context<Self>) -> Div {
@@ -9,8 +10,12 @@ impl Gallery {
         let mut choices = div().flex().flex_wrap().gap(px(18.));
 
         for (i, label) in [
-            "Текущий файл".to_string(),
-            format!("Все оставшиеся файлы ({remaining})"),
+            crate::i18n::text("Текущий файл").to_string(),
+            (if crate::i18n::english() {
+                format!("All remaining files ({remaining})")
+            } else {
+                format!("Все оставшиеся файлы ({remaining})")
+            }),
         ]
         .into_iter()
         .enumerate()
@@ -100,7 +105,7 @@ impl Gallery {
                     .text_size(px(11.))
                     .line_height(px(15.))
                     .text_color(rgb(MUTED))
-                    .child("Применить эти сведения к"),
+                    .child(crate::i18n::text("Применить эти сведения к")),
             )
             .child(choices)
     }
@@ -121,7 +126,11 @@ impl Gallery {
                     .gap(px(5.))
                     .text_color(rgb(0xd0b4fa))
                     .child(if w.batch_expanded { "▾" } else { "▸" })
-                    .child(format!("Файлы для распределения ({remaining})"))
+                    .child(if crate::i18n::english() {
+                        format!("Files to distribute ({remaining})")
+                    } else {
+                        format!("Файлы для распределения ({remaining})")
+                    })
                     .on_click(cx.listener(|this, _, _, cx| {
                         let w = this.distribution.as_mut().unwrap();
                         w.batch_expanded = !w.batch_expanded;

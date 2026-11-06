@@ -1,14 +1,12 @@
-use gpui::{Context, Div, FontWeight, ObjectFit, Window, div, img, prelude::*, px, relative, rgb};
+use gpui::{Context, Div, FontWeight, ObjectFit, Window, div, img, prelude::*, px, relative};
 
 use super::{Action, Version};
+use crate::appearance::rgb;
 use crate::ui::{
     ACCENT, BACKGROUND, Gallery, LINE, MUTED, SURFACE, TEXT, button, motion, shell::icon,
 };
 
-const EXPLANATION: &str = concat!(
-    "Поиск среди проиндексированных файлов Main и Stage. Точные совпадения проверяются по SHA-256, ",
-    "похожие изображения — по превью. Файлы и метаданные сохраняются независимо до выбранного вами действия."
-);
+const EXPLANATION: &str = "Поиск среди проиндексированных файлов Main и Stage. Точные совпадения проверяются по SHA-256, похожие изображения — по превью. Файлы и метаданные сохраняются независимо до выбранного вами действия.";
 const DEMO: &str =
     "Демонстрационные данные · поиск, отметки и действия действуют только в этом сеансе.";
 
@@ -79,12 +77,15 @@ impl Gallery {
                     .flex()
                     .flex_col()
                     .gap(px(4.0))
-                    .child(muted("Проверка библиотеки").font_weight(FontWeight::MEDIUM))
+                    .child(
+                        muted(crate::i18n::text("Проверка библиотеки"))
+                            .font_weight(FontWeight::MEDIUM),
+                    )
                     .child(
                         div()
                             .text_size(px(20.0))
                             .font_weight(FontWeight::BOLD)
-                            .child("Поиск дублей по содержимому"),
+                            .child(crate::i18n::text("Поиск дублей по содержимому")),
                     ),
             )
     }
@@ -93,13 +94,13 @@ impl Gallery {
         let state = &self.duplicates;
         let progress = state.processed * 100 / state.pairs.len();
         let status = if state.running {
-            "Поиск…"
+            crate::i18n::text("Поиск…")
         } else if state.stopped {
-            "Остановлено · неполные результаты"
+            crate::i18n::text("Остановлено · неполные результаты")
         } else if state.saved_at.is_some() {
-            "Поиск завершён"
+            crate::i18n::text("Поиск завершён")
         } else {
-            "Готово к поиску"
+            crate::i18n::text("Готово к поиску")
         };
         let actions = div()
             .flex()
@@ -109,9 +110,9 @@ impl Gallery {
                 action(
                     "duplicate-scan",
                     if state.saved_at.is_some() {
-                        "Обновить результаты"
+                        crate::i18n::text("Обновить результаты")
                     } else {
-                        "Проверить Main и Stage"
+                        crate::i18n::text("Проверить Main и Stage")
                     },
                     "search",
                     !state.running,
@@ -123,7 +124,7 @@ impl Gallery {
                 view.child(
                     action(
                         "duplicate-stop",
-                        "Остановить после текущего пакета",
+                        crate::i18n::text("Остановить после текущего пакета"),
                         "pause",
                         !state.stopped,
                         false,
@@ -200,12 +201,24 @@ impl Gallery {
                     .justify_between()
                     .text_size(px(11.0))
                     .text_color(rgb(MUTED))
-                    .child(format!(
-                        "Обработано {} из {} файлов",
-                        state.processed * 2,
-                        state.pairs.len() * 2
-                    ))
-                    .child(format!("Проверено: {}", state.processed * 2)),
+                    .child(if crate::i18n::english() {
+                        format!(
+                            "Processed {} of {} files",
+                            state.processed * 2,
+                            state.pairs.len() * 2
+                        )
+                    } else {
+                        format!(
+                            "Обработано {} из {} файлов",
+                            state.processed * 2,
+                            state.pairs.len() * 2
+                        )
+                    })
+                    .child(if crate::i18n::english() {
+                        format!("Reviewed: {}", state.processed * 2)
+                    } else {
+                        format!("Проверено: {}", state.processed * 2)
+                    }),
             );
 
         let controls = div()
@@ -218,11 +231,11 @@ impl Gallery {
             .bg(rgb(0x11111c))
             .border_b_1()
             .border_color(rgb(LINE))
-            .child(muted(EXPLANATION).max_w(px(950.0)))
-            .child(muted(DEMO).text_size(px(11.0)).text_color(rgb(ACCENT)))
+            .child(muted(crate::i18n::text(EXPLANATION)).max_w(px(950.0)))
+            .child(muted(crate::i18n::text(DEMO)).text_size(px(11.0)).text_color(rgb(ACCENT)))
             .child(actions)
             .when_some(state.saved_at.clone().filter(|_| !state.running), |view, date| {
-                view.child(muted(format!("Сохранённый поиск: {date}. Обновите для проверки новых или изменённых проиндексированных файлов.")))
+                view.child(muted(if crate::i18n::english() { format!("Saved search: {date}. Refresh to check new or changed indexed files.") } else { format!("Сохранённый поиск: {date}. Обновите для проверки новых или изменённых проиндексированных файлов.") }))
             })
             .child(scan_card)
             .when(!state.rejected.is_empty() || state.last_rejected.is_some(), |view| {
@@ -232,11 +245,11 @@ impl Gallery {
                         .items_center()
                         .gap_2()
                         .child(icon("check").size(px(15.0)))
-                        .child(muted(format!("Исключено пар по содержимому: {}", state.rejected.len())))
+                        .child(muted(if crate::i18n::english() { format!("Content pairs excluded: {}", state.rejected.len()) } else { format!("Исключено пар по содержимому: {}", state.rejected.len()) }))
                         .child(div().flex_1())
                         .when(state.last_rejected.is_some(), |view| {
                             view.child(
-                                action("duplicate-undo", "Отменить последнее исключение", "reset", !state.running, false)
+                                action("duplicate-undo", crate::i18n::text("Отменить последнее исключение"), "reset", !state.running, false)
                                     .on_click(cx.listener(|this, _, _, cx| this.review_duplicate(true, cx))),
                             )
                         }),
@@ -265,9 +278,9 @@ impl Gallery {
                             "duplicate-similar"
                         },
                         if exact {
-                            "Точные совпадения"
+                            crate::i18n::text("Точные совпадения")
                         } else {
-                            "Похожие изображения"
+                            crate::i18n::text("Похожие изображения")
                         },
                         if exact { "copy" } else { "image" },
                         true,
@@ -318,7 +331,7 @@ impl Gallery {
                     .pb(px(14.0))
                     .text_size(px(11.0))
                     .text_color(rgb(MUTED))
-                    .child("Пары совпавших файлов")
+                    .child(crate::i18n::text("Пары совпавших файлов"))
                     .child(count.to_string()),
             )
             .when(count == 0, |view| {
@@ -340,9 +353,9 @@ impl Gallery {
                             .size(px(30.0)),
                         )
                         .child(if state.running {
-                            "Поиск…"
+                            crate::i18n::text("Поиск…")
                         } else {
-                            "В этой категории совпадений нет"
+                            crate::i18n::text("В этой категории совпадений нет")
                         }),
                 )
             })
@@ -379,9 +392,9 @@ impl Gallery {
                                         icon(if pair.exact { "copy" } else { "image" })
                                             .size(px(14.0)),
                                     )
-                                    .child("Библиотека")
+                                    .child(crate::i18n::text("Библиотека"))
                                     .child(icon("arrow").size(px(12.0)))
-                                    .child("Входящие"),
+                                    .child(crate::i18n::text("Входящие")),
                             )
                             .child(
                                 div()
@@ -398,12 +411,19 @@ impl Gallery {
                                     .text_size(px(10.0))
                                     .text_color(rgb(MUTED))
                                     .child(if pair.exact {
-                                        "Точные совпадения".into()
+                                        crate::i18n::text("Точные совпадения").into()
                                     } else {
-                                        format!(
-                                            "Похожие изображения · Расстояние хешей: {}/63",
-                                            pair.distance
-                                        )
+                                        if crate::i18n::english() {
+                                            format!(
+                                                "Similar images · Hash distance: {}/63",
+                                                pair.distance
+                                            )
+                                        } else {
+                                            format!(
+                                                "Похожие изображения · Расстояние хешей: {}/63",
+                                                pair.distance
+                                            )
+                                        }
                                     }),
                             )
                             .on_click(cx.listener(move |this, _, _, cx| {
@@ -432,16 +452,16 @@ impl Gallery {
                 .child(div().flex().gap(px(10.0)).p(px(14.0)).mb(px(16.0)).rounded(px(10.0)).border_1().border_color(rgb(LINE)).bg(rgb(SURFACE))
                     .child(icon(if pair.exact { "circle-check" } else { "info" }).size(px(18.0)).text_color(rgb(ACCENT)))
                     .child(muted(if pair.exact {
-                        "Одинаковое содержимое по SHA-256. Каждая дополнительная копия сравнивается с первой в группе. Перед удалением проверьте метаданные."
+                        crate::i18n::text("Одинаковое содержимое по SHA-256. Каждая дополнительная копия сравнивается с первой в группе. Перед удалением проверьте метаданные.")
                     } else {
-                        "Приблизительное визуальное совпадение, включая возможные версии арта. Это не оценка достоверности. Кадрирование, повороты и значительные правки могут не распознаться; возможны ложные совпадения."
+                        crate::i18n::text("Приблизительное визуальное совпадение, включая возможные версии арта. Это не оценка достоверности. Кадрирование, повороты и значительные правки могут не распознаться; возможны ложные совпадения.")
                     }).flex_1()))
                 .child(div().flex().gap(px(20.0)).mb(px(20.0)).when(compact, |view| view.flex_col())
                     .children(pair.versions.iter().enumerate().map(|(side, version)| self.duplicate_version(version, side, compact, window, cx))))
                 .child(div().flex().flex_wrap().justify_between().gap_3()
-                    .when(!pair.exact, |view| view.child(action("duplicate-reject", "Не похоже", "close", !state.running, false)
+                    .when(!pair.exact, |view| view.child(action("duplicate-reject", crate::i18n::text("Не похоже"), "close", !state.running, false)
                         .on_click(cx.listener(|this, _, _, cx| this.review_duplicate(false, cx)))))
-                    .child(action("duplicate-replace", "Заменить Main этой версией из Stage…", "copy", !state.running, true)
+                    .child(action("duplicate-replace", crate::i18n::text("Заменить Main этой версией из Stage…"), "copy", !state.running, true)
                         .on_click(cx.listener(|this, _, _, cx| {
                             if !this.duplicates.running {
                                 this.duplicates.confirmation = Some(Action::Replace);
@@ -478,12 +498,12 @@ impl Gallery {
                             .mb(px(10.0))
                             .text_size(px(18.0))
                             .font_weight(FontWeight::BOLD)
-                            .child("Сравните перед выбором"),
+                            .child(crate::i18n::text("Сравните перед выбором")),
                     )
                     .child(
-                        muted(
+                        muted(crate::i18n::text(
                             "Выберите пару для сравнения превью, разрешения, размера и метаданных.",
-                        )
+                        ))
                         .max_w(px(380.0))
                         .line_height(px(20.4))
                         .mb(px(24.0)),
@@ -496,7 +516,7 @@ impl Gallery {
                             .text_size(px(11.0))
                             .text_color(rgb(ACCENT))
                             .child(icon("circle-check").size(px(15.0)))
-                            .child("Вы решаете, какую версию оставить"),
+                            .child(crate::i18n::text("Вы решаете, какую версию оставить")),
                     ),
             )
         };
@@ -523,25 +543,37 @@ impl Gallery {
         let size = entry
             .details
             .size
-            .map(|bytes| format!("{:.1} МБ", bytes as f64 / 1_048_576.0))
+            .map(|bytes| {
+                if crate::i18n::english() {
+                    format!("{:.1} MB", bytes as f64 / 1_048_576.0)
+                } else {
+                    format!("{:.1} МБ", bytes as f64 / 1_048_576.0)
+                }
+            })
             .unwrap_or_else(|| "—".into());
         let fields = [
             (
-                "Художник",
+                crate::i18n::text("Художник"),
                 entry.details.artist.clone().unwrap_or_else(|| "—".into()),
             ),
-            ("Копирайт", entry.details.copyrights.join(", ")),
-            ("Персонажи", entry.characters.clone()),
-            ("Теги", entry.tags.join(", ")),
             (
-                "Название видео",
+                crate::i18n::text("Копирайт"),
+                entry.details.copyrights.join(", "),
+            ),
+            (crate::i18n::text("Персонажи"), entry.characters.clone()),
+            (crate::i18n::text("Теги"), entry.tags.join(", ")),
+            (
+                crate::i18n::text("Название видео"),
                 if entry.video {
                     entry.title.clone()
                 } else {
                     "—".into()
                 },
             ),
-            ("Путь", entry.details.relative_path.clone()),
+            (
+                crate::i18n::text("Путь"),
+                entry.details.relative_path.clone(),
+            ),
         ];
         div()
             .flex()
@@ -563,9 +595,9 @@ impl Gallery {
                         div()
                             .font_weight(FontWeight::SEMIBOLD)
                             .child(if version.main {
-                                "Библиотека"
+                                crate::i18n::text("Библиотека")
                             } else {
-                                "Входящие"
+                                crate::i18n::text("Входящие")
                             }),
                     )
                     .child(
@@ -645,7 +677,7 @@ impl Gallery {
                     .child(
                         action(
                             ("duplicate-open", side),
-                            "Открыть оригинал",
+                            crate::i18n::text("Открыть оригинал"),
                             "arrow",
                             enabled,
                             false,
@@ -661,7 +693,7 @@ impl Gallery {
                     .child(
                         action(
                             ("duplicate-delete", side),
-                            "Удалить этот файл…",
+                            crate::i18n::text("Удалить этот файл…"),
                             "trash",
                             enabled,
                             false,
@@ -680,23 +712,34 @@ impl Gallery {
 
     fn duplicate_confirmation(&self, action_kind: Action, cx: &mut Context<Self>) -> Div {
         let label = match action_kind {
-            Action::Delete(side) => format!(
-                "Удалить демонстрационную версию {} из результатов?",
-                if side == 0 { "Main" } else { "Stage" }
-            ),
-            Action::Replace => "Заменить демонстрационную версию Main версией Stage?".into(),
+            Action::Delete(side) => {
+                if crate::i18n::english() {
+                    format!(
+                        "Remove demo version {} from the results?",
+                        if side == 0 { "Main" } else { "Stage" }
+                    )
+                } else {
+                    format!(
+                        "Удалить демонстрационную версию {} из результатов?",
+                        if side == 0 { "Main" } else { "Stage" }
+                    )
+                }
+            }
+            Action::Replace => {
+                crate::i18n::text("Заменить демонстрационную версию Main версией Stage?").into()
+            }
         };
         div().flex().flex_col().gap_3().p_4().mt_4().rounded_lg().border_1().border_color(rgb(0x60477e)).bg(rgb(SURFACE))
-            .child(label).child(muted("Действие применяется только к демонстрационным результатам. Реальные файлы и каталог не изменяются."))
+            .child(label).child(muted(crate::i18n::text("Действие применяется только к демонстрационным результатам. Реальные файлы и каталог не изменяются.")))
             .child(div().flex().gap_2()
-                .child(action("duplicate-confirm", "Подтвердить", "check", !self.duplicates.running, true)
+                .child(action("duplicate-confirm", crate::i18n::text("Подтвердить"), "check", !self.duplicates.running, true)
                     .on_click(cx.listener(|this, _, _, cx| {
                         if this.duplicates.confirm() {
                             tracing::info!(operation = "duplicate_action", storage = "demo_session", "Confirmed demo duplicate action completed");
                             cx.notify();
                         }
                     })))
-                .child(action("duplicate-cancel", "Отмена", "close", true, false)
+                .child(action("duplicate-cancel", crate::i18n::text("Отмена"), "close", true, false)
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.duplicates.confirmation = None;
                         cx.notify();

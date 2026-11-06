@@ -1,9 +1,10 @@
 use gpui::{
     Animation, AnimationExt, App, BoxShadow, Context, Focusable, IntoElement, RenderOnce,
-    WeakEntity, Window, div, point, prelude::*, px, rgb, rgba,
+    WeakEntity, Window, div, point, prelude::*, px,
 };
 use gpui_component::{Selectable, popover::Popover};
 
+use crate::appearance::{rgb, rgba};
 use crate::catalog::SortMode;
 
 use super::{ACCENT, Gallery, LINE, MUTED, TEXT, shell::icon};
