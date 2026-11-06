@@ -443,40 +443,23 @@ impl Gallery {
                     .absolute()
                     .right(px(if list { 8.0 } else { 5.2 }))
                     .bottom(px(if list { 8.0 } else { 40.3 }))
-                    .child(self.card_actions(index, cx)),
+                    .child(self.file_actions(index, false, cx)),
             )
     }
 
-    fn card_actions(&self, index: usize, cx: &mut Context<Self>) -> impl IntoElement {
+    pub(super) fn file_actions(
+        &self,
+        index: usize,
+        wide: bool,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let gallery = cx.weak_entity();
         let source = self.entries[index].path.clone();
         let stage = self.stage;
-
-        Button::new("card-actions")
-            .child(
-                super::motion::button("card-actions-content")
-                    .size(px(28.6))
-                    .flex_shrink_0()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .rounded(px(5.0))
-                    .text_color(rgb(MUTED))
-                    .hover_colors(
-                        Some(rgb(0x242034).into()),
-                        Some(rgb(super::TEXT).into()),
-                        None,
-                    )
-                    .child(gpui_component::Icon::new(IconName::Ellipsis).size(px(17.0))),
-            )
-            .text()
-            .with_size(gpui_component::Size::Size(px(28.6)))
-            .w(px(28.6))
-            .h(px(28.6))
-            .p_0()
-            .rounded(px(5.0))
-            .text_color(rgb(MUTED))
-            .dropdown_menu(move |menu, _, _| {
+        let build_menu =
+            move |menu: gpui_component::menu::PopupMenu,
+                  _: &mut Window,
+                  _: &mut Context<gpui_component::menu::PopupMenu>| {
                 let open = gallery.clone();
                 let details = gallery.clone();
                 let open_source = source.clone();
@@ -513,6 +496,24 @@ impl Gallery {
                         });
                     }),
                 )
+                .when(!stage, |menu| {
+                    let edit = gallery.clone();
+                    let source = source.clone();
+                    menu.item(PopupMenuItem::new("Редактировать метаданные").on_click(
+                        move |_, window, cx| {
+                            let _ = edit.update(cx, |this, cx| {
+                                let target_matches = !this.stage
+                                    && this
+                                        .entries
+                                        .get(index)
+                                        .is_some_and(|entry| entry.path == source);
+                                if target_matches {
+                                    this.edit_file_metadata(index, window, cx);
+                                }
+                            });
+                        },
+                    ))
+                })
                 .when(stage, |menu| {
                     let distribute = gallery.clone();
                     let source = source.clone();
@@ -534,6 +535,40 @@ impl Gallery {
                         }),
                     )
                 })
-            })
+            };
+
+        if wide {
+            super::details::detail_button("detail-more", "", "more", false)
+                .w_full()
+                .dropdown_menu(build_menu)
+                .into_any_element()
+        } else {
+            Button::new("card-actions")
+                .child(
+                    super::motion::button("card-actions-content")
+                        .size(px(28.6))
+                        .flex_shrink_0()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .rounded(px(5.0))
+                        .text_color(rgb(MUTED))
+                        .hover_colors(
+                            Some(rgb(0x242034).into()),
+                            Some(rgb(super::TEXT).into()),
+                            None,
+                        )
+                        .child(gpui_component::Icon::new(IconName::Ellipsis).size(px(17.0))),
+                )
+                .text()
+                .with_size(gpui_component::Size::Size(px(28.6)))
+                .w(px(28.6))
+                .h(px(28.6))
+                .p_0()
+                .rounded(px(5.0))
+                .text_color(rgb(MUTED))
+                .dropdown_menu(build_menu)
+                .into_any_element()
+        }
     }
 }

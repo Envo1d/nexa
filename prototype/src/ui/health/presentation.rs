@@ -82,7 +82,7 @@ impl Gallery {
                         .on_click(cx.listener(|this, _, _, cx| this.repair_health(cx))),
                 )
                 .child(button("health-edit", "Редактировать метаданные").on_click(
-                    cx.listener(|this, _, _, cx| this.unavailable("Редактор метаданных файла", cx)),
+                    cx.listener(|this, _, window, cx| this.edit_health_metadata(window, cx)),
                 )),
         }
     }

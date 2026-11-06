@@ -404,17 +404,15 @@ impl Gallery {
                                     detail_button("detail-tags", "", "tag", false)
                                         .flex_1()
                                         .flex_basis(px(0.0))
-                                        .on_click(cx.listener(|this, _, _, cx| {
-                                            this.unavailable("Редактор тегов", cx)
+                                        .on_click(cx.listener(move |this, _, window, cx| {
+                                            this.open_file_tags(index, window, cx)
                                         })),
                                 )
                                 .child(
-                                    detail_button("detail-more", "", "more", false)
+                                    div()
                                         .flex_1()
-                                        .flex_basis(px(0.0))
-                                        .on_click(cx.listener(|this, _, _, cx| {
-                                            this.unavailable("Расширенные операции", cx)
-                                        })),
+                                        .flex_basis(px(0.))
+                                        .child(self.file_actions(index, true, cx)),
                                 ),
                         )
                     }),
@@ -539,7 +537,7 @@ fn preview_badge(label: &str, right: bool) -> Div {
         .child(label.to_owned())
 }
 
-fn detail_button(
+pub(super) fn detail_button(
     id: &'static str,
     label: &str,
     name: &'static str,

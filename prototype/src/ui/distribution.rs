@@ -18,6 +18,8 @@ const STEPS: [&str; 6] = [
 ];
 
 pub(super) struct Wizard {
+    editing: bool,
+    health_target: bool,
     queue: Vec<usize>,
     position: usize,
     step: usize,
@@ -58,10 +60,46 @@ impl Gallery {
         if queue.is_empty() {
             return;
         }
+        self.start_metadata_wizard(queue, false, false, window, cx);
+    }
+
+    pub(super) fn edit_file_metadata(
+        &mut self,
+        index: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.start_metadata_wizard(vec![index], true, false, window, cx);
+    }
+
+    pub(super) fn edit_health_metadata(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.start_metadata_wizard(vec![0], true, true, window, cx);
+    }
+
+    fn wizard_entry(&self, health: bool, index: usize) -> &crate::catalog::Entry {
+        if health {
+            &self.health.metadata_entry
+        } else {
+            &self.entries[index]
+        }
+    }
+
+    fn start_metadata_wizard(
+        &mut self,
+        queue: Vec<usize>,
+        editing: bool,
+        health_target: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.distribution.is_some() || self.tag_editor.is_some() || self.loading {
+            return;
+        }
+        let current = self.wizard_entry(health_target, queue[0]).clone();
         let source_previews = queue
             .iter()
             .filter_map(|&index| {
-                let source = image::open(&self.entries[index].path).ok()?;
+                let source = image::open(&self.wizard_entry(health_target, index).path).ok()?;
                 let mut pixels = source
                     .resize_to_fill(440, 330, image::imageops::FilterType::Triangle)
                     .to_rgba8();
@@ -105,6 +143,8 @@ impl Gallery {
             cx.notify();
         });
         self.distribution = Some(Wizard {
+            editing,
+            health_target,
             queue,
             position: 0,
             step: 0,
@@ -138,10 +178,30 @@ impl Gallery {
             assignment: None,
             error: None,
         });
+        if editing {
+            let w = self.distribution.as_mut().unwrap();
+            w.values = metadata::entry_values(&current);
+            w.artist.update(cx, |s, cx| {
+                s.set_value(current.details.artist.unwrap_or_default(), window, cx)
+            });
+            w.title.update(cx, |s, cx| {
+                s.set_value(
+                    if current.video {
+                        current.title
+                    } else {
+                        String::new()
+                    },
+                    window,
+                    cx,
+                )
+            });
+        }
         self.distribution.as_ref().unwrap().focus.focus(window);
         tracing::info!(
             operation = "distribution",
-            count = self.stage_selection.len(),
+            count = self.distribution.as_ref().unwrap().queue.len(),
+            editing,
+            health_target,
             "Demo wizard opened"
         );
         cx.notify();
@@ -216,45 +276,46 @@ impl Gallery {
         let title = w.title.read(cx).value().trim().to_string();
         let needs_title = w.queue[w.position..w.position + count]
             .iter()
-            .any(|&index| self.entries[index].video);
+            .any(|&index| {
+                if w.health_target {
+                    self.health.metadata_entry.video
+                } else {
+                    self.entries[index].video
+                }
+            });
         if artist.trim().is_empty() || (needs_title && title.trim().is_empty()) {
+            tracing::warn!(
+                operation = "file_metadata",
+                editing = w.editing,
+                reason = "required_fields",
+                "Metadata confirmation rejected"
+            );
             w.error = Some("Укажите художника и название для видео.".into());
             w.scroll.scroll_to_bottom();
             cx.notify();
             return;
         }
         for &index in &w.queue[w.position..w.position + count] {
-            let entry = &mut self.entries[index];
-            entry.tags = w.values[1].clone();
-            entry.details.copyrights = w.values[0].clone();
-            entry.details.character_copyrights = w.values[2]
-                .iter()
-                .filter_map(|value| {
-                    let (name, copyright) = value.rsplit_once(" (")?;
-                    Some((
-                        name.to_string(),
-                        copyright.trim_end_matches(')').to_string(),
-                    ))
-                })
-                .collect();
-            entry.characters = entry
-                .details
-                .character_copyrights
-                .iter()
-                .map(|(name, _)| name.as_str())
-                .collect::<Vec<_>>()
-                .join(", ");
-            entry.details.artist = Some(artist.clone());
-            if entry.video && !title.trim().is_empty() {
-                entry.title = title.clone();
+            let entry = if w.health_target {
+                &mut self.health.metadata_entry
+            } else {
+                &mut self.entries[index]
+            };
+            metadata::apply_entry(entry, &w.values, &artist, &title);
+            if !w.editing {
+                self.stage_selection.remove(&index);
             }
-            self.stage_selection.remove(&index);
+        }
+        if w.health_target {
+            self.health.metadata_saved();
         }
         w.completed = count;
         w.done = true;
         tracing::info!(
             operation = "distribution",
             count,
+            editing = w.editing,
+            health = w.health_target,
             "Demo metadata applied; completion displayed"
         );
         cx.notify();
@@ -289,8 +350,19 @@ impl Gallery {
 
     pub(super) fn close_distribution(&mut self, cx: &mut Context<Self>) {
         if let Some(w) = self.distribution.take() {
+            if w.editing {
+                self.tag_counts = crate::catalog::tag_counts(&self.entries);
+                self.refilter(cx);
+                tracing::info!(
+                    operation = "file_metadata",
+                    saved = w.done,
+                    health = w.health_target,
+                    "Session metadata editor closed"
+                );
+                return;
+            }
             let end = w.position + if w.done { w.completed } else { 0 };
-            let mut completed = w.queue[..end].to_vec();
+            let mut completed = workflow::distribution_moves(w.editing, &w.queue, end);
             completed.sort_unstable();
             for index in completed.into_iter().rev() {
                 self.inactive_workspace
@@ -313,7 +385,7 @@ impl Gallery {
 
     pub(super) fn distribution_dialog(&self, window: &Window, cx: &mut Context<Self>) -> Div {
         let w = self.distribution.as_ref().expect("open wizard");
-        let entry = &self.entries[w.queue[w.position]];
+        let entry = self.wizard_entry(w.health_target, w.queue[w.position]);
         let remaining = w.queue.len() - w.position;
         let compact = f32::from(window.viewport_size().height) <= 650.;
         let height = (f32::from(window.viewport_size().height) - 24.).min(820.);
@@ -342,7 +414,15 @@ impl Gallery {
                 .border_1()
                 .border_color(rgb(LINE))
                 .bg(rgb(SURFACE))
-                .child(row("Действие", "Распределение завершено".into()))
+                .child(row(
+                    "Действие",
+                    if w.editing {
+                        "Метаданные обновлены"
+                    } else {
+                        "Распределение завершено"
+                    }
+                    .into(),
+                ))
                 .child(row("Файлы", w.completed.to_string()))
                 .child(row(
                     "Очередь",
@@ -409,7 +489,12 @@ impl Gallery {
                             .mb_2(),
                     )
                     .child(note(&if w.completed == 1 {
-                        "Файл распределён на время демосеанса.".into()
+                        if w.editing {
+                            "Метаданные файла обновлены на время демосеанса."
+                        } else {
+                            "Файл распределён на время демосеанса."
+                        }
+                        .into()
                     } else {
                         format!("Файлы ({}) распределены на время демосеанса.", w.completed)
                     }))
@@ -431,6 +516,7 @@ impl Gallery {
                     } else {
                         match w.step {
                             4 => "Дополнительные сведения",
+                            5 if w.editing => "Подтвердить изменения метаданных",
                             5 => "Подтвердить распределение",
                             _ => STEPS[w.step],
                         }
@@ -442,7 +528,14 @@ impl Gallery {
                         div()
                             .mt(px(if w.step == 0 { 6. } else { 8. }))
                             .mb(px(if w.step == 0 { 12. } else { 22. }))
-                            .child(note(descriptions[w.step]).line_height(px(19.2))),
+                            .child(
+                                note(if w.editing && w.step == 0 {
+                                    "Проверьте файл перед изменением сведений в библиотеке."
+                                } else {
+                                    descriptions[w.step]
+                                })
+                                .line_height(px(19.2)),
+                            ),
                     )
                 });
             match w.step {
@@ -510,6 +603,10 @@ impl Gallery {
                                 .on_click(cx.listener(|this, _, window, cx| {
                                     let index = this.distribution.as_ref().unwrap().queue
                                         [this.distribution.as_ref().unwrap().position];
+                                    if this.distribution.as_ref().unwrap().health_target {
+                                        this.open_health_preview(window, cx);
+                                        return;
+                                    }
                                     this.selected = Some(index);
                                     this.open_viewer(window, cx);
                                 })),
@@ -527,7 +624,11 @@ impl Gallery {
                         ))
                         .child(technical_inline(
                             compact,
-                            "Путь во входящих",
+                            if w.editing {
+                                "Путь в библиотеке"
+                            } else {
+                                "Путь во входящих"
+                            },
                             entry.details.relative_path.clone(),
                         ))
                         .child(
@@ -668,7 +769,11 @@ impl Gallery {
                         .child(div().h_2())
                         .child(self.wizard_input(true, cx))
                         .child(div().h_6());
-                    if entry.video || w.queue[w.position..].iter().any(|&i| self.entries[i].video) {
+                    if entry.video
+                        || w.queue[w.position..]
+                            .iter()
+                            .any(|&i| self.wizard_entry(w.health_target, i).video)
+                    {
                         body = body.child(note("Название видео")).child(div().h_2()).child(
                             input_surface("wizard-title-input", &w.title, false, cx)
                                 .child(input(&w.title).flex_1()),
@@ -766,30 +871,32 @@ impl Gallery {
                         ));
                     }
                     body = body.child(summary);
-                    body = body.child(
-                        button("wizard-save-preset", "")
-                            .with_focus(
-                                &w.save_preset_focus
-                                    .clone()
-                                    .tab_stop(!w.artist.read(cx).value().trim().is_empty()),
-                            )
-                            .w(px(170.))
-                            .mt(px(14.))
-                            .child(shell::icon("plus").size(px(15.)))
-                            .child("Сохранить как пресет…")
-                            .when(w.artist.read(cx).value().trim().is_empty(), |d| {
-                                d.opacity(0.35)
-                                    .cursor_default()
-                                    .hover_colors(None, None, None)
-                            })
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                let w = this.distribution.as_mut().unwrap();
-                                if w.artist.read(cx).value().trim().is_empty() {
-                                    return;
-                                }
-                                this.open_preset_manager(true, window, cx);
-                            })),
-                    );
+                    if !w.editing {
+                        body = body.child(
+                            button("wizard-save-preset", "")
+                                .with_focus(
+                                    &w.save_preset_focus
+                                        .clone()
+                                        .tab_stop(!w.artist.read(cx).value().trim().is_empty()),
+                                )
+                                .w(px(170.))
+                                .mt(px(14.))
+                                .child(shell::icon("plus").size(px(15.)))
+                                .child("Сохранить как пресет…")
+                                .when(w.artist.read(cx).value().trim().is_empty(), |d| {
+                                    d.opacity(0.35)
+                                        .cursor_default()
+                                        .hover_colors(None, None, None)
+                                })
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    let w = this.distribution.as_mut().unwrap();
+                                    if w.artist.read(cx).value().trim().is_empty() {
+                                        return;
+                                    }
+                                    this.open_preset_manager(true, window, cx);
+                                })),
+                        );
+                    }
                     if w.all {
                         body = body.child(self.wizard_batch_files(cx));
                     }
@@ -946,7 +1053,11 @@ impl Gallery {
                         if w.all {
                             &all_label
                         } else {
-                            "Распределить файл"
+                            if w.editing {
+                                "Сохранить изменения"
+                            } else {
+                                "Распределить файл"
+                            }
                         }
                     } else {
                         "Далее"
@@ -1039,12 +1150,14 @@ impl Gallery {
                                 div()
                                     .flex_1()
                                     .child(
-                                        heading("Распределить в библиотеку")
+                                        heading(if w.editing { "Редактировать метаданные" } else { "Распределить в библиотеку" })
                                             .text_size(px(14.))
                                             .line_height(px(17.)),
                                     )
                                     .child(div().mt(px(5.)).child(note(
-                                        &(if w.queue.len() == 1 {
+                                        &(if w.done {
+                                            format!("Завершено файлов: {} · Осталось: {}", w.completed, remaining - w.completed)
+                                        } else if w.queue.len() == 1 {
                                             entry.details.filename.clone()
                                         } else {
                                             format!(
@@ -1056,7 +1169,7 @@ impl Gallery {
                                         }),
                                     ))),
                             )
-                            .when(!w.done, |header| header.child(self.preset_control(window, cx)))
+                            .when(!w.done && !w.editing, |header| header.child(self.preset_control(window, cx)))
                             .child(
                                 motion::button("wizard-close").with_focus(&w.close_focus).focus_ring(rgb(SURFACE)).cursor_pointer().rounded(px(5.)).hover_colors(Some(gpui::rgba(0xa786ff1a).into()), Some(rgb(TEXT).into()), None)
                                     .size(px(28.))

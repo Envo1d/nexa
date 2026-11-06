@@ -41,7 +41,16 @@ const DEMO: &str = concat!(
     "экране и не затрагивают реальные файлы."
 );
 
+struct PreviewReturn {
+    entries: Vec<crate::catalog::Entry>,
+    visible: Vec<usize>,
+    selected: Option<usize>,
+    tag_counts: Vec<(String, usize)>,
+}
+
 pub(super) struct Health {
+    preview_return: Option<PreviewReturn>,
+    pub(super) metadata_entry: crate::catalog::Entry,
     category: usize,
     remaining: [bool; 4],
     proposal: bool,
@@ -51,13 +60,30 @@ pub(super) struct Health {
 
 impl Health {
     pub(super) fn new() -> Self {
+        let mut metadata_entry = crate::catalog::demo_entries().remove(1);
+        metadata_entry.details.filename = "untitled-video.mp4".into();
+        metadata_entry.details.relative_path = PATHS[3].into();
+        metadata_entry.details.artist = Some("Demo artist".into());
+        metadata_entry.details.copyrights = vec!["Demo collection".into()];
+        metadata_entry.details.character_copyrights.clear();
+        metadata_entry.characters.clear();
+        metadata_entry.tags = vec!["favorite".into(), "landscape".into()];
+        metadata_entry.title.clear();
+
         Self {
+            metadata_entry,
+            preview_return: None,
             category: 0,
             remaining: [true; 4],
             proposal: false,
             confirmed: false,
             message: None,
         }
+    }
+
+    pub(super) fn metadata_saved(&mut self) {
+        self.remaining[3] = false;
+        self.message = Some("Метаданные обновлены на время демосеанса.".into());
     }
 
     fn choose(&mut self, category: usize) {
@@ -126,6 +152,27 @@ fn empty() -> Div {
 }
 
 impl Gallery {
+    pub(super) fn open_health_preview(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.health.preview_return = Some(PreviewReturn {
+            entries: std::mem::replace(&mut self.entries, vec![self.health.metadata_entry.clone()]),
+            visible: std::mem::replace(&mut self.visible, vec![0]),
+            selected: self.selected.replace(0),
+            tag_counts: std::mem::take(&mut self.tag_counts),
+        });
+        self.tag_counts = crate::catalog::tag_counts(&self.entries);
+        self.open_viewer(window, cx);
+    }
+
+    pub(super) fn restore_health_preview(&mut self) {
+        if let Some(saved) = self.health.preview_return.take() {
+            self.health.metadata_entry = self.entries[0].clone();
+            self.entries = saved.entries;
+            self.visible = saved.visible;
+            self.selected = saved.selected;
+            self.tag_counts = saved.tag_counts;
+        }
+    }
+
     pub(super) fn open_health(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.loading || self.dialog_open {
             return;
