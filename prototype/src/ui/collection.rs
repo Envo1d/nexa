@@ -410,6 +410,13 @@ impl Gallery {
                     cx.notify();
                 }),
             )
+            .on_mouse_down(
+                gpui::MouseButton::Right,
+                cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {
+                    this.open_card_context_menu(index, event.position, window, cx);
+                    cx.stop_propagation();
+                }),
+            )
             .child(preview)
             .child(body)
             .when(!self.stage, |view| {
