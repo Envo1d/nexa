@@ -92,7 +92,7 @@ pub(super) fn browse_with_counts(
     (visible, counts)
 }
 
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub(super) struct Entry {
     pub title: String,
     pub path: PathBuf,
@@ -108,7 +108,7 @@ pub(super) struct Entry {
     pub details: EntryDetails,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, serde::Serialize, serde::Deserialize)]
 pub(super) struct EntryDetails {
     pub order_position: Option<usize>,
     pub character_copyrights: Vec<(String, String)>,

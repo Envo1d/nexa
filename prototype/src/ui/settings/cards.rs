@@ -18,18 +18,30 @@ impl Gallery {
 
         card.child(
             row(true)
-                .child(label(
-                    if section == 0 {
-                        "libraryPath"
-                    } else {
-                        "stagingPath"
-                    },
-                    "notSelected",
-                ))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .child(div().font_weight(FontWeight::SEMIBOLD).child(text(
+                            if section == 0 {
+                                "libraryPath"
+                            } else {
+                                "stagingPath"
+                            },
+                        )))
+                        .child(
+                            small(
+                                self.settings.paths[section]
+                                    .as_deref()
+                                    .unwrap_or(text("notSelected")),
+                            )
+                            .mt(px(6.)),
+                        ),
+                )
                 .child(
                     action(("settings-browse", section), "browse", Some("folder")).on_click(
-                        cx.listener(move |this, _, _, cx| {
-                            this.settings_preview_action("browse", cx)
+                        cx.listener(move |this, _, window, cx| {
+                            this.settings_browse(section, window, cx)
                         }),
                     ),
                 ),
@@ -137,35 +149,42 @@ impl Gallery {
         ))
     }
 
-    pub(super) fn settings_catalog_card(&self) -> Div {
-        let card = card();
-
-        card.child(self.settings_disabled_action(
-            "catalogBackup",
-            "catalogBackupDescription",
-            "catalogCreateBackup",
-            false,
-        ))
-        .child(self.settings_disabled_action(
-            "catalogExport",
-            "catalogExportDescription",
-            "catalogExport",
-            false,
-        ))
-        .child(self.settings_disabled_action(
-            "catalogRestore",
-            "catalogRestoreDescription",
-            "catalogChooseBackup",
-            false,
-        ))
-        .child(
-            div()
-                .px(px(20.0))
-                .py(px(16.0))
-                .child(text("catalogNativeOnly")),
-        )
+    pub(super) fn settings_catalog_card(&self, cx: &mut Context<Self>) -> Div {
+        let mut content = card();
+        for (index, (title, description, button)) in [
+            (
+                "catalogBackup",
+                "catalogBackupDescription",
+                "catalogCreateBackup",
+            ),
+            ("catalogExport", "catalogExportDescription", "catalogExport"),
+            (
+                "catalogRestore",
+                "catalogRestoreDescription",
+                "catalogChooseBackup",
+            ),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            content = content.child(
+                row(false).child(label(title, description)).child(
+                    action(("catalog-action", index), button, None)
+                        .when(self.dialog_open, |d| d.opacity(0.4).cursor_default())
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            if index == 2 {
+                                this.settings_choose_backup(window, cx);
+                            } else {
+                                this.settings_export(index == 1, window, cx);
+                            }
+                        })),
+                ),
+            );
+        }
+        content.child(self.settings_restore_preview(cx)).child(small(
+            "Копии сеанса GPUI: Библиотека и Входящие. Производственные JSON-копии Tauri, словарь, настройки и исходные файлы не включены. Экспорт метаданных не подходит для восстановления."
+        ).py(px(16.)).px(px(20.)))
     }
-
     pub(super) fn settings_logs_card(&self, cx: &mut Context<Self>) -> Div {
         let card = card();
 
@@ -180,34 +199,56 @@ impl Gallery {
     }
 
     pub(super) fn settings_updates_card(&self, cx: &mut Context<Self>) -> Div {
-        let card = card();
-
-        card.child(
-            row(false)
-                .child(
+        use super::dialogs::Update;
+        let status = match self.settings.workflow.update {
+            Update::Unchecked => "Не проверено",
+            Update::Checking => "Проверка обновлений…",
+            Update::Available => "Доступна Nexa 2.16.3 · демонстрация",
+            Update::Complete => "Предпросмотр установки открыт",
+        };
+        card()
+            .child(
+                row(false)
+                    .child(
+                        div()
+                            .flex_1()
+                            .child(label("version", ""))
+                            .child(small("Nexa 2.16.2").mt(px(6.))),
+                    )
+                    .child(badge(status, false)),
+            )
+            .child(self.settings_toggle(4, "autoUpdate", "autoUpdateDescription", false, cx))
+            .child(
+                row(true)
+                    .child(label("checkNow", "checkDescription"))
+                    .child(
+                        action("settings-check-update", "checkNow", Some("reset"))
+                            .when(self.settings.workflow.update == Update::Checking, |d| {
+                                d.opacity(0.4).cursor_default()
+                            })
+                            .on_click(cx.listener(|this, _, _, cx| this.settings_check_update(cx))),
+                    ),
+            )
+            .when(self.settings.workflow.update == Update::Available, |d| {
+                d.child(
                     div()
-                        .flex_1()
+                        .pb(px(16.))
                         .child(
-                            div()
-                                .line_height(px(17.0))
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .child(text("version")),
+                            small(
+                                "Демонстрационное обновление. Установщик и сеть не используются.",
+                            )
+                            .mb(px(12.)),
                         )
-                        .child(small("Nexa 2.16.2").mt(px(6.0))),
+                        .child(
+                            action("settings-install-update", "", Some("reset"))
+                                .child("Установить Nexa 2.16.3")
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    this.settings_confirm_update(window, cx)
+                                })),
+                        ),
                 )
-                .child(badge("Не проверено", false)),
-        )
-        .child(self.settings_toggle(4, "autoUpdate", "autoUpdateDescription", false, cx))
-        .child(self.settings_action_row(
-            "checkNow",
-            "checkDescription",
-            "checkNow",
-            Some("reset"),
-            true,
-            cx,
-        ))
+            })
     }
-
     pub(super) fn settings_appearance_card(&self, cx: &mut Context<Self>) -> Div {
         let card = card();
 
@@ -221,17 +262,5 @@ impl Gallery {
                 .child(label("theme", "themeDescription"))
                 .child(self.settings_selector(true, cx)),
         )
-    }
-
-    pub(super) fn settings_disabled_action(
-        &self,
-        title: &str,
-        description: &str,
-        button: &'static str,
-        last: bool,
-    ) -> Div {
-        row(last)
-            .child(label(title, description))
-            .child(action(button, button, None).opacity(0.35).cursor_default())
     }
 }

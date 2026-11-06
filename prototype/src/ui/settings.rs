@@ -5,7 +5,9 @@ use gpui_component::input::{InputEvent, InputState};
 
 use super::{ACCENT, Gallery, LINE, MUTED, SURFACE, TEXT, motion, shell::icon};
 
+mod backup;
 mod cards;
+mod dialogs;
 mod presentation;
 mod select;
 mod text;
@@ -36,6 +38,9 @@ const THEMES: [&str; 7] = [
 
 pub(super) struct Settings {
     toggles: [bool; 5],
+    paths: [Option<String>; 2],
+    saved_paths: [Option<String>; 2],
+    pub(super) workflow: dialogs::Workflow,
     fields: [Entity<InputState>; 3],
     language: usize,
     theme: usize,
@@ -67,6 +72,9 @@ impl Settings {
 
         Self {
             toggles: [true, true, false, false, false],
+            paths: [None, None],
+            saved_paths: [None, None],
+            workflow: dialogs::Workflow::new(cx),
             fields,
             language: 0,
             theme: 0,
