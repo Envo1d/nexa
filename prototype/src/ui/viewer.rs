@@ -339,7 +339,7 @@ impl Gallery {
         self.restore_health_preview();
         (self.visible, self.type_counts) = crate::catalog::browse_with_counts(
             &self.entries,
-            &self.search.read(cx).value(),
+            &self.collection_query(cx),
             crate::catalog::BrowseFilter {
                 path_search: self.stage,
                 videos_only: self.videos_only,

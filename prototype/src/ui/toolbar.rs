@@ -19,6 +19,10 @@ impl Gallery {
             .child(
                 div()
                     .id("collection-search")
+                    .relative()
+                    .capture_key_down(cx.listener(|this, event, window, cx| {
+                        this.search_suggestion_key(event, window, cx);
+                    }))
                     .track_focus(&self.search.focus_handle(cx))
                     .flex()
                     .items_center()
@@ -59,10 +63,14 @@ impl Gallery {
                                         .hover_colors(None, Some(rgb(TEXT).into()), None)
                                         .child(icon("close").size(px(14.0)))
                                         .on_click(cx.listener(|this, _, window, cx| {
+                                            if !this.stage {
+                                                this.search_suggestions.applied.clear();
+                                            }
                                             this.search.update(cx, |state, cx| {
                                                 state.set_value("", window, cx);
                                                 state.focus(window, cx);
                                             });
+                                            this.refilter(cx);
                                         })),
                                 )
                             })
@@ -78,7 +86,10 @@ impl Gallery {
                                         .child("Ctrl F"),
                                 )
                             }),
-                    ),
+                    )
+                    .when(!self.stage && self.search_suggestions.open, |d| {
+                        d.children(self.search_suggestion_popup(cx))
+                    }),
             )
             .child(
                 div()
