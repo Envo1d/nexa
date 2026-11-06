@@ -256,6 +256,7 @@ impl Gallery {
                                 this.hide_untagged = false;
                                 this.favorites_only = false;
                                 this.sort = crate::catalog::SortMode::Newest;
+                                this.search_suggestions.applied.clear();
                                 this.search
                                     .update(cx, |state, cx| state.set_value("", window, cx));
                                 this.refilter(cx);

@@ -18,6 +18,7 @@ mod health;
 mod layout;
 mod modal_backdrop;
 mod motion;
+mod search_suggestions;
 mod selection;
 mod settings;
 mod shell;
@@ -86,6 +87,7 @@ pub(super) struct Gallery {
     previews: HashMap<usize, Arc<RenderImage>>,
     shell_background: Arc<RenderImage>,
     search: Entity<InputState>,
+    search_suggestions: search_suggestions::Suggestions,
     focus: FocusHandle,
     selected: Option<usize>,
     videos_only: bool,
@@ -121,11 +123,27 @@ impl Gallery {
             .new(|cx| InputState::new(window, cx).placeholder("Метаданные через точку с запятой"));
         let focus = cx.focus_handle();
         focus.focus(window);
-        let subscription = cx.subscribe(&search, |this: &mut Self, _, event, cx| {
-            if matches!(event, InputEvent::Change) {
-                this.refilter(cx);
-            }
-        });
+        let subscription =
+            cx.subscribe_in(&search, window, |this: &mut Self, _, event, window, cx| {
+                match event {
+                    InputEvent::Change => {
+                        this.search_suggestions.open = true;
+                        this.search_suggestions.active = None;
+                        if this.stage {
+                            this.refilter(cx);
+                        } else {
+                            this.refresh_search_catalog();
+                        }
+                    }
+                    InputEvent::Focus => this.search_suggestions.open = true,
+                    InputEvent::Blur => {
+                        this.search_suggestions.open = false;
+                        this.search_suggestions.active = None;
+                    }
+                    InputEvent::PressEnter { .. } => this.commit_search_suggestion(window, cx),
+                }
+                cx.notify();
+            });
         let gallery = cx.weak_entity();
         window.on_window_should_close(cx, move |_, cx| {
             let _ = gallery.update(cx, |this, _| {
@@ -178,6 +196,7 @@ impl Gallery {
             previews: HashMap::new(),
             shell_background: background::shell_image(),
             search,
+            search_suggestions: Default::default(),
             focus,
             selected: None,
             videos_only: false,
@@ -208,11 +227,29 @@ impl Gallery {
         }
     }
 
+    fn refresh_search_catalog(&mut self) {
+        self.search_suggestions.catalog = crate::taxonomy::Catalog::default();
+        if !self.stage {
+            self.search_suggestions.catalog.refresh(self.entries.iter());
+            self.search_suggestions
+                .catalog
+                .records
+                .extend(self.taxonomy.catalog.records.iter().cloned());
+        }
+    }
+
+    fn collection_query(&self, cx: &Context<Self>) -> String {
+        self.search_suggestions
+            .collection_query(&self.search.read(cx).value(), self.stage)
+    }
+
     fn refilter(&mut self, cx: &mut Context<Self>) {
         self.marquee = None;
+        self.search_suggestions.active = None;
+        self.refresh_search_catalog();
         (self.visible, self.type_counts) = catalog::browse_with_counts(
             &self.entries,
-            &self.search.read(cx).value(),
+            &self.collection_query(cx),
             catalog::BrowseFilter {
                 path_search: self.stage,
                 videos_only: self.videos_only,
@@ -232,7 +269,7 @@ impl Gallery {
     }
 
     fn add_search(&mut self, value: &str, window: &mut Window, cx: &mut Context<Self>) {
-        let current = self.search.read(cx).value().to_string();
+        let current = self.collection_query(cx);
         let mut terms: Vec<_> = current
             .split(';')
             .map(str::trim)
@@ -245,9 +282,10 @@ impl Gallery {
         {
             terms.push(value.to_owned());
         }
-        self.search.update(cx, |state, cx| {
-            state.set_value(terms.join("; "), window, cx)
-        });
+        let query = terms.join("; ");
+        self.search_suggestions.applied = query.clone();
+        self.search
+            .update(cx, |state, cx| state.set_value(query, window, cx));
         self.refilter(cx);
     }
 
