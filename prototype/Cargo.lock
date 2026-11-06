@@ -3919,6 +3919,7 @@ dependencies = [
  "gpui-component",
  "gpui-component-assets",
  "image",
+ "raw-window-handle",
  "resvg",
  "tempfile",
  "thiserror 2.0.21",
@@ -3926,6 +3927,7 @@ dependencies = [
  "tracing-subscriber",
  "unicode-normalization",
  "windows 0.62.2",
+ "windows-collections 0.3.2",
 ]
 
 [[package]]

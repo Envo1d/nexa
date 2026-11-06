@@ -396,8 +396,13 @@ impl Gallery {
                                     detail_button("detail-share", "", "share", false)
                                         .flex_1()
                                         .flex_basis(px(0.0))
-                                        .on_click(cx.listener(|this, _, _, cx| {
-                                            this.unavailable("Поделиться файлом", cx)
+                                        .on_click(cx.listener(move |this, _, window, cx| {
+                                            this.run_file_action(
+                                                index,
+                                                super::file_operations::Action::Share,
+                                                window,
+                                                cx,
+                                            )
                                         })),
                                 )
                                 .child(
