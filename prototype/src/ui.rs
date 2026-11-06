@@ -9,6 +9,7 @@ use gpui_component::input::{InputEvent, InputState};
 mod assets;
 mod background;
 mod collection;
+mod context_menu;
 mod details;
 mod distribution;
 mod duplicates;
@@ -34,6 +35,7 @@ pub(crate) use assets::Assets;
 gpui::actions!(nexa, [FocusSearch, CloseDetails, NextFocus, PreviousFocus]);
 
 pub(super) fn init(cx: &mut App) {
+    context_menu::init(cx);
     tracing::debug!(
         operation = "window_controls",
         drag_backend = "native_caption_hit_test",
@@ -61,6 +63,7 @@ const MUTED: u32 = 0xa39bb5;
 const ACCENT: u32 = 0xa786ff;
 
 pub(super) struct Gallery {
+    context_menu: Option<context_menu::Menu>,
     file_operation: Option<file_operations::Draft>,
     file_action_busy: bool,
     tag_editor: Option<file_tags::Editor>,
@@ -174,6 +177,7 @@ impl Gallery {
         let type_counts = [entries.len(), videos, entries.len() - videos];
 
         Self {
+            context_menu: None,
             file_operation: None,
             file_action_busy: false,
             tag_editor: None,
@@ -744,6 +748,9 @@ impl Render for Gallery {
             })
             .when(self.distribution.is_some(), |view| {
                 view.child(self.distribution_dialog(window, cx))
+            })
+            .when(self.context_menu.is_some(), |view| {
+                view.child(self.card_context_menu(window, cx))
             })
             .into_any_element()
     }
