@@ -2,10 +2,11 @@ use std::{path::PathBuf, time::Duration};
 
 use gpui::{
     App, AppContext, Bounds, Context, FontWeight, Render, Window, WindowBounds, WindowOptions, div,
-    img, prelude::*, px, rgb, size,
+    img, prelude::*, px, size,
 };
 
 use super::super::super::{ACCENT, LINE, MUTED, TEXT, motion};
+use crate::appearance::rgb;
 
 struct Updater {
     tick: usize,
@@ -51,7 +52,9 @@ pub(super) fn open(cx: &mut App) -> Result<(), String> {
             })
         },
     )
-    .map_err(|_| "Не удалось открыть окно предпросмотра обновления.".to_owned())?;
+    .map_err(|_| {
+        crate::i18n::text("Не удалось открыть окно предпросмотра обновления.").to_owned()
+    })?;
     tracing::info!(
         operation = "update_preview",
         mode = "simulation",
@@ -70,16 +73,16 @@ impl Render for Updater {
             _ => 3,
         };
         let title = [
-            "Подготовка",
-            "Проверка обновления",
-            "Обновление Nexa",
-            "Всё готово",
+            crate::i18n::text("Подготовка"),
+            crate::i18n::text("Проверка обновления"),
+            crate::i18n::text("Обновление Nexa"),
+            crate::i18n::text("Всё готово"),
         ][phase];
         let message = [
-            "Подготовка обновления…",
-            "Проверка пакета обновления…",
-            "Установка обновления…",
-            "Предпросмотр завершён. Приложение не изменялось.",
+            crate::i18n::text("Подготовка обновления…"),
+            crate::i18n::text("Проверка пакета обновления…"),
+            crate::i18n::text("Установка обновления…"),
+            crate::i18n::text("Предпросмотр завершён. Приложение не изменялось."),
         ][phase];
         let step = match phase {
             0 | 1 => 0,
@@ -87,7 +90,13 @@ impl Render for Updater {
             _ => 2,
         };
         let mut steps = div().flex().justify_between().text_size(px(11.));
-        for (index, label) in ["Проверка", "Установка", "Открыть Nexa"].iter().enumerate()
+        for (index, label) in [
+            crate::i18n::text("Проверка"),
+            crate::i18n::text("Установка"),
+            crate::i18n::text("Открыть Nexa"),
+        ]
+        .iter()
+        .enumerate()
         {
             steps = steps.child(
                 div()
@@ -136,7 +145,7 @@ impl Render for Updater {
                     .on_mouse_down(gpui::MouseButton::Left, |_, window, _| {
                         window.start_window_move()
                     })
-                    .child("Nexa · Предпросмотр обновления")
+                    .child(crate::i18n::text("Nexa · Предпросмотр обновления"))
                     .child(
                         motion::button("close-updater")
                             .keyboard_focus(true)
@@ -169,7 +178,7 @@ impl Render for Updater {
                     .text_size(px(12.))
                     .text_color(rgb(MUTED))
                     .mb(px(8.))
-                    .child("Версия 2.16.3 · демонстрация"),
+                    .child(crate::i18n::text("Версия 2.16.3 · демонстрация")),
             )
             .child(
                 div()
@@ -211,7 +220,9 @@ impl Render for Updater {
                     .mt(px(20.))
                     .text_size(px(12.))
                     .text_color(rgb(MUTED))
-                    .child("Симуляция: загрузка и перезапуск не выполняются."),
+                    .child(crate::i18n::text(
+                        "Симуляция: загрузка и перезапуск не выполняются.",
+                    )),
             )
     }
 }

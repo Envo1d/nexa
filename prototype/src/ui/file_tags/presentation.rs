@@ -1,10 +1,9 @@
 use gpui::Focusable;
-use gpui::{
-    BoxShadow, Context, Div, FontWeight, Window, div, img, point, prelude::*, px, rgb, rgba,
-};
+use gpui::{BoxShadow, Context, Div, FontWeight, Window, div, img, point, prelude::*, px};
 use gpui_component::input::Input;
 
 use super::super::{ACCENT, Gallery, LINE, MUTED, SURFACE, TEXT, motion, shell::icon};
+use crate::appearance::{rgb, rgba};
 
 fn button(id: &'static str, label: &str) -> motion::MotionDiv {
     super::super::button(id, label)
@@ -64,7 +63,11 @@ impl Gallery {
             );
         }
         if e.draft.is_empty() {
-            chips = chips.child(div().text_color(rgb(MUTED)).child("Тегов пока нет"));
+            chips = chips.child(
+                div()
+                    .text_color(rgb(MUTED))
+                    .child(crate::i18n::text("Тегов пока нет")),
+            );
         }
 
         let mut search = div().relative().flex().flex_col().gap_2().child(
@@ -120,7 +123,7 @@ impl Gallery {
                         .items_center()
                         .gap(px(6.))
                         .child(icon("plus").size(px(16.)))
-                        .child("Добавить")
+                        .child(crate::i18n::text("Добавить"))
                         .when(e.query.read(cx).value().trim().is_empty(), |d| {
                             d.opacity(0.4).cursor_default()
                         })
@@ -170,7 +173,7 @@ impl Gallery {
                                     .py(px(10.))
                                     .text_size(px(12.))
                                     .text_color(rgb(MUTED))
-                                    .child("Подходящих значений нет."),
+                                    .child(crate::i18n::text("Подходящих значений нет.")),
                             )
                         })
                         .children(options.into_iter().enumerate().map(|(index, value)| {
@@ -286,7 +289,7 @@ impl Gallery {
                                         div()
                                             .text_size(px(17.))
                                             .font_weight(FontWeight::BOLD)
-                                            .child("Редактировать теги"),
+                                            .child(crate::i18n::text("Редактировать теги")),
                                     )
                                     .child(
                                         div()
@@ -333,7 +336,7 @@ impl Gallery {
                                     .text_size(px(12.))
                                     .font_weight(FontWeight::MEDIUM)
                                     .text_color(rgb(MUTED))
-                                    .child("Выбранные теги"),
+                                    .child(crate::i18n::text("Выбранные теги")),
                             )
                             .child(
                                 div()
@@ -359,7 +362,9 @@ impl Gallery {
                             .text_size(px(12.))
                             .line_height(px(18.))
                             .text_color(rgb(MUTED))
-                            .child("Найдите существующий тег или введите новый."),
+                            .child(crate::i18n::text(
+                                "Найдите существующий тег или введите новый.",
+                            )),
                     )
                     .child(search),
             )
@@ -378,7 +383,9 @@ impl Gallery {
                     .text_size(px(11.))
                     .line_height(px(18.7))
                     .text_color(rgb(MUTED))
-                    .child("Изменения сохраняются только на время демосессии."),
+                    .child(crate::i18n::text(
+                        "Изменения сохраняются только на время демосессии.",
+                    )),
             )
             .child(
                 div()
@@ -389,11 +396,13 @@ impl Gallery {
                     .flex()
                     .justify_end()
                     .gap_2()
-                    .child(button("file-tag-cancel", "Отмена").on_click(
-                        cx.listener(|this, _, window, cx| this.close_file_tags(window, cx)),
-                    ))
                     .child(
-                        button("file-tag-save", "Сохранить теги")
+                        button("file-tag-cancel", crate::i18n::text("Отмена")).on_click(
+                            cx.listener(|this, _, window, cx| this.close_file_tags(window, cx)),
+                        ),
+                    )
+                    .child(
+                        button("file-tag-save", crate::i18n::text("Сохранить теги"))
                             .with_focus(&e.save_focus)
                             .bg(motion::Surface::gradient(
                                 120.,

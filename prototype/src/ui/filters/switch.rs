@@ -1,8 +1,9 @@
 use std::time::Instant;
 
-use gpui::{App, IntoElement, RenderOnce, Window, div, prelude::*, px, rgb};
+use gpui::{App, IntoElement, RenderOnce, Window, div, prelude::*, px};
 
 use super::super::{ACCENT, TEXT, motion};
+use crate::appearance::rgb;
 
 #[derive(IntoElement)]
 pub(in crate::ui) struct Switch {

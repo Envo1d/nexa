@@ -1,6 +1,8 @@
 use std::{cell::Cell, rc::Rc};
 
-use gpui::{IntoElement, Pixels, ScrollHandle, Styled, canvas, fill, point, px, rgb, size};
+use gpui::{IntoElement, Pixels, ScrollHandle, Styled, canvas, fill, point, px, size};
+
+use crate::appearance::rgb;
 
 /// Match the reference's five-pixel scrollbar without a component-library rail.
 #[derive(Default)]

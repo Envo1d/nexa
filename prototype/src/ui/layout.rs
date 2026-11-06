@@ -21,13 +21,13 @@ pub(super) fn full_duration(duration: Option<&str>) -> String {
     match duration {
         Some(value) if value.matches(':').count() == 1 => format!("00:{value}"),
         Some(value) => value.to_owned(),
-        None => "Недоступно".into(),
+        None => crate::i18n::text("Недоступно").into(),
     }
 }
 
 pub(super) fn compact_date(date: Option<&str>) -> String {
     let Some(date) = date else {
-        return "Дата недоступна".into();
+        return crate::i18n::text("Дата недоступна").into();
     };
     let Some((day, time)) = date.split_once(' ') else {
         return date.into();
@@ -35,18 +35,18 @@ pub(super) fn compact_date(date: Option<&str>) -> String {
     let parts: Vec<_> = day.split('.').collect();
     let month = parts.get(1).and_then(|value| value.parse::<usize>().ok());
     let months = [
-        "янв.",
-        "февр.",
-        "мар.",
-        "апр.",
-        "мая",
-        "июн.",
-        "июл.",
-        "авг.",
-        "сент.",
-        "окт.",
-        "нояб.",
-        "дек.",
+        crate::i18n::text("янв."),
+        crate::i18n::text("февр."),
+        crate::i18n::text("мар."),
+        crate::i18n::text("апр."),
+        crate::i18n::text("мая"),
+        crate::i18n::text("июн."),
+        crate::i18n::text("июл."),
+        crate::i18n::text("авг."),
+        crate::i18n::text("сент."),
+        crate::i18n::text("окт."),
+        crate::i18n::text("нояб."),
+        crate::i18n::text("дек."),
     ];
 
     match month

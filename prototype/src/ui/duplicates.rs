@@ -1,8 +1,9 @@
 use std::{collections::BTreeSet, time::Duration};
 
-use gpui::{Context, Div, Window, div, prelude::*, px, rgb};
+use gpui::{Context, Div, Window, div, prelude::*, px};
 
 use super::{Gallery, LINE, SURFACE, TEXT, motion};
+use crate::appearance::rgb;
 use crate::catalog::Entry;
 
 mod presentation;
@@ -151,8 +152,8 @@ impl Duplicates {
         self.removed.insert(id);
         self.selected = None;
         self.message = Some(match action {
-            Action::Delete(_) => "Демонстрационный файл удалён из результатов. Реальные файлы не изменены.",
-            Action::Replace => "Демонстрационная версия Main заменена. Реальные файлы и метаданные не изменены.",
+            Action::Delete(_) => crate::i18n::text("Демонстрационный файл удалён из результатов. Реальные файлы не изменены."),
+            Action::Replace => crate::i18n::text("Демонстрационная версия Main заменена. Реальные файлы и метаданные не изменены."),
         }.into());
 
         true
@@ -199,6 +200,10 @@ fn demo_pairs() -> Vec<Pair> {
 }
 
 impl Gallery {
+    pub(super) fn refresh_duplicates_locale(&mut self) {
+        self.duplicates.message = None;
+    }
+
     pub(super) fn cancel_duplicate_confirmation(&mut self) {
         self.duplicates.confirmation = None;
     }

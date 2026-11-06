@@ -1,10 +1,11 @@
 use gpui::{
     App, BoxShadow, Context, Corner, Focusable, IntoElement, RenderOnce, WeakEntity, Window, div,
-    point, prelude::*, px, rgb, rgba,
+    point, prelude::*, px,
 };
 use gpui_component::{Selectable, popover::Popover};
 
 use super::{ACCENT, Gallery, LANGUAGES, LINE, MUTED, TEXT, THEMES, icon, motion, text};
+use crate::appearance::{rgb, rgba};
 
 impl Gallery {
     pub(super) fn settings_selector(
@@ -21,7 +22,10 @@ impl Gallery {
         let options: Vec<String> = if theme {
             THEMES.iter().map(|key| text(key).to_owned()).collect()
         } else {
-            LANGUAGES.iter().map(|value| (*value).to_owned()).collect()
+            LANGUAGES
+                .iter()
+                .map(|value| crate::i18n::text(value).to_owned())
+                .collect()
         };
         let gallery = cx.weak_entity();
         let open = gallery.clone();

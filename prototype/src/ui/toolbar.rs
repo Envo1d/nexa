@@ -1,10 +1,11 @@
-use gpui::{BoxShadow, Context, Div, Focusable, div, point, prelude::*, px, rgb, rgba};
+use gpui::{BoxShadow, Context, Div, Focusable, div, point, prelude::*, px};
 use gpui_component::input::Input;
 
 use super::{
     ACCENT, Gallery, LINE, MUTED, TEXT,
     shell::{control, icon},
 };
+use crate::appearance::{rgb, rgba};
 
 impl Gallery {
     pub(super) fn toolbar(&self, cx: &mut Context<Self>) -> Div {
@@ -106,7 +107,7 @@ impl Gallery {
                             .child(
                                 type_control(
                                     "all",
-                                    "Все файлы",
+                                    crate::i18n::text("Все файлы"),
                                     "files",
                                     self.type_counts[0],
                                     !self.videos_only && !self.images_only,
@@ -122,7 +123,7 @@ impl Gallery {
                             .child(
                                 type_control(
                                     "videos",
-                                    "Видео",
+                                    crate::i18n::text("Видео"),
                                     "video",
                                     self.type_counts[1],
                                     self.videos_only,
@@ -138,7 +139,7 @@ impl Gallery {
                             .child(
                                 type_control(
                                     "images",
-                                    "Изображения",
+                                    crate::i18n::text("Изображения"),
                                     "image",
                                     self.type_counts[2],
                                     self.images_only,
@@ -220,7 +221,7 @@ impl Gallery {
                     div()
                         .text_size(px(11.0))
                         .text_color(rgb(MUTED))
-                        .child("Подготовка выбранных файлов…"),
+                        .child(crate::i18n::text("Подготовка выбранных файлов…")),
                 )
             })
     }

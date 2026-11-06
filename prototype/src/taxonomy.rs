@@ -15,19 +15,19 @@ impl Category {
 
     pub(crate) fn label(self) -> &'static str {
         match self {
-            Self::Copyright => "Произведения",
-            Self::Artist => "Авторы",
-            Self::Character => "Персонажи",
-            Self::Tag => "Теги",
+            Self::Copyright => crate::i18n::text("Произведения"),
+            Self::Artist => crate::i18n::text("Авторы"),
+            Self::Character => crate::i18n::text("Персонажи"),
+            Self::Tag => crate::i18n::text("Теги"),
         }
     }
 
     pub(crate) fn singular(self) -> &'static str {
         match self {
-            Self::Copyright => "Произведение",
-            Self::Artist => "Автор",
-            Self::Character => "Персонаж",
-            Self::Tag => "Тег",
+            Self::Copyright => crate::i18n::text("Произведение"),
+            Self::Artist => crate::i18n::text("Автор"),
+            Self::Character => crate::i18n::text("Персонаж"),
+            Self::Tag => crate::i18n::text("Тег"),
         }
     }
 

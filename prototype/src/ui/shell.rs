@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use gpui::{Context, Div, Window, WindowControlArea, div, img, prelude::*, px, rgb};
+use gpui::{Context, Div, Window, WindowControlArea, div, img, prelude::*, px};
 use gpui_component::{
     Icon, IconName, Sizable,
     button::{Button, ButtonVariants},
@@ -8,6 +8,7 @@ use gpui_component::{
 };
 
 use super::{ACCENT, Gallery, LINE, MUTED, SURFACE, TEXT, button, button_with_hover, motion};
+use crate::appearance::rgb;
 
 fn navigation_button(
     id: &'static str,
@@ -149,7 +150,7 @@ fn window_control(
         .justify_center()
         .rounded(px(8.0))
         .text_color(rgb(MUTED))
-        .bg(gpui::rgba(0))
+        .bg(crate::appearance::rgba(0))
         .border_0()
         .child(icon(name).size(px(size)))
 }
@@ -168,7 +169,7 @@ impl Gallery {
             .pt_2()
             .gap_1()
             .child(
-                button("main-tab", "Библиотека")
+                button("main-tab", crate::i18n::text("Библиотека"))
                     .h_full()
                     .py_0()
                     .border_0()
@@ -186,7 +187,7 @@ impl Gallery {
                             || self.settings_open
                             || self.duplicates_open
                         {
-                            gpui::rgba(0)
+                            crate::appearance::rgba(0)
                         } else {
                             rgb(0x2c263f)
                         },
@@ -199,7 +200,7 @@ impl Gallery {
                             || self.settings_open
                             || self.duplicates_open
                         {
-                            gpui::rgba(0)
+                            crate::appearance::rgba(0)
                         } else {
                             rgb(ACCENT)
                         },
@@ -221,7 +222,7 @@ impl Gallery {
                     ),
             )
             .child(
-                button("stage", "Входящие")
+                button("stage", crate::i18n::text("Входящие"))
                     .bg(
                         if self.stage
                             && !self.taxonomy_open
@@ -231,7 +232,7 @@ impl Gallery {
                         {
                             rgb(0x2c263f)
                         } else {
-                            gpui::rgba(0)
+                            crate::appearance::rgba(0)
                         },
                     )
                     .border_0()
@@ -245,7 +246,7 @@ impl Gallery {
                         {
                             rgb(ACCENT)
                         } else {
-                            gpui::rgba(0)
+                            crate::appearance::rgba(0)
                         },
                     )
                     .rounded_t(px(9.0))
@@ -343,7 +344,11 @@ impl Gallery {
     }
 
     pub(super) fn unavailable(&mut self, feature: &'static str, cx: &mut Context<Self>) {
-        self.status = format!("{feature}: перенос этого раздела ещё не выполнен.");
+        self.status = if crate::i18n::english() {
+            format!("{feature}: this section has not been ported yet.")
+        } else {
+            format!("{feature}: перенос этого раздела ещё не выполнен.")
+        };
         self.notice = Some(self.status.clone());
         cx.notify();
     }
@@ -370,18 +375,22 @@ impl Gallery {
                 gpui::linear_color_stop(rgb(0x10101a), 1.0),
             ))
             .child(
-                navigation_button("collapse", label("Библиотека"), "nav-menu", false).on_click(
-                    cx.listener(|this, _, _, cx| {
-                        this.sidebar_expanded = !this.sidebar_expanded;
-                        cx.notify();
-                    }),
-                ),
+                navigation_button(
+                    "collapse",
+                    label(crate::i18n::text("Библиотека")),
+                    "nav-menu",
+                    false,
+                )
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.sidebar_expanded = !this.sidebar_expanded;
+                    cx.notify();
+                })),
             )
             .child(div().h(px(12.0)).flex_shrink_0())
             .child(
                 navigation_button(
                     "gallery",
-                    label("Галерея"),
+                    label(crate::i18n::text("Галерея")),
                     "folder",
                     !self.settings_open
                         && !self.duplicates_open
@@ -400,7 +409,7 @@ impl Gallery {
             .child(
                 navigation_button(
                     "favorites",
-                    label("Избранное"),
+                    label(crate::i18n::text("Избранное")),
                     "nav-star",
                     !self.settings_open
                         && !self.duplicates_open
@@ -417,19 +426,29 @@ impl Gallery {
             )
             .child(div().h(px(4.0)).flex_shrink_0())
             .child(
-                navigation_button("tags", label("Теги"), "tag", self.taxonomy_open)
-                    .on_click(cx.listener(|this, _, window, cx| this.open_taxonomy(window, cx))),
+                navigation_button(
+                    "tags",
+                    label(crate::i18n::text("Теги")),
+                    "tag",
+                    self.taxonomy_open,
+                )
+                .on_click(cx.listener(|this, _, window, cx| this.open_taxonomy(window, cx))),
             )
             .child(div().h(px(4.0)).flex_shrink_0())
             .child(
-                navigation_button("health", label("Проверка"), "warning", self.health_open)
-                    .on_click(cx.listener(|this, _, window, cx| this.open_health(window, cx))),
+                navigation_button(
+                    "health",
+                    label(crate::i18n::text("Проверка")),
+                    "warning",
+                    self.health_open,
+                )
+                .on_click(cx.listener(|this, _, window, cx| this.open_health(window, cx))),
             )
             .child(div().h(px(4.0)).flex_shrink_0())
             .child(
                 navigation_button(
                     "duplicates-nav",
-                    label("Дубликаты"),
+                    label(crate::i18n::text("Дубликаты")),
                     "copy",
                     self.duplicates_open,
                 )
@@ -447,7 +466,7 @@ impl Gallery {
                     .child(
                         navigation_button(
                             "settings-content",
-                            label("Настройки"),
+                            label(crate::i18n::text("Настройки")),
                             "nav-settings",
                             self.settings_open,
                         )
@@ -459,17 +478,20 @@ impl Gallery {
                         let settings = gallery.clone();
                         let files = gallery.clone();
 
-                        menu.item(
-                            PopupMenuItem::new("Настройки").on_click(move |_, window, cx| {
+                        menu.item(PopupMenuItem::new(crate::i18n::text("Настройки")).on_click(
+                            move |_, window, cx| {
                                 let _ =
                                     settings.update(cx, |this, cx| this.open_settings(window, cx));
-                            }),
-                        )
+                            },
+                        ))
                         .separator()
                         .item(
-                            PopupMenuItem::new("Открыть файлы…").on_click(move |_, window, cx| {
-                                let _ = files.update(cx, |this, cx| this.choose_files(window, cx));
-                            }),
+                            PopupMenuItem::new(crate::i18n::text("Открыть файлы…")).on_click(
+                                move |_, window, cx| {
+                                    let _ =
+                                        files.update(cx, |this, cx| this.choose_files(window, cx));
+                                },
+                            ),
                         )
                     }),
             )

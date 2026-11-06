@@ -3,9 +3,10 @@ use std::{
     sync::Arc,
 };
 
-use gpui::{Context, Div, RenderImage, UniformListScrollHandle, Window, div, prelude::*, px, rgb};
+use gpui::{Context, Div, RenderImage, UniformListScrollHandle, Window, div, prelude::*, px};
 
 use super::{Gallery, LINE, MUTED, SURFACE, TEXT, shell::control};
+use crate::appearance::rgb;
 use crate::catalog::{self, Entry, SortMode};
 
 pub(super) struct Workspace {
@@ -77,9 +78,9 @@ impl Gallery {
         self.search.update(cx, |state, cx| {
             state.set_placeholder(
                 if stage {
-                    "Поиск по имени файла или пути"
+                    crate::i18n::text("Поиск по имени файла или пути")
                 } else {
-                    "Метаданные через точку с запятой"
+                    crate::i18n::text("Метаданные через точку с запятой")
                 },
                 window,
                 cx,
@@ -148,32 +149,44 @@ impl Gallery {
                     .text_color(rgb(TEXT))
                     .child(self.entries.len().to_string()),
             )
-            .child(div().text_size(px(13.0)).child("файлов ждут распределения"))
+            .child(
+                div()
+                    .text_size(px(13.0))
+                    .child(crate::i18n::text("файлов ждут распределения")),
+            )
             .child(
                 div()
                     .mt(px(6.0))
                     .text_size(px(12.0))
                     .line_height(px(19.2))
-                    .child(
+                    .child(crate::i18n::text(
                         "Выберите файлы, чтобы назначить метаданные и перенести их в библиотеку.",
-                    ),
+                    )),
             );
-        let previews =
-            super::filters::toggle("stage-previews", "Показывать превью", self.show_previews)
-                .on_click(cx.listener(|this, _, _, cx| {
-                    this.show_previews = !this.show_previews;
-                    cx.notify();
-                }));
-        let reset = control("stage-reset", "Сбросить фильтры", "reset", false)
-            .justify_center()
-            .text_size(px(11.0))
-            .on_click(cx.listener(|this, _, window, cx| {
-                this.videos_only = false;
-                this.images_only = false;
-                this.search
-                    .update(cx, |state, cx| state.set_value("", window, cx));
-                this.refilter(cx);
-            }));
+        let previews = super::filters::toggle(
+            "stage-previews",
+            crate::i18n::text("Показывать превью"),
+            self.show_previews,
+        )
+        .on_click(cx.listener(|this, _, _, cx| {
+            this.show_previews = !this.show_previews;
+            cx.notify();
+        }));
+        let reset = control(
+            "stage-reset",
+            crate::i18n::text("Сбросить фильтры"),
+            "reset",
+            false,
+        )
+        .justify_center()
+        .text_size(px(11.0))
+        .on_click(cx.listener(|this, _, window, cx| {
+            this.videos_only = false;
+            this.images_only = false;
+            this.search
+                .update(cx, |state, cx| state.set_value("", window, cx));
+            this.refilter(cx);
+        }));
 
         div()
             .flex()
@@ -198,7 +211,7 @@ impl Gallery {
                     .p_4()
                     .text_size(px(14.0))
                     .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .child("Очередь входящих"),
+                    .child(crate::i18n::text("Очередь входящих")),
             )
             .child(
                 div()
@@ -221,7 +234,11 @@ impl Gallery {
                     .child(
                         self.distribution_button(
                             "stage-distribute",
-                            &format!("Распределить выбранные ({count})"),
+                            &(if crate::i18n::english() {
+                                format!("Distribute selected ({count})")
+                            } else {
+                                format!("Распределить выбранные ({count})")
+                            }),
                             cx,
                         )
                         .w_full()
@@ -254,13 +271,17 @@ impl Gallery {
                     .whitespace_nowrap()
                     .text_color(rgb(MUTED))
                     .child(if count == 0 {
-                        "Выберите файлы для распределения".to_owned()
+                        crate::i18n::text("Выберите файлы для распределения").to_owned()
                     } else {
-                        format!("Выбрано: {count}")
+                        if crate::i18n::english() {
+                            format!("Selected: {count}")
+                        } else {
+                            format!("Выбрано: {count}")
+                        }
                     }),
             )
             .child(
-                super::button("stage-clear", "Снять выделение")
+                super::button("stage-clear", crate::i18n::text("Снять выделение"))
                     .opacity(if count == 0 { 0.45 } else { 1.0 })
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.stage_selection.clear();
@@ -268,7 +289,11 @@ impl Gallery {
                         cx.notify();
                     })),
             )
-            .child(self.distribution_button("stage-distribute-bar", "Распределить", cx))
+            .child(self.distribution_button(
+                "stage-distribute-bar",
+                crate::i18n::text("Распределить"),
+                cx,
+            ))
     }
 
     pub(super) fn distribution_button(

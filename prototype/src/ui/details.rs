@@ -1,10 +1,11 @@
 use gpui::{
     BoxShadow, ClipboardItem, Context, Div, SharedString, Stateful, Window, div, point, prelude::*,
-    px, rgb, rgba,
+    px,
 };
 use gpui_component::scroll::{Scrollbar, ScrollbarShow};
 
 use super::{Gallery, LINE, MUTED, SURFACE, TEXT, shell::icon};
+use crate::appearance::{rgb, rgba};
 
 mod scrolling;
 
@@ -51,7 +52,7 @@ impl Gallery {
                             .flex_1()
                             .text_size(px(14.0))
                             .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .child("Информация о файле"),
+                            .child(crate::i18n::text("Информация о файле")),
                     )
                     .child(
                         super::motion::button("close-details")
@@ -97,12 +98,14 @@ impl Gallery {
                             .text_color(rgb(TEXT))
                             .font_weight(gpui::FontWeight::SEMIBOLD)
                             .child(if self.stage && self.stage_selection.len() > 1 {
-                                "Выбрано несколько файлов"
+                                crate::i18n::text("Выбрано несколько файлов")
                             } else {
-                                "Файл не выбран"
+                                crate::i18n::text("Файл не выбран")
                             }),
                     )
-                    .child("Выберите один файл, чтобы просмотреть информацию."),
+                    .child(crate::i18n::text(
+                        "Выберите один файл, чтобы просмотреть информацию.",
+                    )),
             );
         };
         let entry = &self.entries[index];
@@ -121,9 +124,9 @@ impl Gallery {
                     "{} ({})",
                     entry.extension,
                     if entry.video {
-                        "Видео"
+                        crate::i18n::text("Видео")
                     } else {
-                        "Изображение"
+                        crate::i18n::text("Изображение")
                     }
                 ),
             ),
@@ -133,7 +136,7 @@ impl Gallery {
                     .details
                     .size
                     .map(format_size)
-                    .unwrap_or_else(|| "Недоступно".into()),
+                    .unwrap_or_else(|| crate::i18n::text("Недоступно").into()),
             ),
             (
                 "Разрешение",
@@ -141,7 +144,7 @@ impl Gallery {
                     .details
                     .resolution
                     .map(|(width, height)| format!("{width} × {height}"))
-                    .unwrap_or_else(|| "Недоступно".into()),
+                    .unwrap_or_else(|| crate::i18n::text("Недоступно").into()),
             ),
         ];
         if entry.video {
@@ -154,7 +157,7 @@ impl Gallery {
                 if entry.demo {
                     "29,97"
                 } else {
-                    "Недоступно"
+                    crate::i18n::text("Недоступно")
                 }
                 .into(),
             ));
@@ -164,7 +167,7 @@ impl Gallery {
             entry
                 .date_label
                 .clone()
-                .unwrap_or_else(|| "Недоступно".into()),
+                .unwrap_or_else(|| crate::i18n::text("Недоступно").into()),
         ));
         fields.push((
             "Создан",
@@ -172,7 +175,7 @@ impl Gallery {
                 .details
                 .created_label
                 .clone()
-                .unwrap_or_else(|| "Недоступно".into()),
+                .unwrap_or_else(|| crate::i18n::text("Недоступно").into()),
         ));
         if entry.video {
             fields.push((
@@ -180,16 +183,16 @@ impl Gallery {
                 if entry.demo {
                     "H.264 / AVC"
                 } else {
-                    "Недоступно"
+                    crate::i18n::text("Недоступно")
                 }
                 .into(),
             ));
             fields.push((
                 "Битрейт",
                 if entry.demo {
-                    "50.20 Мбит/с"
+                    crate::i18n::text("50.20 Мбит/с")
                 } else {
-                    "Недоступно"
+                    crate::i18n::text("Недоступно")
                 }
                 .into(),
             ));
@@ -230,9 +233,9 @@ impl Gallery {
                         .child(self.picture_fitted(index, true))
                         .child(preview_badge(
                             if entry.video {
-                                "Предпросмотр видео"
+                                crate::i18n::text("Предпросмотр видео")
                             } else {
-                                "Предпросмотр изображения"
+                                crate::i18n::text("Предпросмотр изображения")
                             },
                             false,
                         ))
@@ -253,28 +256,28 @@ impl Gallery {
                         .border_color(rgb(LINE))
                         .child(self.metadata_group(
                             "copyrights",
-                            "Произведение",
+                            crate::i18n::text("Произведение"),
                             &entry.details.copyrights,
                             (0x382128, 0xf0c2cd, chip_size),
                             cx,
                         ))
                         .child(self.metadata_group(
                             "artist",
-                            "Автор",
+                            crate::i18n::text("Автор"),
                             &artist,
                             (0x262544, 0xd6d1ff, chip_size),
                             cx,
                         ))
                         .child(self.metadata_group(
                             "characters",
-                            "Персонажи",
+                            crate::i18n::text("Персонажи"),
                             &characters,
                             (0x203b32, 0xb0dfc7, chip_size),
                             cx,
                         ))
                         .child(self.metadata_group(
                             "tags",
-                            "Теги",
+                            crate::i18n::text("Теги"),
                             &entry.tags,
                             (0x2c2644, 0xd0b4fa, chip_size),
                             cx,
@@ -311,7 +314,7 @@ impl Gallery {
                                         .size(px(16.0))
                                         .flex_shrink_0(),
                                     )
-                                    .child(label),
+                                    .child(crate::i18n::text(label)),
                             )
                             .child(div().min_w_0().text_right().child(value))
                     })),
@@ -322,29 +325,45 @@ impl Gallery {
                     .flex_col()
                     .gap(px(7.0))
                     .child(
-                        detail_button("open-detail", "Открыть файл", "arrow", true).on_click(
-                            cx.listener(move |this, _, window, cx| {
+                        detail_button(
+                            "open-detail",
+                            crate::i18n::text("Открыть файл"),
+                            "arrow",
+                            true,
+                        )
+                        .on_click(cx.listener(
+                            move |this, _, window, cx| {
                                 this.selected = Some(index);
                                 this.open_selected(window, cx);
-                            }),
-                        ),
+                            },
+                        )),
                     )
                     .child(
-                        detail_button("reveal-detail", "Открыть папку", "folder", false).on_click(
-                            cx.listener(move |this, _, _, cx| {
-                                tracing::info!(
-                                    operation = "reveal_file",
-                                    "File location reveal requested"
-                                );
-                                cx.reveal_path(&this.entries[index].path);
-                            }),
-                        ),
+                        detail_button(
+                            "reveal-detail",
+                            crate::i18n::text("Открыть папку"),
+                            "folder",
+                            false,
+                        )
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            tracing::info!(
+                                operation = "reveal_file",
+                                "File location reveal requested"
+                            );
+                            cx.reveal_path(&this.entries[index].path);
+                        })),
                     )
                     .when(!self.stage, |view| {
                         view.child(
-                            detail_button("copy-detail", "Копировать путь", "copy", false)
-                                .h(px(34.0))
-                                .on_click(cx.listener(move |this, _, _, cx| {
+                            detail_button(
+                                "copy-detail",
+                                crate::i18n::text("Копировать путь"),
+                                "copy",
+                                false,
+                            )
+                            .h(px(34.0))
+                            .on_click(cx.listener(
+                                move |this, _, _, cx| {
                                     cx.write_to_clipboard(ClipboardItem::new_string(
                                         this.entries[index].path.to_string_lossy().into_owned(),
                                     ));
@@ -352,13 +371,14 @@ impl Gallery {
                                         operation = "copy_path",
                                         "Selected path copied"
                                     );
-                                })),
+                                },
+                            )),
                         )
                     })
                     .when(self.stage, |view| {
                         view.child(self.distribution_button(
                             "detail-distribute",
-                            "Распределить",
+                            crate::i18n::text("Распределить"),
                             cx,
                         ))
                     })
@@ -375,9 +395,9 @@ impl Gallery {
                                         .tooltip(move |window, cx| {
                                             gpui_component::tooltip::Tooltip::new(
                                                 if entry_favorite {
-                                                    "Убрать из избранного"
+                                                    crate::i18n::text("Убрать из избранного")
                                                 } else {
-                                                    "Добавить в избранное"
+                                                    crate::i18n::text("Добавить в избранное")
                                                 },
                                             )
                                             .build(window, cx)
@@ -516,9 +536,9 @@ impl Gallery {
                     .when(values.is_empty(), |view| {
                         view.child(div().text_size(px(12.0)).text_color(rgb(MUTED)).child(
                             if id == "tags" {
-                                "Тегов пока нет"
+                                crate::i18n::text("Тегов пока нет")
                             } else {
-                                "Недоступно"
+                                crate::i18n::text("Недоступно")
                             },
                         ))
                     }),
@@ -535,7 +555,8 @@ fn preview_badge(label: &str, right: bool) -> Div {
         .px(px(5.0))
         .py(px(3.0))
         .rounded(px(4.0))
-        .bg(gpui::rgba(0x0a0a12c2))
+        .bg(crate::appearance::rgba(0x0a0a12c2))
+        .text_color(rgb(0xffffff))
         .text_color(rgb(0xffffff))
         .text_size(px(if right { 10.0 } else { 9.0 }))
         .line_height(px(if right { 12.0 } else { 11.0 }))
@@ -551,9 +572,9 @@ pub(super) fn detail_button(
     let icon_only = label.is_empty();
     let tooltip = if icon_only {
         match name {
-            "share" => "Поделиться файлом",
-            "tag" => "Редактировать теги",
-            "more" => "Другие действия",
+            "share" => crate::i18n::text("Поделиться файлом"),
+            "tag" => crate::i18n::text("Редактировать теги"),
+            "more" => crate::i18n::text("Другие действия"),
             _ => "",
         }
     } else {
@@ -609,9 +630,17 @@ pub(super) fn detail_button(
 
 pub(super) fn format_size(bytes: u64) -> String {
     if bytes >= 1024 * 1024 * 1024 {
-        format!("{:.2} ГБ", bytes as f64 / 1024.0_f64.powi(3))
+        if crate::i18n::english() {
+            format!("{:.2} GB", bytes as f64 / 1024.0_f64.powi(3))
+        } else {
+            format!("{:.2} ГБ", bytes as f64 / 1024.0_f64.powi(3))
+        }
     } else {
-        format!("{:.2} МБ", bytes as f64 / 1024.0_f64.powi(2))
+        if crate::i18n::english() {
+            format!("{:.2} MB", bytes as f64 / 1024.0_f64.powi(2))
+        } else {
+            format!("{:.2} МБ", bytes as f64 / 1024.0_f64.powi(2))
+        }
     }
 }
 

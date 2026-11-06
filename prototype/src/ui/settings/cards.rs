@@ -1,7 +1,8 @@
-use gpui::{Context, Div, FontWeight, div, prelude::*, px, rgb};
+use gpui::{Context, Div, FontWeight, div, prelude::*, px};
 
 use super::presentation::{action, badge, label, row, small};
 use super::{Gallery, LINE, SURFACE, icon, text};
+use crate::appearance::rgb;
 
 fn card() -> Div {
     div()
@@ -96,10 +97,7 @@ impl Gallery {
                     .child(badge(text("idle"), true)),
             )
             .child(
-                small(concat!(
-                    "В этом сеансе сканирование не выполнялось · ",
-                    "Файлов: 0 · Обработано: 0 · Проблем: 0"
-                ))
+                small(crate::i18n::text("В этом сеансе сканирование не выполнялось · Файлов: 0 · Обработано: 0 · Проблем: 0"))
                 .line_height(px(17.0))
                 .mt(px(8.0)),
             );
@@ -128,7 +126,9 @@ impl Gallery {
                         .child(
                             div()
                                 .font_weight(FontWeight::SEMIBOLD)
-                                .child("Только в настольном приложении / 512 МБ"),
+                                .child(crate::i18n::text(
+                                    "Только в настольном приложении / 512 МБ",
+                                )),
                         ),
                 )
                 .child(
@@ -182,7 +182,7 @@ impl Gallery {
             );
         }
         content.child(self.settings_restore_preview(cx)).child(small(
-            "Копии сеанса GPUI: Библиотека и Входящие. Производственные JSON-копии Tauri, словарь, настройки и исходные файлы не включены. Экспорт метаданных не подходит для восстановления."
+            crate::i18n::text("Копии сеанса GPUI: Библиотека и Входящие. Производственные JSON-копии Tauri, словарь, настройки и исходные файлы не включены. Экспорт метаданных не подходит для восстановления.")
         ).py(px(16.)).px(px(20.)))
     }
     pub(super) fn settings_logs_card(&self, cx: &mut Context<Self>) -> Div {
@@ -201,10 +201,10 @@ impl Gallery {
     pub(super) fn settings_updates_card(&self, cx: &mut Context<Self>) -> Div {
         use super::dialogs::Update;
         let status = match self.settings.workflow.update {
-            Update::Unchecked => "Не проверено",
-            Update::Checking => "Проверка обновлений…",
-            Update::Available => "Доступна Nexa 2.16.3 · демонстрация",
-            Update::Complete => "Предпросмотр установки открыт",
+            Update::Unchecked => crate::i18n::text("Не проверено"),
+            Update::Checking => crate::i18n::text("Проверка обновлений…"),
+            Update::Available => crate::i18n::text("Доступна Nexa 2.16.3 · демонстрация"),
+            Update::Complete => crate::i18n::text("Предпросмотр установки открыт"),
         };
         card()
             .child(
@@ -234,14 +234,14 @@ impl Gallery {
                     div()
                         .pb(px(16.))
                         .child(
-                            small(
+                            small(crate::i18n::text(
                                 "Демонстрационное обновление. Установщик и сеть не используются.",
-                            )
+                            ))
                             .mb(px(12.)),
                         )
                         .child(
                             action("settings-install-update", "", Some("reset"))
-                                .child("Установить Nexa 2.16.3")
+                                .child(crate::i18n::text("Установить Nexa 2.16.3"))
                                 .on_click(cx.listener(|this, _, window, cx| {
                                     this.settings_confirm_update(window, cx)
                                 })),

@@ -1,9 +1,10 @@
 use gpui::{
     Context, Div, Focusable, FontWeight, MouseButton, ObjectFit, StyledImage, Window, div, img,
-    point, prelude::*, px, rgb, rgba,
+    point, prelude::*, px,
 };
 
 use super::{Gallery, Panel, UNSUPPORTED};
+use crate::appearance::{rgb, rgba};
 use crate::ui::{ACCENT, LINE, MUTED, TEXT, motion, shell::icon};
 
 pub(super) fn icon_button(
@@ -36,26 +37,26 @@ pub(super) fn sized_icon_button(
     let label = match name {
         "heart" => {
             if active {
-                "Убрать из избранного"
+                crate::i18n::text("Убрать из избранного")
             } else {
-                "В избранное"
+                crate::i18n::text("В избранное")
             }
         }
-        "viewer-heart-filled" => "Убрать из избранного",
-        "tag" => "Теги",
-        "info" => "Информация о файле",
-        "keyboard" => "Подсказки",
-        "external-link" => "Открыть внешне",
-        "close" => "Закрыть",
-        "play" => "Воспроизвести",
-        "pause" => "Пауза",
-        "repeat" => "Повтор видео (R)",
-        "volume-2" => "Выключить звук",
-        "volume-x" => "Включить звук",
-        "player-fullscreen" => "Полный экран",
-        "player-fullscreen-exit" => "Выйти из полного экрана",
-        "minus" => "Уменьшить",
-        "plus" => "Увеличить",
+        "viewer-heart-filled" => crate::i18n::text("Убрать из избранного"),
+        "tag" => crate::i18n::text("Теги"),
+        "info" => crate::i18n::text("Информация о файле"),
+        "keyboard" => crate::i18n::text("Подсказки"),
+        "external-link" => crate::i18n::text("Открыть внешне"),
+        "close" => crate::i18n::text("Закрыть"),
+        "play" => crate::i18n::text("Воспроизвести"),
+        "pause" => crate::i18n::text("Пауза"),
+        "repeat" => crate::i18n::text("Повтор видео (R)"),
+        "volume-2" => crate::i18n::text("Выключить звук"),
+        "volume-x" => crate::i18n::text("Включить звук"),
+        "player-fullscreen" => crate::i18n::text("Полный экран"),
+        "player-fullscreen-exit" => crate::i18n::text("Выйти из полного экрана"),
+        "minus" => crate::i18n::text("Уменьшить"),
+        "plus" => crate::i18n::text("Увеличить"),
         _ => "",
     };
 
@@ -112,7 +113,7 @@ impl Gallery {
             .w(px(width))
             .h(px(height))
             .object_fit(ObjectFit::Fill)
-            .with_loading(|| status("Загрузка файла…").into_any_element())
+            .with_loading(|| status(crate::i18n::text("Загрузка файла…")).into_any_element())
             .with_fallback(move || {
                 let gallery = gallery.clone();
                 gpui::canvas(
@@ -121,7 +122,8 @@ impl Gallery {
                             if this.viewer_state.generation == generation
                                 && this.viewer_state.error.is_none()
                             {
-                                this.viewer_state.error = Some(UNSUPPORTED.into());
+                                this.viewer_state.error =
+                                    Some(crate::i18n::text(UNSUPPORTED).into());
                                 this.viewer_state.loading = false;
                                 tracing::error!(
                                     operation = "media_viewer",
@@ -243,7 +245,7 @@ impl Gallery {
         }
 
         if self.viewer_state.loading && video {
-            body = body.child(status("Загрузка файла…"));
+            body = body.child(status(crate::i18n::text("Загрузка файла…")));
         }
         if self.player.as_ref().is_some_and(|player| {
             matches!(
@@ -257,7 +259,8 @@ impl Gallery {
                 .rounded(px(8.0))
                 .bg(rgba(0x0a0a12c2))
                 .text_color(rgb(0xffffff))
-                .child("Буферизация…");
+                .text_color(rgb(0xffffff))
+                .child(crate::i18n::text("Буферизация…"));
             body = body.child(
                 div()
                     .absolute()
@@ -282,6 +285,7 @@ impl Gallery {
                             .p(px(20.0))
                             .rounded(px(12.0))
                             .bg(rgba(0x0a0a12c2))
+                            .text_color(rgb(0xffffff))
                             .border_1()
                             .border_color(rgba(0xffffff20))
                             .flex()
@@ -291,7 +295,7 @@ impl Gallery {
                             .text_center()
                             .child(error)
                             .child(
-                                label_button("viewer-retry", "Повторить")
+                                label_button("viewer-retry", crate::i18n::text("Повторить"))
                                     .bg(rgb(0x1a1827))
                                     .border_1()
                                     .border_color(rgb(LINE))
@@ -410,7 +414,7 @@ impl Gallery {
         let title = if entry.video {
             self.viewer_video_title(cx)
         } else {
-            "Изображение".into()
+            crate::i18n::text("Изображение").into()
         };
         let compact = width <= 1100.0;
         let actions = div()
@@ -538,6 +542,7 @@ impl Gallery {
         .border_1()
         .border_color(rgba(0xffffff20))
         .bg(rgba(0x0a0a12c2))
+        .text_color(rgb(0xffffff))
         .text_color(rgb(0xf4f4f8))
         .opacity(if enabled { 1.0 } else { 0.4 })
         .when(enabled, |view| {
@@ -597,7 +602,7 @@ impl Gallery {
                     })),
             )
             .child(
-                label_button("zoom-fit", "Вписать")
+                label_button("zoom-fit", crate::i18n::text("Вписать"))
                     .when(!ready, |view| {
                         view.opacity(0.4).cursor_default().keyboard_focus(false)
                     })
@@ -727,6 +732,7 @@ fn status(message: &str) -> Div {
                 .border_1()
                 .border_color(rgba(0xffffff20))
                 .bg(rgba(0x0a0a12c2))
+                .text_color(rgb(0xffffff))
                 .child(message.to_owned()),
         )
 }

@@ -1,9 +1,10 @@
-use gpui::{Context, Div, Focusable, FontWeight, Window, div, point, prelude::*, px, rgb};
+use gpui::{Context, Div, Focusable, FontWeight, Window, div, point, prelude::*, px};
 use gpui_component::input::Input;
 
 use super::{
     ACCENT, DEFAULT_FIELDS, Gallery, LINE, MUTED, SECTIONS, SURFACE, TEXT, icon, motion, text,
 };
+use crate::appearance::rgb;
 
 pub(super) fn small(value: impl Into<String>) -> Div {
     div()
@@ -268,8 +269,8 @@ impl Gallery {
                 .pt(px(20.0))
                 .child(
                     action("settings-reset", "resetDefaults", Some("reset"))
-                        .bg(gpui::rgba(0))
-                        .border_color(gpui::rgba(0))
+                        .bg(crate::appearance::rgba(0))
+                        .border_color(crate::appearance::rgba(0))
                         .px(px(0.0))
                         .text_color(rgb(ACCENT))
                         .border_0()
@@ -312,14 +313,15 @@ impl Gallery {
                                     rgb(0x7b43d9),
                                     rgb(0x6839ce),
                                 ))
-                                .border_color(gpui::rgba(0))
+                                .border_color(crate::appearance::rgba(0))
                                 .text_color(rgb(0xffffff))
                                 .hover_colors(Some(rgb(0x8853e1).into()), None, None)
-                                .on_click(cx.listener(|this, _, _, cx| {
+                                .on_click(cx.listener(|this, _, window, cx| {
                                     if this.dialog_open {
                                         return;
                                     }
                                     this.settings.saved_paths = this.settings.paths.clone();
+                                    this.apply_interface_preferences(window, cx);
                                     this.settings.saved = true;
                                     this.settings.message = None;
                                     tracing::info!(

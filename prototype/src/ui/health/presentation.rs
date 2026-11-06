@@ -1,8 +1,9 @@
-use gpui::{Context, Div, ElementId, FontWeight, div, prelude::*, px, rgb};
+use gpui::{Context, Div, ElementId, FontWeight, div, prelude::*, px};
 
 use super::{
     DEMO, Gallery, HINTS, ICONS, LABELS, LINE, MUTED, PATHS, REASONS, TEXT, icon, muted, panel,
 };
+use crate::appearance::rgb;
 use crate::ui::motion;
 
 pub(super) fn button(id: impl Into<ElementId>, title: &str) -> motion::MotionDiv {
@@ -30,7 +31,7 @@ fn primary(id: &'static str, title: &str) -> motion::MotionDiv {
             rgb(0x7b43d9),
             rgb(0x6839ce),
         ))
-        .border_color(gpui::rgba(0))
+        .border_color(crate::appearance::rgba(0))
         .text_color(rgb(0xffffff))
 }
 
@@ -40,17 +41,14 @@ impl Gallery {
         match self.health.category {
             0 => actions
                 .child(
-                    muted(concat!(
-                        "Укажите переименованный или перемещённый файл. ",
-                        "Его ID в каталоге, теги и избранное сохранятся."
-                    ))
+                    muted(crate::i18n::text("Укажите переименованный или перемещённый файл. Его ID в каталоге, теги и избранное сохранятся."))
                     .w_full()
                     .my(px(5.0)),
                 )
                 .child(
                     primary("health-locate", "")
                         .child(icon("staging").size(px(16.0)))
-                        .child("Указать файл…")
+                        .child(crate::i18n::text("Указать файл…"))
                         .on_click(cx.listener(|this, _, _, cx| {
                             this.health.proposal = true;
                             this.health.confirmed = false;
@@ -64,24 +62,24 @@ impl Gallery {
                 ),
             1 => actions
                 .child(
-                    primary("health-recovery", "Повторить восстановление")
+                    primary("health-recovery", crate::i18n::text("Повторить восстановление"))
                         .on_click(cx.listener(|this, _, _, cx| this.repair_health(cx))),
                 )
                 .child(
-                    button("health-indexing", "Настройки индексирования").on_click(cx.listener(
-                        |this, _, _, cx| this.unavailable("Настройки индексирования", cx),
+                    button("health-indexing", crate::i18n::text("Настройки индексирования")).on_click(cx.listener(
+                        |this, _, _, cx| this.unavailable(crate::i18n::text("Настройки индексирования"), cx),
                     )),
                 ),
             2 => actions.child(
-                primary("health-preview", "Повторить создание превью")
+                primary("health-preview", crate::i18n::text("Повторить создание превью"))
                     .on_click(cx.listener(|this, _, _, cx| this.repair_health(cx))),
             ),
             _ => actions
                 .child(
-                    primary("health-metadata", "Перечитать технические метаданные")
+                    primary("health-metadata", crate::i18n::text("Перечитать технические метаданные"))
                         .on_click(cx.listener(|this, _, _, cx| this.repair_health(cx))),
                 )
-                .child(button("health-edit", "Редактировать метаданные").on_click(
+                .child(button("health-edit", crate::i18n::text("Редактировать метаданные")).on_click(
                     cx.listener(|this, _, window, cx| this.edit_health_metadata(window, cx)),
                 )),
         }
@@ -96,11 +94,10 @@ impl Gallery {
         cx: &mut Context<Self>,
     ) -> Div {
         let category = self.health.category;
-        let description = concat!(
-            "Проверяйте проблемы каталога и восстанавливайте связь с файлами, ",
-            "сохраняя их разметку."
+        let description = crate::i18n::text(
+            "Проверяйте проблемы каталога и восстанавливайте связь с файлами, сохраняя их разметку.",
         );
-        let feedback = self.health.message.clone().unwrap_or_else(|| format!("Найдено проблем: {total}. Нажмите «Проверить файлы», чтобы проверить пути на диске."));
+        let feedback = self.health.message.clone().unwrap_or_else(|| if crate::i18n::english() { format!("Issues found: {total}. Use Check files to verify paths on disk.") } else { format!("Найдено проблем: {total}. Нажмите «Проверить файлы», чтобы проверить пути на диске.") });
         let heading = div()
             .flex()
             .items_center()
@@ -117,9 +114,13 @@ impl Gallery {
                         div()
                             .text_size(px(16.0))
                             .font_weight(FontWeight::BOLD)
-                            .child(LABELS[category]),
+                            .child(crate::i18n::text(LABELS[category])),
                     )
-                    .child(muted(HINTS[category]).text_size(px(12.0)).my(px(5.0))),
+                    .child(
+                        muted(crate::i18n::text(HINTS[category]))
+                            .text_size(px(12.0))
+                            .my(px(5.0)),
+                    ),
             )
             .child(muted(if present { "1" } else { "0" }));
         let row = crate::ui::button("health-issue", "")
@@ -163,7 +164,7 @@ impl Gallery {
                     )
                     .child(
                         muted(if category == 1 {
-                            REASONS[category]
+                            crate::i18n::text(REASONS[category])
                         } else {
                             PATHS[category]
                         })
@@ -176,7 +177,7 @@ impl Gallery {
                             .text_size(px(11.0))
                             .line_height(px(14.0))
                             .text_color(rgb(0xefbc79))
-                            .child(REASONS[category]),
+                            .child(crate::i18n::text(REASONS[category])),
                     ),
             )
             .child(icon("arrow").size(px(16.0)))
@@ -191,15 +192,23 @@ impl Gallery {
             .border_color(rgb(LINE))
             .child(
                 muted(if present {
-                    "1–1 из 1"
+                    crate::i18n::text("1–1 из 1")
                 } else {
-                    "0–0 из 0"
+                    crate::i18n::text("0–0 из 0")
                 })
                 .flex_1()
                 .text_size(px(11.0)),
             )
-            .child(button("health-prev", "Назад").opacity(0.4).cursor_default())
-            .child(button("health-next", "Далее").opacity(0.4).cursor_default());
+            .child(
+                button("health-prev", crate::i18n::text("Назад"))
+                    .opacity(0.4)
+                    .cursor_default(),
+            )
+            .child(
+                button("health-next", crate::i18n::text("Далее"))
+                    .opacity(0.4)
+                    .cursor_default(),
+            );
 
         div()
             .flex_1()
@@ -229,7 +238,7 @@ impl Gallery {
                             .flex_1()
                             .min_w(px(300.0))
                             .child(
-                                muted("Обслуживание библиотеки")
+                                muted(crate::i18n::text("Обслуживание библиотеки"))
                                     .text_size(px(12.0))
                                     .font_weight(FontWeight::MEDIUM),
                             )
@@ -240,7 +249,7 @@ impl Gallery {
                                     .text_size(px(20.0))
                                     .line_height(px(24.0))
                                     .font_weight(FontWeight::BOLD)
-                                    .child("Состояние библиотеки"),
+                                    .child(crate::i18n::text("Состояние библиотеки")),
                             )
                             .child(muted(description).my(px(5.0))),
                     )
@@ -251,7 +260,7 @@ impl Gallery {
                             .child(
                                 button("health-refresh", "")
                                     .child(icon("reset").size(px(16.0)))
-                                    .child("Обновить")
+                                    .child(crate::i18n::text("Обновить"))
                                     .on_click(cx.listener(|this, _, _, cx| {
                                         this.health.message = None;
                                         tracing::info!(
@@ -265,9 +274,9 @@ impl Gallery {
                             .child(
                                 primary("health-check", "")
                                     .child(icon("scan").size(px(16.0)))
-                                    .child("Проверить файлы")
+                                    .child(crate::i18n::text("Проверить файлы"))
                                     .on_click(cx.listener(|this, _, _, cx| {
-                                        this.health.message = Some(DEMO.into());
+                                        this.health.message = Some(crate::i18n::text(DEMO).into());
                                         tracing::info!(
                                             operation = "health_check",
                                             outcome = "demo_only",
@@ -286,7 +295,7 @@ impl Gallery {
                     .rounded(px(8.0))
                     .bg(rgb(0x152b46))
                     .text_color(rgb(0x8bbbff))
-                    .child(DEMO),
+                    .child(crate::i18n::text(DEMO)),
             )
             .child(
                 div()
@@ -307,7 +316,7 @@ impl Gallery {
                                 view.bg(rgb(0x2c263f)).border_color(rgb(0x6d5a90))
                             })
                             .child(icon(ICONS[index]).size(px(16.0)))
-                            .child(LABELS[index])
+                            .child(crate::i18n::text(LABELS[index]))
                             .child(
                                 div()
                                     .px(px(6.0))

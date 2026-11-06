@@ -1,6 +1,7 @@
-use gpui::{Context, Div, Window, div, prelude::*, px, rgb};
+use gpui::{Context, Div, Window, div, prelude::*, px};
 
 use super::{Gallery, LINE, MUTED, SURFACE, TEXT, shell::icon};
+use crate::appearance::rgb;
 
 const LABELS: [&str; 4] = [
     "Отсутствующие файлы",
@@ -23,23 +24,11 @@ const REASONS: [&str; 4] = [
 ];
 const HINTS: [&str; 4] = [
     "Пути, которые больше не доступны. Теги и избранное сохранены.",
-    concat!(
-        "Незавершённые перемещения, очистка после замены, ошибки ",
-        "синхронизации и недоступные источники по последней проверке."
-    ),
-    concat!(
-        "Последние ошибки превью для максимум 1 024 файлов в текущем ",
-        "сеансе. Прошлые сеансы не учитываются."
-    ),
-    concat!(
-        "Недоступные технические свойства или незаполненные автор, ",
-        "копирайт либо название видео в библиотеке."
-    ),
+    "Незавершённые перемещения, очистка после замены, ошибки синхронизации и недоступные источники по последней проверке.",
+    "Последние ошибки превью для максимум 1 024 файлов в текущем сеансе. Прошлые сеансы не учитываются.",
+    "Недоступные технические свойства или незаполненные автор, копирайт либо название видео в библиотеке.",
 ];
-const DEMO: &str = concat!(
-    "Демонстрационные данные. Исправления действуют только на этом ",
-    "экране и не затрагивают реальные файлы."
-);
+const DEMO: &str = "Демонстрационные данные. Исправления действуют только на этом экране и не затрагивают реальные файлы.";
 
 struct PreviewReturn {
     entries: Vec<crate::catalog::Entry>,
@@ -83,7 +72,7 @@ impl Health {
 
     pub(super) fn metadata_saved(&mut self) {
         self.remaining[3] = false;
-        self.message = Some("Метаданные обновлены на время демосеанса.".into());
+        self.message = Some(crate::i18n::text("Метаданные обновлены на время демосеанса.").into());
     }
 
     fn choose(&mut self, category: usize) {
@@ -108,7 +97,10 @@ impl Health {
         self.proposal = false;
         self.confirmed = false;
         self.message = Some(
-            "Демонстрационная проблема устранена. Реальные файлы и каталог не изменены.".into(),
+            crate::i18n::text(
+                "Демонстрационная проблема устранена. Реальные файлы и каталог не изменены.",
+            )
+            .into(),
         );
     }
 }
@@ -144,14 +136,18 @@ fn empty() -> Div {
             div()
                 .text_size(px(14.0))
                 .font_weight(gpui::FontWeight::BOLD)
-                .child("В этой категории проблем нет"),
+                .child(crate::i18n::text("В этой категории проблем нет")),
         )
-        .child(muted(
+        .child(muted(crate::i18n::text(
             "Обновите список после исправлений или проверьте файлы на внешние изменения.",
-        ))
+        )))
 }
 
 impl Gallery {
+    pub(super) fn refresh_health_locale(&mut self) {
+        self.health.message = None;
+    }
+
     pub(super) fn open_health_preview(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.health.preview_return = Some(PreviewReturn {
             entries: std::mem::replace(&mut self.entries, vec![self.health.metadata_entry.clone()]),
@@ -224,7 +220,7 @@ impl Gallery {
             .rsplit('\\')
             .next()
             .filter(|name| !name.is_empty())
-            .unwrap_or("Восстановление файловой операции");
+            .unwrap_or(crate::i18n::text("Восстановление файловой операции"));
         let mut detail = panel()
             .id("health-detail")
             .flex()
@@ -237,7 +233,7 @@ impl Gallery {
 
         if present {
             detail = detail
-                .child(muted("Подробности проблемы").text_size(px(12.0)))
+                .child(muted(crate::i18n::text("Подробности проблемы")).text_size(px(12.0)))
                 .child(
                     div()
                         .mt_3()
@@ -254,7 +250,7 @@ impl Gallery {
                         .flex()
                         .gap_2()
                         .child(icon("warning").size(px(18.0)))
-                        .child(REASONS[category]),
+                        .child(crate::i18n::text(REASONS[category])),
                 );
             if category != 1 {
                 detail = detail.child(
@@ -267,12 +263,12 @@ impl Gallery {
                         .border_color(rgb(LINE))
                         .children(
                             [
-                                ("Автор", "Demo artist"),
-                                ("Копирайты", "Demo collection"),
-                                ("Персонажи", "—"),
-                                ("Теги", "favorite; landscape"),
-                                ("Название видео", "—"),
-                                ("Избранное", "Да"),
+                                (crate::i18n::text("Автор"), "Demo artist"),
+                                (crate::i18n::text("Копирайты"), "Demo collection"),
+                                (crate::i18n::text("Персонажи"), "—"),
+                                (crate::i18n::text("Теги"), "favorite; landscape"),
+                                (crate::i18n::text("Название видео"), "—"),
+                                (crate::i18n::text("Избранное"), crate::i18n::text("Да")),
                             ]
                             .into_iter()
                             .map(|(label, value)| {
@@ -296,18 +292,18 @@ impl Gallery {
                         .flex()
                         .flex_col()
                         .gap_3()
-                        .child("Восстановление связи с файлом")
+                        .child(crate::i18n::text("Восстановление связи с файлом"))
                         .child(muted(r"C:\Media\Found\restored-image.png"))
-                        .child(muted(
+                        .child(muted(crate::i18n::text(
                             "Демонстрационная привязка не перемещает и не удаляет файлы.",
-                        ))
+                        )))
                         .child(
                             button(
                                 "health-confirm",
                                 if self.health.confirmed {
-                                    "☑ Подтверждаю выбор файла"
+                                    crate::i18n::text("☑ Подтверждаю выбор файла")
                                 } else {
-                                    "☐ Подтверждаю выбор файла"
+                                    crate::i18n::text("☐ Подтверждаю выбор файла")
                                 },
                             )
                             .on_click(cx.listener(|this, _, _, cx| {
@@ -319,26 +315,31 @@ impl Gallery {
                             div()
                                 .flex()
                                 .gap_2()
-                                .child(button("health-cancel", "Отмена").on_click(cx.listener(
-                                    |this, _, _, cx| {
-                                        this.health.proposal = false;
-                                        this.health.confirmed = false;
-                                        cx.notify();
-                                    },
-                                )))
                                 .child(
-                                    button("health-relink", "Восстановить связь")
-                                        .opacity(if self.health.confirmed { 1.0 } else { 0.4 })
-                                        .on_click(
-                                            cx.listener(|this, _, _, cx| this.repair_health(cx)),
-                                        ),
+                                    button("health-cancel", crate::i18n::text("Отмена")).on_click(
+                                        cx.listener(|this, _, _, cx| {
+                                            this.health.proposal = false;
+                                            this.health.confirmed = false;
+                                            cx.notify();
+                                        }),
+                                    ),
+                                )
+                                .child(
+                                    button(
+                                        "health-relink",
+                                        crate::i18n::text("Восстановить связь"),
+                                    )
+                                    .opacity(if self.health.confirmed { 1.0 } else { 0.4 })
+                                    .on_click(cx.listener(|this, _, _, cx| this.repair_health(cx))),
                                 ),
                         ),
                 );
             }
         } else {
             detail = detail.child(div().flex_1().flex().items_center().justify_center().child(
-                muted("Выберите проблему, чтобы посмотреть разметку и доступные исправления."),
+                muted(crate::i18n::text(
+                    "Выберите проблему, чтобы посмотреть разметку и доступные исправления.",
+                )),
             ));
         }
 

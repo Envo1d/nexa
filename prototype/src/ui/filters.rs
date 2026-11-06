@@ -1,7 +1,8 @@
-use gpui::{Context, Div, FontWeight, Stateful, Window, div, prelude::*, px, rgb, rgba};
+use gpui::{Context, Div, FontWeight, Stateful, Window, div, prelude::*, px};
 use gpui_component::scroll::{Scrollbar, ScrollbarShow};
 
 use super::{ACCENT, Gallery, LINE, MUTED, SURFACE, shell::control};
+use crate::appearance::{rgb, rgba};
 
 mod switch;
 pub(super) use switch::Switch;
@@ -52,7 +53,7 @@ impl Gallery {
                     .p_4()
                     .font_weight(gpui::FontWeight::SEMIBOLD)
                     .text_size(px(14.0))
-                    .child("Теги"),
+                    .child(crate::i18n::text("Теги")),
             )
             .child(
                 div()
@@ -80,16 +81,27 @@ impl Gallery {
                                     .rounded(px(7.0))
                                     .bg(rgb(0x1a1927))
                                     .child(
-                                        tag_mode("frequent", "Частые", !self.show_all_tags)
-                                            .on_click(cx.listener(|this, _, _, cx| {
+                                        tag_mode(
+                                            "frequent",
+                                            crate::i18n::text("Частые"),
+                                            !self.show_all_tags,
+                                        )
+                                        .on_click(
+                                            cx.listener(|this, _, _, cx| {
                                                 this.show_all_tags = false;
                                                 this.tags_scroll
                                                     .set_offset(gpui::point(px(0.0), px(0.0)));
                                                 cx.notify();
-                                            })),
+                                            }),
+                                        ),
                                     )
                                     .child(
-                                        tag_mode("all-tags", "Все", self.show_all_tags).on_click(
+                                        tag_mode(
+                                            "all-tags",
+                                            crate::i18n::text("Все"),
+                                            self.show_all_tags,
+                                        )
+                                        .on_click(
                                             cx.listener(|this, _, _, cx| {
                                                 this.show_all_tags = true;
                                                 this.tags_scroll
@@ -180,7 +192,7 @@ impl Gallery {
                                                         div()
                                                             .py_3()
                                                             .text_color(rgb(MUTED))
-                                                            .child("Нет тегов"),
+                                                            .child(crate::i18n::text("Нет тегов")),
                                                     )
                                                 },
                                             ),
@@ -204,29 +216,46 @@ impl Gallery {
                                     .text_size(px(12.0))
                                     .font_weight(gpui::FontWeight::SEMIBOLD)
                                     .line_height(px(18.0))
-                                    .child("Дополнительно"),
+                                    .child(crate::i18n::text("Дополнительно")),
                             )
                             .child(
-                                toggle("tagged", "Только с тегами", self.tagged_only).on_click(
-                                    cx.listener(|this, _, _, cx| {
+                                toggle(
+                                    "tagged",
+                                    crate::i18n::text("Только с тегами"),
+                                    self.tagged_only,
+                                )
+                                .on_click(cx.listener(
+                                    |this, _, _, cx| {
                                         this.tagged_only = !this.tagged_only;
                                         this.refilter(cx);
-                                    }),
-                                ),
+                                    },
+                                )),
                             )
                             .child(
-                                toggle("hide-untagged", "Скрыть без тегов", self.hide_untagged)
-                                    .on_click(cx.listener(|this, _, _, cx| {
+                                toggle(
+                                    "hide-untagged",
+                                    crate::i18n::text("Скрыть без тегов"),
+                                    self.hide_untagged,
+                                )
+                                .on_click(cx.listener(
+                                    |this, _, _, cx| {
                                         this.hide_untagged = !this.hide_untagged;
                                         this.refilter(cx);
-                                    })),
+                                    },
+                                )),
                             )
                             .child(
-                                toggle("previews", "Показывать превью", self.show_previews)
-                                    .on_click(cx.listener(|this, _, _, cx| {
+                                toggle(
+                                    "previews",
+                                    crate::i18n::text("Показывать превью"),
+                                    self.show_previews,
+                                )
+                                .on_click(cx.listener(
+                                    |this, _, _, cx| {
                                         this.show_previews = !this.show_previews;
                                         cx.notify();
-                                    })),
+                                    },
+                                )),
                             ),
                     ),
             )
@@ -241,26 +270,31 @@ impl Gallery {
                     .border_t_1()
                     .border_color(rgb(LINE))
                     .child(
-                        control("reset", "Сбросить фильтры", "reset", false)
-                            .h(px(34.0))
-                            .py_0()
-                            .justify_center()
-                            .text_size(px(11.0))
-                            .font_weight(FontWeight::MEDIUM)
-                            .rounded(px(6.0))
-                            .bg(rgb(0x1a1827))
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.videos_only = false;
-                                this.images_only = false;
-                                this.tagged_only = false;
-                                this.hide_untagged = false;
-                                this.favorites_only = false;
-                                this.sort = crate::catalog::SortMode::Newest;
-                                this.search_suggestions.applied.clear();
-                                this.search
-                                    .update(cx, |state, cx| state.set_value("", window, cx));
-                                this.refilter(cx);
-                            })),
+                        control(
+                            "reset",
+                            crate::i18n::text("Сбросить фильтры"),
+                            "reset",
+                            false,
+                        )
+                        .h(px(34.0))
+                        .py_0()
+                        .justify_center()
+                        .text_size(px(11.0))
+                        .font_weight(FontWeight::MEDIUM)
+                        .rounded(px(6.0))
+                        .bg(rgb(0x1a1827))
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            this.videos_only = false;
+                            this.images_only = false;
+                            this.tagged_only = false;
+                            this.hide_untagged = false;
+                            this.favorites_only = false;
+                            this.sort = crate::catalog::SortMode::Newest;
+                            this.search_suggestions.applied.clear();
+                            this.search
+                                .update(cx, |state, cx| state.set_value("", window, cx));
+                            this.refilter(cx);
+                        })),
                     ),
             )
     }

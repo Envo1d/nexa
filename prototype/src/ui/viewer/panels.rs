@@ -1,7 +1,8 @@
-use gpui::{Context, Div, Focusable, FontWeight, MouseButton, Window, div, prelude::*, px, rgb};
+use gpui::{Context, Div, Focusable, FontWeight, MouseButton, Window, div, prelude::*, px};
 use gpui_component::input::Input;
 
 use super::{Gallery, Panel, presentation::sized_icon_button};
+use crate::appearance::rgb;
 use crate::ui::{LINE, MUTED, TEXT, shell::icon};
 
 impl Gallery {
@@ -12,7 +13,11 @@ impl Gallery {
             .flex_wrap()
             .gap(px(8.0))
             .when(entry.tags.is_empty(), |view| {
-                view.child(div().text_color(rgb(MUTED)).child("Без тегов"))
+                view.child(
+                    div()
+                        .text_color(rgb(MUTED))
+                        .child(crate::i18n::text("Без тегов")),
+                )
             })
             .children(entry.tags.iter().enumerate().map(|(tag_index, tag)| {
                 crate::ui::motion::button(("viewer-tag", tag_index))
@@ -103,7 +108,7 @@ impl Gallery {
 
         div().flex().flex_col().child(tags).child(form)
             .when_some(self.viewer_state.save_error.clone(), |view, error| view.child(div().mt(px(12.0)).text_color(rgb(0xf292a7)).child(error)))
-            .child(note("В демо изменения сохраняются только на время сеанса. Фото отображаются из демонстрационных превью."))
+            .child(note(crate::i18n::text("В демо изменения сохраняются только на время сеанса. Фото отображаются из демонстрационных превью.")))
     }
 
     pub(super) fn viewer_tag_matches(&self, cx: &Context<Self>) -> Vec<String> {
@@ -159,7 +164,7 @@ impl Gallery {
                         .py(px(10.0))
                         .text_size(px(12.0))
                         .text_color(rgb(MUTED))
-                        .child("Подходящих значений нет."),
+                        .child(crate::i18n::text("Подходящих значений нет.")),
                 )
             })
             .children(
@@ -200,9 +205,9 @@ impl Gallery {
         cx: &mut Context<Self>,
     ) -> gpui::Stateful<Div> {
         let title = match panel {
-            Panel::Tags => "Теги",
-            Panel::Info => "Информация о файле",
-            Panel::Help => "Подсказки",
+            Panel::Tags => crate::i18n::text("Теги"),
+            Panel::Info => crate::i18n::text("Информация о файле"),
+            Panel::Help => crate::i18n::text("Подсказки"),
         };
         let index = self.selected.unwrap_or(0);
         let entry = &self.entries[index];
@@ -213,7 +218,7 @@ impl Gallery {
             Panel::Info => {
                 if entry.video {
                     content = content.child(info_row(
-                        "Название видео",
+                        crate::i18n::text("Название видео"),
                         vec![self.viewer_video_title(cx)],
                         false,
                         false,
@@ -221,19 +226,19 @@ impl Gallery {
                 }
                 content = content
                     .child(info_row(
-                        "Произведение",
+                        crate::i18n::text("Произведение"),
                         entry.details.copyrights.clone(),
                         false,
                         false,
                     ))
                     .child(info_row(
-                        "Автор",
+                        crate::i18n::text("Автор"),
                         entry.details.artist.iter().cloned().collect(),
                         false,
                         false,
                     ))
                     .child(info_row(
-                        "Персонажи",
+                        crate::i18n::text("Персонажи"),
                         entry
                             .details
                             .character_copyrights
@@ -259,7 +264,7 @@ impl Gallery {
                         self.viewer_state.natural
                     });
                 content = content.child(info_row(
-                    "Разрешение",
+                    crate::i18n::text("Разрешение"),
                     dimensions
                         .map(|(w, h)| format!("{w} × {h}"))
                         .into_iter()
@@ -272,23 +277,30 @@ impl Gallery {
                 }
             }
             Panel::Help => {
-                let mut rows = vec![("← / →", "Предыдущий / следующий файл")];
+                let mut rows = vec![("← / →", crate::i18n::text("Предыдущий / следующий файл"))];
                 if entry.video {
                     rows.extend([
-                        ("Space / K", "Воспроизведение / пауза"),
-                        ("F", "Полный экран"),
-                        ("M", "Громкость"),
-                        ("R", "Повтор видео"),
-                        ("T", "Диагностика воспроизведения"),
+                        ("Space / K", crate::i18n::text("Воспроизведение / пауза")),
+                        ("F", crate::i18n::text("Полный экран")),
+                        ("M", crate::i18n::text("Громкость")),
+                        ("R", crate::i18n::text("Повтор видео")),
+                        ("T", crate::i18n::text("Диагностика воспроизведения")),
                     ]);
                 } else {
-                    rows.extend([("+ / −", "Масштаб"), ("0", "Вписать")]);
+                    rows.extend([
+                        ("+ / −", crate::i18n::text("Масштаб")),
+                        ("0", crate::i18n::text("Вписать")),
+                    ]);
                 }
-                rows.push(("Esc", "Закрыть панель / просмотрщик"));
+                rows.push(("Esc", crate::i18n::text("Закрыть панель / просмотрщик")));
                 let help = if entry.video {
-                    "В полном экране: Влево / Вправо — перемотка на 5 секунд; Вверх / Вниз — громкость с шагом 5%. На паузе панель видима постоянно, после перемотки, изменения громкости или движения мыши — ненадолго."
+                    crate::i18n::text(
+                        "В полном экране: Влево / Вправо — перемотка на 5 секунд; Вверх / Вниз — громкость с шагом 5%. На паузе панель видима постоянно, после перемотки, изменения громкости или движения мыши — ненадолго.",
+                    )
                 } else {
-                    "Колесо меняет масштаб, перетаскивание перемещает фото. Двойной щелчок или 0 вписывают изображение в окно."
+                    crate::i18n::text(
+                        "Колесо меняет масштаб, перетаскивание перемещает фото. Двойной щелчок или 0 вписывают изображение в окно.",
+                    )
                 };
                 let shortcut_count = rows.len();
                 content = content
@@ -405,7 +417,11 @@ fn info_row(label: &str, values: Vec<String>, characters: bool, technical: bool)
                 .flex_wrap()
                 .gap(px(6.0))
                 .when(values.is_empty(), |view| {
-                    view.child(div().text_color(rgb(MUTED)).child("Недоступно"))
+                    view.child(
+                        div()
+                            .text_color(rgb(MUTED))
+                            .child(crate::i18n::text("Недоступно")),
+                    )
                 })
                 .children(
                     values

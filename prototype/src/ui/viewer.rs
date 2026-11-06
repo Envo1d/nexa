@@ -51,7 +51,8 @@ pub(super) struct Viewer {
 
 impl Viewer {
     pub(super) fn new(window: &mut Window, cx: &mut Context<Gallery>) -> Self {
-        let tag_input = cx.new(|cx| InputState::new(window, cx).placeholder("Добавить тег…"));
+        let tag_input = cx
+            .new(|cx| InputState::new(window, cx).placeholder(crate::i18n::text("Добавить тег…")));
         let tag_subscription = cx.subscribe_in(&tag_input, window, |this, _, event, window, cx| {
             match event {
                 InputEvent::PressEnter { .. } => {
@@ -147,6 +148,14 @@ fn fit(natural: Option<(u32, u32)>, width: f32, height: f32) -> (f32, f32) {
 }
 
 impl Gallery {
+    pub(super) fn refresh_viewer_locale(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.viewer_state.tag_input.update(cx, |state, cx| {
+            state.set_placeholder(crate::i18n::text("Добавить тег…"), window, cx);
+        });
+        self.viewer_state.error = None;
+        self.viewer_state.save_error = None;
+    }
+
     fn viewer_video_title(&self, cx: &Context<Self>) -> String {
         let entry = &self.entries[self.selected.unwrap_or(0)];
         if entry.demo {
@@ -158,7 +167,7 @@ impl Gallery {
             .and_then(|player| player.read(cx).metadata())
             .and_then(|metadata| metadata.title)
             .filter(|title| !title.trim().is_empty())
-            .unwrap_or_else(|| "Видео".into())
+            .unwrap_or_else(|| crate::i18n::text("Видео").into())
     }
 
     pub(crate) fn preview_local_files(
@@ -220,7 +229,7 @@ impl Gallery {
             if entry.demo {
                 self.viewer_state.loading = false;
                 self.viewer_state.error = Some(
-                    "Воспроизведение видео доступно для реальных файлов в настольном приложении."
+                    crate::i18n::text("Воспроизведение видео доступно для реальных файлов в настольном приложении.")
                         .into(),
                 );
             } else {
@@ -244,7 +253,8 @@ impl Gallery {
                         match event {
                             PlayerEvent::Error(_) => {
                                 if this.viewer_state.error.is_none() {
-                                    this.viewer_state.error = Some(UNSUPPORTED.into());
+                                    this.viewer_state.error =
+                                        Some(crate::i18n::text(UNSUPPORTED).into());
                                     tracing::error!(
                                         operation = "media_viewer",
                                         "Video playback failed"
@@ -310,7 +320,7 @@ impl Gallery {
                             );
                         }
                         Err(()) => {
-                            this.viewer_state.error = Some(UNSUPPORTED.into());
+                            this.viewer_state.error = Some(crate::i18n::text(UNSUPPORTED).into());
                             tracing::error!(
                                 operation = "media_viewer",
                                 "Image header could not be read"
@@ -387,8 +397,10 @@ impl Gallery {
             || self.entries[index].tags.len() >= 100
         {
             self.viewer_state.save_error = Some(
-                "Можно добавить до 100 тегов длиной до 24 символов, без управляющих символов."
-                    .into(),
+                crate::i18n::text(
+                    "Можно добавить до 100 тегов длиной до 24 символов, без управляющих символов.",
+                )
+                .into(),
             );
             cx.notify();
             return;
